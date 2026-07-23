@@ -1,0 +1,1 @@
+pyinstaller --onefile --windowed --name "Порайонка" --add-data "core;core" --add-data "ui;ui" --add-data "assets;assets" main.py
