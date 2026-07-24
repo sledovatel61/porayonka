@@ -163,12 +163,12 @@ def load_zonal_templates() -> List[ReportTemplate]:
                     data = json.load(f)
                 template = _template_from_dict(data)
                 templates.append(template)
-                print(f"[ZONAL_DATA] Загружен шаблон: {template.name} ({file.name})")
+                print(f"[ZONAL_DATA] Zagruzhen shablon: {template.name} ({file.name})")
             except Exception as e:
-                print(f"[ZONAL_DATA] Ошибка загрузки шаблона {file.name}: {e}")
+                print(f"[ZONAL_DATA] Oshibka zagruzki shablona {file.name}: {e}")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка чтения папки шаблонов: {e}")
-    print(f"[ZONAL_DATA] Всего шаблонов: {len(templates)}")
+        print(f"[ZONAL_DATA] Oshibka chteniya papki shablonov: {e}")
+    print(f"[ZONAL_DATA] Vsego shablonov: {len(templates)}")
     return templates
 
 
@@ -184,10 +184,10 @@ def save_zonal_template(template: ReportTemplate) -> str:
         data = _template_to_dict(template)
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[ZONAL_DATA] Шаблон сохранён: {filepath}")
+        print(f"[ZONAL_DATA] SHablon sohranen: {filepath}")
         return str(filepath)
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка сохранения шаблона: {e}")
+        print(f"[ZONAL_DATA] Oshibka sohraneniya shablona: {e}")
         raise
 
 
@@ -200,9 +200,9 @@ def delete_zonal_template(template_name: str) -> None:
     try:
         if filepath.exists():
             filepath.unlink()
-            print(f"[ZONAL_DATA] Шаблон удалён: {filepath}")
+            print(f"[ZONAL_DATA] SHablon udalen: {filepath}")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка удаления шаблона: {e}")
+        print(f"[ZONAL_DATA] Oshibka udaleniya shablona: {e}")
 
 
 # ────────────────────────────────────────────────────────────
@@ -213,16 +213,16 @@ def load_zonal_template() -> ReportTemplate:
     """Загрузить текущий активный шаблон из zonal_template.json"""
     filepath = get_template_file()
     if not filepath.exists():
-        print("[ZONAL_DATA] Файл шаблона не найден, создаю пустой")
+        print("[ZONAL_DATA] Fayl shablona ne nayden, sozdayu pustoy")
         return ReportTemplate(name="Новая форма")
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
         template = _template_from_dict(data)
-        print(f"[ZONAL_DATA] Шаблон загружен: {template.name}, пунктов: {len(template.items)}")
+        print(f"[ZONAL_DATA] SHablon zagruzhen: {template.name}, punktov: {len(template.items)}")
         return template
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка загрузки шаблона: {e}")
+        print(f"[ZONAL_DATA] Oshibka zagruzki shablona: {e}")
         return ReportTemplate(name="Новая форма")
 
 
@@ -233,9 +233,9 @@ def save_zonal_template_to_file(template: ReportTemplate) -> None:
         data = _template_to_dict(template)
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[ZONAL_DATA] Шаблон сохранён: {filepath}")
+        print(f"[ZONAL_DATA] SHablon sohranen: {filepath}")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка сохранения шаблона: {e}")
+        print(f"[ZONAL_DATA] Oshibka sohraneniya shablona: {e}")
         raise
 
 
@@ -247,16 +247,16 @@ def load_zonal_submissions() -> List[ReportData]:
     """Загрузить данные отчётов из zonal_submissions.json"""
     filepath = get_submissions_file()
     if not filepath.exists():
-        print("[ZONAL_DATA] Файл данных не найден, будет создан пустой")
+        print("[ZONAL_DATA] Fayl dannyh ne nayden, budet sozdan pustoy")
         return []
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
         submissions = [_report_data_from_dict(s) for s in data.get("submissions", [])]
-        print(f"[ZONAL_DATA] Загружено данных: {len(submissions)}")
+        print(f"[ZONAL_DATA] Zagruzheno dannyh: {len(submissions)}")
         return submissions
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка загрузки данных: {e}")
+        print(f"[ZONAL_DATA] Oshibka zagruzki dannyh: {e}")
         return []
 
 
@@ -267,9 +267,9 @@ def save_zonal_submissions(submissions: List[ReportData]) -> None:
         data = {"submissions": [_report_data_to_dict(s) for s in submissions]}
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[ZONAL_DATA] Данные сохранены ({len(submissions)} записей): {filepath}")
+        print(f"[ZONAL_DATA] Dannye sohraneny ({len(submissions)} zapisey): {filepath}")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка сохранения данных: {e}")
+        print(f"[ZONAL_DATA] Oshibka sohraneniya dannyh: {e}")
         raise
 
 
@@ -282,13 +282,13 @@ def clear_zonal_submissions() -> None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = get_data_path() / f"zonal_submissions_backup_{timestamp}.json"
             filepath.rename(backup_path)
-            print(f"[ZONAL_DATA] Данные перемещены в backup: {backup_path}")
+            print(f"[ZONAL_DATA] Dannye peremescheny v backup: {backup_path}")
         data = {"submissions": []}
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[ZONAL_DATA] Данные очищены: {filepath}")
+        print(f"[ZONAL_DATA] Dannye ochischeny: {filepath}")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка очистки данных: {e}")
+        print(f"[ZONAL_DATA] Oshibka ochistki dannyh: {e}")
         # Если backup не удался, просто записываем пустой файл
         data = {"submissions": []}
         with open(filepath, "w", encoding="utf-8") as f:
@@ -303,16 +303,16 @@ def load_criminalists() -> List[Criminalist]:
     """Загрузить список криминалистов (из файла или дефолтный)"""
     filepath = get_criminalists_file()
     if not filepath.exists():
-        print("[ZONAL_DATA] Файл криминалистов не найден, используем дефолтный")
+        print("[ZONAL_DATA] Fayl kriminalistov ne nayden, ispolzuem defoltnyy")
         return get_initial_criminalists()
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
         criminalists = [_criminalist_from_dict(c) for c in data.get("criminalists", [])]
-        print(f"[ZONAL_DATA] Загружено криминалистов: {len(criminalists)}")
+        print(f"[ZONAL_DATA] Zagruzheno kriminalistov: {len(criminalists)}")
         return criminalists if criminalists else get_initial_criminalists()
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка загрузки криминалистов: {e}")
+        print(f"[ZONAL_DATA] Oshibka zagruzki kriminalistov: {e}")
         return get_initial_criminalists()
 
 
@@ -323,9 +323,9 @@ def save_criminalists(criminalists: List[Criminalist]) -> None:
         data = {"criminalists": [_criminalist_to_dict(c) for c in criminalists]}
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[ZONAL_DATA] Криминалисты сохранены: {len(criminalists)}")
+        print(f"[ZONAL_DATA] Kriminalisty sohraneny: {len(criminalists)}")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка сохранения криминалистов: {e}")
+        print(f"[ZONAL_DATA] Oshibka sohraneniya kriminalistov: {e}")
         raise
 
 
@@ -342,7 +342,7 @@ def _migrate_old_collection() -> bool:
     if not old_file.exists():
         return False
     
-    print("[ZONAL_DATA] Обнаружен старый формат данных, выполняю миграцию...")
+    print("[ZONAL_DATA] Obnaruzhen staryy format dannyh, vypolnyayu migraciyu...")
     try:
         with open(old_file, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -368,11 +368,11 @@ def _migrate_old_collection() -> bool:
         # Backup старого файла
         backup_path = old_file.with_suffix(".json.old")
         old_file.rename(backup_path)
-        print(f"[ZONAL_DATA] Миграция завершена. Старый файл: {backup_path}")
+        print(f"[ZONAL_DATA] Migraciya zavershena. Staryy fayl: {backup_path}")
         return True
         
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка миграции: {e}")
+        print(f"[ZONAL_DATA] Oshibka migracii: {e}")
         return False
 
 
@@ -406,7 +406,7 @@ def load_zonal_collection() -> Optional[ZonalCollection]:
         last_saved=last_saved,
         criminalists=criminalists,
     )
-    print(f"[ZONAL_DATA] Коллекция загружена: {template.name}, "
+    print(f"[ZONAL_DATA] Kollekciya zagruzhena: {template.name}, "
           f"submissions: {len(submissions)}, криминалистов: {len(criminalists)}")
     return collection
 
@@ -425,9 +425,9 @@ def save_zonal_collection(collection: ZonalCollection) -> None:
         # Сохраняем криминалистов
         save_criminalists(collection.criminalists)
         
-        print(f"[ZONAL_DATA] Коллекция сохранена")
+        print(f"[ZONAL_DATA] Kollekciya sohranena")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка сохранения коллекции: {e}")
+        print(f"[ZONAL_DATA] Oshibka sohraneniya kollekcii: {e}")
         raise
 
 
@@ -496,3 +496,121 @@ def get_summary(collection: ZonalCollection) -> dict:
             "total_all": len(collection.criminalists),  # Все (для информации)
         }
     return summary
+
+
+# ────────────────────────────────────────────────────────────
+# ЗАПОЛНЕННОСТЬ ФОРМЫ (ФАЗА 2: СЕТКА ПЛАШЕК)
+# ────────────────────────────────────────────────────────────
+
+def _get_report_data_for(collection: ZonalCollection, criminalist_id: int, item_id: str):
+    """Найти ReportData для криминалиста и пункта (без создания новой записи)."""
+    for sub in collection.submissions:
+        if sub.criminalist_id == criminalist_id and sub.template_item_id == item_id:
+            return sub
+    return None
+
+
+def is_item_filled(collection: ZonalCollection, criminalist, item) -> bool:
+    """
+    Пункт считается заполненным (сданным) для криминалиста, если:
+    - режим по отделам и у криминалиста есть закреплённые отделы:
+        * числовой  -> по всем закреплённым отделам введено значение
+        * да/нет     -> по всем закреплённым отделам стоит "сдано"
+    - обычный режим:
+        * числовой  -> введено значение
+        * да/нет     -> стоит "сдано"
+    """
+    use_dept_mode = (
+        collection.template.use_departments_mode
+        and bool(criminalist.zone.department_ids)
+    )
+    rd = _get_report_data_for(collection, criminalist.id, item.id)
+    if item.item_type == ReportItemType.NUMERICAL:
+        if use_dept_mode:
+            depts = criminalist.zone.department_ids
+            if not depts:
+                return False
+            if rd is None:
+                return False
+            return all(rd.department_values.get(did) is not None for did in depts)
+        return rd is not None and rd.value is not None
+    else:  # DELIVERABLE
+        if use_dept_mode:
+            depts = criminalist.zone.department_ids
+            if not depts:
+                return False
+            if rd is None:
+                return False
+            return all(rd.department_submitted.get(did, False) for did in depts)
+        return rd is not None and rd.is_submitted
+
+
+def get_criminalist_fill(collection: ZonalCollection, criminalist) -> dict:
+    """
+    Заполненность формы конкретного криминалиста (в процентах).
+    Возвращает {filled_items, total_items, percent}.
+    """
+    items = collection.template.items
+    if not items:
+        return {"filled_items": 0, "total_items": 0, "percent": 0}
+    filled = sum(1 for it in items if is_item_filled(collection, criminalist, it))
+    total = len(items)
+    percent = round(filled / total * 100)
+    return {"filled_items": filled, "total_items": total, "percent": percent}
+
+
+def get_fill_summary(collection: ZonalCollection) -> dict:
+    """
+    Сводная заполненность ТОЛЬКО по активным криминалистам.
+    Возвращает {active, inactive, items_submitted, overall_percent, total_criminalists}.
+    """
+    active_criminalists = [c for c in collection.criminalists if c.is_active]
+    inactive = len(collection.criminalists) - len(active_criminalists)
+    items_submitted = 0
+    sum_pct = 0
+    for c in active_criminalists:
+        f = get_criminalist_fill(collection, c)
+        items_submitted += f["filled_items"]
+        sum_pct += f["percent"]
+    n = len(active_criminalists)
+    overall = round(sum_pct / n) if n else 0
+    return {
+        "active": n,
+        "inactive": inactive,
+        "items_submitted": items_submitted,
+        "overall_percent": overall,
+        "total_criminalists": len(collection.criminalists),
+    }
+
+
+def build_non_submitters_text(collection: ZonalCollection, dept_map: dict) -> str:
+    """
+    Сформировать текстовый список криминалистов, не сдавших форму полностью.
+    Учитываются ТОЛЬКО активные криминалисты с заполненностью < 100%.
+    Заглушка для будущей интеграции с Telegram / Messenger MAX.
+    """
+    lines = []
+    for c in collection.criminalists:
+        if not c.is_active:
+            continue
+        fill = get_criminalist_fill(collection, c)
+        if fill["percent"] >= 100:
+            continue
+        zone_names = [dept_map.get(did, f"Otdel {did}") for did in c.zone.department_ids]
+        zone_text = ", ".join(zone_names) if zone_names else "zony ne zakrepleny"
+        lines.append(f"{c.full_name} ({fill['percent']}%) - {zone_text}")
+    if not lines:
+        return "Vse aktivnye kriminalisty sdalii formu (100%)."
+    header = "Ne sdali formu:"
+    return header + "\n" + "\n".join(lines)
+
+
+def get_non_submitters(collection: ZonalCollection) -> list:
+    """Список активных криминалистов с заполненностью < 100% (для кнопки копирования)."""
+    result = []
+    for c in collection.criminalists:
+        if not c.is_active:
+            continue
+        if get_criminalist_fill(collection, c)["percent"] < 100:
+            result.append(c)
+    return result

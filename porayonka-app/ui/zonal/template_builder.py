@@ -22,7 +22,7 @@ def create_template_builder(
     """
     Создать панель конструктора шаблонов.
     """
-    print("[TEMPLATE_BUILDER] Создаю конструктор шаблонов")
+    print("[TEMPLATE_BUILDER] Sozdayu konstruktor shablonov")
 
     # ── Поле названия формы ──────────────────────────────────────
     name_field = ft.TextField(
@@ -347,5 +347,5 @@ def create_template_builder(
         ),
     )
 
-    print("[TEMPLATE_BUILDER] Конструктор создан")
+    print("[TEMPLATE_BUILDER] Konstruktor sozdan")
     return panel

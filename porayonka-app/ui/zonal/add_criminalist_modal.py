@@ -1,6 +1,7 @@
 # ui/zonal/add_criminalist_modal.py
-# Модальное окно добавления/редактирования криминалиста
-# [DARK THEME] Обновлено визуально
+# Модальное окно добавления/редактирования криминалиста.
+# В режиме редактирования允许 удаление (on_delete).
+# [DARK THEME] + ft.icons.* + hint_style (Flet 0.23.2)
 import flet as ft
 from typing import Callable, Optional, Dict
 from core.zonal_models import Criminalist, CriminalistZone
@@ -12,13 +13,15 @@ def create_add_criminalist_modal(
     criminalist: Optional[Criminalist] = None,
     on_save: Callable[[str, str, list], None] = None,  # full_name, note, department_ids
     existing_ids: set = None,
+    on_delete: Callable = None,  # on_delete(criminalist) — только в режиме редактирования
 ) -> ft.AlertDialog:
     """
     Создать модальное окно добавления/редактирования криминалиста.
+    В режиме редактирования (criminalist != None) возможно удаление (on_delete).
     """
-    print("[ADD_CRIM_MODAL] Создаю диалог добавления криминалиста")
+    print("[ADD_CRIM_MODAL] Sozdayu dialog dobavleniya/redaktirovaniya kriminalista")
     is_edit = criminalist is not None
-    
+
     # Поле ФИО
     name_field = ft.TextField(
         value=criminalist.full_name if is_edit else "",
@@ -27,12 +30,12 @@ def create_add_criminalist_modal(
         border_radius=8,
         border_color=COLORS["border"],
         focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"],  # ТЁМНЫЙ ФОН
-        color=COLORS["text"],    # ТЁМНЫЙ ТЕКСТ
+        bgcolor=COLORS["card"],
+        color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
         expand=True,
     )
-    
+
     # Поле примечания
     note_field = ft.TextField(
         value=criminalist.note if is_edit else "",
@@ -41,22 +44,22 @@ def create_add_criminalist_modal(
         border_radius=8,
         border_color=COLORS["border"],
         focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"],  # ТЁМНЫЙ ФОН
-        color=COLORS["text"],    # ТЁМНЫЙ ТЕКСТ
+        bgcolor=COLORS["card"],
+        color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
         expand=True,
     )
-    
+
     # Выбор отделов
     dept_map = {d["id"]: d["name"] for d in INITIAL_DEPARTMENTS}
     selected_ids = set(existing_ids) if existing_ids else set()
-    
+
     if is_edit and criminalist:
         selected_ids = set(criminalist.zone.department_ids)
-    
+
     checkboxes = {}
     dept_list = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=300)
-    
+
     def _build_dept_list():
         dept_list.controls.clear()
         for dept_data in INITIAL_DEPARTMENTS:
@@ -75,13 +78,13 @@ def create_add_criminalist_modal(
             )
             checkboxes[did] = cb
             dept_list.controls.append(cb)
-    
+
     def _on_cb_change(e, dept_id: int):
         if e.control.value:
             selected_ids.add(dept_id)
         else:
             selected_ids.discard(dept_id)
-    
+
     def _select_all(e=None):
         for did, cb in checkboxes.items():
             selected_ids.add(did)
@@ -90,7 +93,7 @@ def create_add_criminalist_modal(
             dept_list.update()
         except Exception:
             pass
-    
+
     def _deselect_all(e=None):
         for did, cb in checkboxes.items():
             selected_ids.discard(did)
@@ -99,35 +102,87 @@ def create_add_criminalist_modal(
             dept_list.update()
         except Exception:
             pass
-    
+
     _build_dept_list()
-    
+
     # Кнопки
     def _close_dialog(e=None):
         dialog.open = False
         page.update()
-    
+
+    def _delete(e=None):
+        if on_delete is None or not is_edit:
+            return
+        dialog.open = False
+        page.update()
+        on_delete(criminalist)
+
     def _save(e=None):
         full_name = name_field.value.strip()
         if not full_name:
             name_field.error_text = "Введите ФИО"
             name_field.update()
             return
-        
+
         note = note_field.value.strip()
-        
+
         if on_save:
             on_save(full_name, note, sorted(list(selected_ids)))
-        
+
         dialog.open = False
         page.update()
-    
+
+    # Кнопка удаления (только при редактировании и наличии on_delete)
+    delete_action = None
+    if is_edit and on_delete is not None:
+        delete_action = ft.ElevatedButton(
+            "Удалить",
+            icon=ft.icons.DELETE_FOREVER,
+            bgcolor="#dc2626",
+            color="white",
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            ),
+            expand=True,
+            on_click=_delete,
+        )
+
+    dialog_actions = []
+    if delete_action is not None:
+        dialog_actions.append(delete_action)
+    dialog_actions.extend([
+        ft.TextButton(
+            "Отмена",
+            style=ft.ButtonStyle(
+                color=COLORS["text_secondary"],
+                bgcolor=COLORS["empty_bg"],
+                shape=ft.RoundedRectangleBorder(radius=8),
+                padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            ),
+            expand=True,
+            on_click=_close_dialog,
+        ),
+        ft.ElevatedButton(
+            "Сохранить",
+            icon=ft.icons.SAVE,
+            bgcolor=COLORS["btn_save"],
+            color="white",
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            ),
+            expand=True,
+            on_click=_save,
+        ),
+    ])
+
     dialog = ft.AlertDialog(
         modal=True,
         title=ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Text("✏️ " if is_edit else "➕ ", size=20),
+                    ft.Icon(ft.icons.EDIT if is_edit else ft.icons.ADD, size=20, color="white"),
                     ft.Text(
                         f"{'Редактировать' if is_edit else 'Добавить'} криминалиста",
                         size=14,
@@ -155,7 +210,6 @@ def create_add_criminalist_modal(
             border_radius=ft.border_radius.only(top_left=12, top_right=12),
             margin=ft.margin.only(top=-12, left=-24, right=-24),
         ),
-        # ТЁМНЫЙ ФОН КОНТЕНТА
         bgcolor=COLORS["primary_light"],
         content=ft.Container(
             content=ft.Column(
@@ -192,39 +246,16 @@ def create_add_criminalist_modal(
                         border=ft.border.all(1, COLORS["border"]),
                         border_radius=8,
                         padding=ft.padding.all(8),
-                        bgcolor=COLORS["card"],  # ТЁМНЫЙ ФОН СПИСКА
+                        bgcolor=COLORS["card"],
                     ),
                 ],
                 spacing=8,
             ),
             width=500,
         ),
-        actions=[
-            ft.TextButton(
-                "Отмена",
-                style=ft.ButtonStyle(
-                    color=COLORS["text_secondary"],
-                    bgcolor=COLORS["empty_bg"],
-                    shape=ft.RoundedRectangleBorder(radius=8),
-                    padding=ft.padding.symmetric(horizontal=20, vertical=10),
-                ),
-                expand=True,
-                on_click=_close_dialog,
-            ),
-            ft.ElevatedButton(
-                "💾 Сохранить",
-                bgcolor=COLORS["btn_save"],
-                color="white",
-                style=ft.ButtonStyle(
-                    shape=ft.RoundedRectangleBorder(radius=8),
-                    padding=ft.padding.symmetric(horizontal=20, vertical=10),
-                ),
-                expand=True,
-                on_click=_save,
-            ),
-        ],
+        actions=dialog_actions,
         actions_alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         shape=ft.RoundedRectangleBorder(radius=12),
     )
-    
+
     return dialog
