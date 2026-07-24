@@ -428,4 +428,43 @@ React-версия использует похожие цвета, но hardcode
 
 ---
 
+## 15. Известная проблема: пустые вкладки (Flet 0.23.2)
+
+### Симптом
+
+При запуске `python porayonka-app/main.py`:
+- Окно открывается, шапка и переключатель вкладок видны.
+- Вкладка «Следственные отделы» показывает только поле поиска; таблица 29 отделов, статистика, легенда — не отображаются.
+- Вкладка «Зональные» показывает пустую/серую область; плашки криминалистов, конструктор шаблона, сводка — не отображаются.
+- Консоль **чистая**: логи показывают, что все строки таблицы, плашки, сводка создаются без ошибок.
+- Окружение: Python 3.10+, Flet 0.23.2, Windows.
+
+### Что уже пробовалось и не помогло
+
+1. `ft.Tabs(expand=True, expand_loose=True)` — вкладки не растянулись на доступную высоту.
+2. Обёртка `ft.Tabs` в `ft.Container(expand=True)` — не дала эффекта.
+3. Явная высота `ft.Tabs` (`tabs.height = page.window.height - 84`) + `page.on_resize` для пересчёта — содержимое всё равно не появилось.
+4. `expand=True` для `scroll_area`/`rows_column`/`table_container` в `ui/department_table.py` и обёртка `ResponsiveRow` в `ft.Container(expand=True)` в `ui/zonal/zonal_tab.py` — не решило проблему.
+
+### Текущее экспериментальное решение в `main`
+
+В `main.py` `ft.Tabs` заменён на кастомный переключатель из двух кнопок (`ft.ElevatedButton`) и двух `ft.Container(..., expand=True, visible=...)` с содержимым вкладок. Переключение происходит через изменение `visible`. Это обходной путь, чтобы полностью исключить `ft.Tabs` из цепочки layout.
+
+**Нужно проверить:** помогло ли это решение в реальном GUI. Если нет — проблема глубже (возможно, в `ft.Column`/`ft.Container` с `expand=True` внутри других `expand=True`, в `ResponsiveRow`, в `department_table.py` или в том, как Flet 0.23.2 на Windows обрабатывает размеры).
+
+### Куда смотреть при отладке
+
+- `porayonka-app/main.py` — сборка страницы, переключение вкладок, `page.add`.
+- `porayonka-app/ui/department_table.py` — таблица 29 отделов (`scroll_area`, `rows_column`, `table_container`).
+- `porayonka-app/ui/zonal/zonal_tab.py` — корневая вкладка зональных, `ResponsiveRow`, `toolbar`, `summary_col`.
+- `porayonka-app/ui/zonal/criminalist_tile.py` — плашки криминалистов.
+- `porayonka-app/core/constants.py` — `COLORS`.
+
+### Ограничения
+
+- Не повышать версию Flet выше 0.23.2 без полного regression-теста (особенно `ft.icons.*`, `hint_style`, `ResponsiveRow`, `Tabs`).
+- Все `print()` в консоль — только ASCII (без emoji и спецсимволов), чтобы избежать `UnicodeEncodeError` на Windows с cp1251.
+
+---
+
 *Этот файл создан для агентов, работающих с кодовой базой. При изменении архитектуры, структуры или зависимостей обновляйте этот документ.*
