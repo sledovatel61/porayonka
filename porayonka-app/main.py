@@ -162,18 +162,18 @@ def main(page: ft.Page) -> None:
         )
 
     # ── Вкладки ─────────────────────────────────────────────────
+    HEADER_HEIGHT = 84
+
     tabs = ft.Tabs(
         selected_index=0,
         animation_duration=200,
-        expand=True,
-        expand_loose=True,
         tabs=[
             ft.Tab(
-                text="Sledstvennye otdely",
+                text="Следственные отделы",
                 content=tab1_content,
             ),
             ft.Tab(
-                text="Zonalnye",
+                text="Зональные",
                 content=tab2_content,
             ),
         ],
@@ -181,6 +181,18 @@ def main(page: ft.Page) -> None:
         label_color=COLORS["text"],
         unselected_label_color=COLORS["text_secondary"],
     )
+
+    def _sync_tabs_height():
+        available_height = int(page.window.height - HEADER_HEIGHT)
+        if available_height > 0:
+            tabs.height = available_height
+            try:
+                tabs.update()
+            except Exception:
+                pass
+
+    page.on_resize = lambda e: _sync_tabs_height()
+    _sync_tabs_height()
 
     # ── Сборка страницы ──────────────────────────────────────────
     page.add(
