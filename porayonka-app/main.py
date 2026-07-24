@@ -162,14 +162,17 @@ def main(page: ft.Page) -> None:
         )
 
     # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
+    content_area = ft.Container(
+        content=tab1_content,
+        expand=True,
+    )
+
     def _switch_tab(index: int):
-        tab1_container.visible = (index == 0)
-        tab2_container.visible = (index == 1)
+        content_area.content = tab1_content if index == 0 else tab2_content
         btn_tab1.style.bgcolor = COLORS["btn_save"] if index == 0 else COLORS["primary_light"]
         btn_tab2.style.bgcolor = COLORS["btn_save"] if index == 1 else COLORS["primary_light"]
         try:
-            tab1_container.update()
-            tab2_container.update()
+            content_area.update()
             btn_tab1.update()
             btn_tab2.update()
         except Exception:
@@ -207,25 +210,13 @@ def main(page: ft.Page) -> None:
         bgcolor=COLORS["primary"],
     )
 
-    tab1_container = ft.Container(
-        content=tab1_content,
-        expand=True,
-        visible=True,
-    )
-    tab2_container = ft.Container(
-        content=tab2_content,
-        expand=True,
-        visible=False,
-    )
-
     # ── Сборка страницы ──────────────────────────────────────────
     page.add(
         ft.Column(
             controls=[
                 header,
                 tab_bar,
-                tab1_container,
-                tab2_container,
+                content_area,
             ],
             spacing=0,
             expand=True,

@@ -692,7 +692,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,
-        expand=True,
     )
 
     print("[ZONAL_TAB] Vkladka sozdana uspeshno (faza 2)")

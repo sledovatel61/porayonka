@@ -445,25 +445,88 @@ React-версия использует похожие цвета, но hardcode
 2. Обёртка `ft.Tabs` в `ft.Container(expand=True)` — не дала эффекта.
 3. Явная высота `ft.Tabs` (`tabs.height = page.window.height - 84`) + `page.on_resize` для пересчёта — содержимое всё равно не появилось.
 4. `expand=True` для `scroll_area`/`rows_column`/`table_container` в `ui/department_table.py` и обёртка `ResponsiveRow` в `ft.Container(expand=True)` в `ui/zonal/zonal_tab.py` — не решило проблему.
+5. **Фикс v2 (агенты 1 и 2):** убирание `scroll=ft.ScrollMode.AUTO` у `tab1_content`, убирание `expand=True` у `responsive_row`/`responsive_row_container` и `progress_area`, замена emoji на `ft.icons.*`, ASCII-логи — вкладки остались пустыми.
+6. **Фикс v3:** замена двух `visible`-контейнеров на один `content_area` с динамической сменой `content`, убирание `expand=True` у корневой колонки `tab_content` — требует проверки пользователем.
 
-### Текущее экспериментальное решение в `main`
+### 15.3 Последний экспериментальный фикс (v3)
 
-В `main.py` `ft.Tabs` заменён на кастомный переключатель из двух кнопок (`ft.ElevatedButton`) и двух `ft.Container(..., expand=True, visible=...)` с содержимым вкладок. Переключение происходит через изменение `visible`. Это обходной путь, чтобы полностью исключить `ft.Tabs` из цепочки layout.
+Применены дополнительные изменения после того, как фикс v2 не устранил пустые вкладки:
 
-**Нужно проверить:** помогло ли это решение в реальном GUI. Если нет — проблема глубже (возможно, в `ft.Column`/`ft.Container` с `expand=True` внутри других `expand=True`, в `ResponsiveRow`, в `department_table.py` или в том, как Flet 0.23.2 на Windows обрабатывает размеры).
+- `main.py` — заменена схема с двумя `ft.Container(..., visible=True/False)` на **один `content_area`** (`ft.Container`), в котором меняется `content` при переключении вкладки. Это исключает участие невидимого контейнера в layout и устраняет возможный конфликт двух `expand=True` контейнеров, из которых один скрыт.
+- `porayonka-app/ui/zonal/zonal_tab.py` — у корневой колонки вкладки `tab_content` убран `expand=True`, оставлен только `scroll=ft.ScrollMode.AUTO`. Корневая колонка зональной вкладки теперь получает высоту от родительского `content_area` и скроллится внутри него, вместо того чтобы растягиваться в бесконечную высоту.
 
-### Куда смотреть при отладке
+### 15.4 Что нужно проверить сейчас
 
-- `porayonka-app/main.py` — сборка страницы, переключение вкладок, `page.add`.
-- `porayonka-app/ui/department_table.py` — таблица 29 отделов (`scroll_area`, `rows_column`, `table_container`).
-- `porayonka-app/ui/zonal/zonal_tab.py` — корневая вкладка зональных, `ResponsiveRow`, `toolbar`, `summary_col`.
-- `porayonka-app/ui/zonal/criminalist_tile.py` — плашки криминалистов.
-- `porayonka-app/core/constants.py` — `COLORS`.
+```bash
+cd porayonka-app
+python main.py
+```
 
-### Ограничения
+- Вкладка «Следственные отделы» должна показать: статистику, тулбар, легенду, таблицу 29 отделов.
+- Вкладка «Зональные» должна показать: конструктор шаблона, сводку, тулбар поиска/фильтра, сетку плашек криминалистов.
+- Если содержимое по-прежнему не отображается — проблема глубже, чем `expand/scroll`. Возможные направления:
+  1. `ft.Container` с `content=ft.Column(..., expand=True)` внутри `content_area` не получает/не передаёт constraints в Flet 0.23.2.
+  2. Вложенная цепочка `Column → Container → Column → Container → Column(scroll=AUTO)` в `department_table.py` слишком глубока и где-то теряется высота.
+  3. `page.theme_mode = ft.ThemeMode.LIGHT` конфликтует с тёмной палитрой, но это маловероятно, т.к. шапка и фон рендерятся.
+  4. Баг конкретной сборки Flet 0.23.2 на Windows (Flutter engine) — может потребоваться явная высота или `Stack` вместо `Column`/`Container`.
+
+### 15.5 Ограничения
 
 - Не повышать версию Flet выше 0.23.2 без полного regression-теста (особенно `ft.icons.*`, `hint_style`, `ResponsiveRow`, `Tabs`).
 - Все `print()` в консоль — только ASCII (без emoji и спецсимволов), чтобы избежать `UnicodeEncodeError` на Windows с cp1251.
+- Не добавлять `expand=True` внутрь `Column`/`Container` с `scroll=ft.ScrollMode.AUTO` — это основная гипотеза причины схлопывания.
+
+---
+
+## 16. Промпт для агентов на анализ/ремонт layout
+
+> Используйте этот промпт как стартовую точку для новых агентов, запускаемых на арене. Задача — добиться, чтобы обе вкладки отображались в реальном GUI Windows + Flet 0.23.2.
+
+**Контекст:**
+
+- Репозиторий: `https://github.com/USERNAME/porayonka-app` (ветка `main`).
+- Приложение: `porayonka-app/main.py`.
+- Версия Flet: **строго 0.23.2** (`flet==0.23.2` в `requirements.txt`).
+- Окружение: Windows, Python 3.10+, запуск `python porayonka-app/main.py`.
+- Скрины от пользователя: шапка и переключатель вкладок видны, но содержимое вкладок пустое/серое. Логи в консоли показывают, что строки таблицы, плашки криминалистов, сводка создаются без ошибок.
+
+**Уже попробовано (не работает):**
+
+1. `ft.Tabs(expand=True)` и обёртки в `ft.Container(expand=True)`.
+2. Явная высота `ft.Tabs` + `page.on_resize`.
+3. Замена `ft.Tabs` на кастомные кнопки + два `ft.Container(..., expand=True, visible=True/False)`.
+4. Убирание `scroll=ft.ScrollMode.AUTO` у корневой колонки первой вкладки.
+5. Убирание `expand=True` у `ResponsiveRow` и его контейнера во вкладке «Зональные».
+6. Убирание `expand=True` у `progress_area` в сводке.
+7. Замена всех emoji-строк на `ft.icons.*`.
+8. Перевод всех `print()` на ASCII.
+9. Замена двух visible-контейнеров на один `content_area` с динамической сменой `content`.
+10. Убирание `expand=True` у корневой колонки вкладки «Зональные».
+
+**Что нужно сделать:**
+
+1. Проанализируй `porayonka-app/main.py`, `porayonka-app/ui/department_table.py`, `porayonka-app/ui/zonal/zonal_tab.py`, `porayonka-app/ui/zonal/criminalist_tile.py`, `porayonka-app/ui/zonal/summary_panel.py`.
+2. Найди, почему содержимое вкладок не отображается в GUI, несмотря на успешное создание контролов в логах.
+3. Предложи минимальные изменения, которые исправят layout в Flet 0.23.2 на Windows.
+4. Объясни, почему предыдущие фиксы не сработали, и почему твой должен сработать.
+5. Не повышай версию Flet. Не добавляй новые зависимости. Сохрани существующий функционал.
+6. После правки проверь импорты: `python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"`.
+7. Подготовь diff и описание для внедрения оркестратором.
+
+**Важно:**
+
+- Делай только layout-фикс. Не трогай логику данных, сохранение, экспорт, модели.
+- Если нужно добавить временные отладочные `bgcolor` или `print()` — это допустимо, но пометь их явно, чтобы оркестратор удалил перед релизом.
+- Если единственное рабочее решение — радикальная перестройка (например, `Stack` вместо `Column`, или отказ от `ResponsiveRow`), объясни trade-offs и предложи пошаговый план.
+
+**Где искать:**
+
+- `porayonka-app/main.py` — сборка страницы, `content_area`, `tab_bar`, `_switch_tab`.
+- `porayonka-app/ui/department_table.py` — `table_container`, `scroll_area`, `rows_column`.
+- `porayonka-app/ui/zonal/zonal_tab.py` — `tab_content`, `responsive_row_container`, `summary_col`, `toolbar`.
+- `porayonka-app/ui/zonal/criminalist_tile.py` — размеры и `col` плашек.
+- `porayonka-app/core/constants.py` — `COLORS`.
+- `AGENTS.md` раздел 15 — история проблемы и предыдущие фиксы.
 
 ---
 
