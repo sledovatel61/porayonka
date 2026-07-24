@@ -56,6 +56,7 @@ class Criminalist:
     id: int
     full_name: str               # ФИО
     note: str = ""               # Примечание (например, "Цифровая криминалистика")
+    is_active: bool = True       # Участвует в текущем сборе
     zone: CriminalistZone = field(default_factory=lambda: CriminalistZone(criminalist_id=0))
 
 

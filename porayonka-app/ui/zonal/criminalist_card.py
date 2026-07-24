@@ -19,6 +19,7 @@ def create_criminalist_card(
     on_data_change: Callable,
     on_zone_edit: Callable,
     on_delete_criminalist: Callable,
+    on_toggle_active: Callable,  # ← НОВЫЙ колбэк
     dept_map: Dict[int, str],
 ) -> ft.Column:
     """
@@ -344,7 +345,23 @@ def create_criminalist_card(
         visible=bool(criminalist.note),
     )
 
-    # Кнопки управления (зоны + удалить)
+    # Кнопки управления (активность + зоны + удалить)
+    
+    # КНОПКА: Активность
+    active_icon = ft.Icons.VISIBILITY if criminalist.is_active else ft.Icons.VISIBILITY_OFF
+    active_color = COLORS["btn_save"] if criminalist.is_active else "#64748b"
+    active_tooltip = "Активен — участвует в сборе" if criminalist.is_active else "Отключён — не участвует в сборе"
+    
+    toggle_active_btn = ft.IconButton(
+        icon=active_icon,
+        icon_size=18,
+        icon_color=active_color,
+        tooltip=active_tooltip,
+        on_click=lambda e: on_toggle_active(criminalist),
+        style=ft.ButtonStyle(padding=ft.padding.all(4)),
+    )
+    
+    # КНОПКА: Редактировать зоны
     edit_zone_btn = ft.IconButton(
         icon=ft.Icons.EDIT,
         icon_size=18,
@@ -370,6 +387,8 @@ def create_criminalist_card(
                 ft.Text("👤", size=16),
                 name_text,
                 note_text,
+                ft.Container(width=4),  # Отступ
+                toggle_active_btn,  # Кнопка активности
                 edit_zone_btn,
                 delete_btn,
                 expand_icon,

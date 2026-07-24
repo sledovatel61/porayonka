@@ -1,5 +1,6 @@
 # core/zonal_data.py
 # Загрузка и сохранение данных зональных криминалистов
+# Разделённое хранение: шаблон, данные, криминалисты — отдельно
 import json
 import os
 from pathlib import Path
@@ -33,8 +34,18 @@ def get_templates_path() -> Path:
 
 
 def get_collection_file() -> Path:
-    """Путь к файлу сбора данных"""
+    """Путь к старому файлу сбора данных (для миграции)"""
     return get_data_path() / "zonal_collection.json"
+
+
+def get_template_file() -> Path:
+    """Путь к файлу текущего шаблона"""
+    return get_data_path() / "zonal_template.json"
+
+
+def get_submissions_file() -> Path:
+    """Путь к файлу данных отчётов"""
+    return get_data_path() / "zonal_submissions.json"
 
 
 def get_criminalists_file() -> Path:
@@ -115,6 +126,7 @@ def _criminalist_to_dict(c: Criminalist) -> dict:
         "id": c.id,
         "full_name": c.full_name,
         "note": c.note,
+        "is_active": c.is_active,
         "zone": {
             "criminalist_id": c.zone.criminalist_id,
             "department_ids": c.zone.department_ids,
@@ -128,6 +140,7 @@ def _criminalist_from_dict(d: dict) -> Criminalist:
         id=d["id"],
         full_name=d["full_name"],
         note=d.get("note", ""),
+        is_active=d.get("is_active", True),  # Для обратной совместимости
         zone=CriminalistZone(
             criminalist_id=zone_data.get("criminalist_id", d["id"]),
             department_ids=zone_data.get("department_ids", []),
@@ -193,64 +206,96 @@ def delete_zonal_template(template_name: str) -> None:
 
 
 # ────────────────────────────────────────────────────────────
-# СБОР ДАННЫХ
+# ТЕКУЩИЙ ШАБЛОН (РАЗДЕЛЁННОЕ ХРАНЕНИЕ)
 # ────────────────────────────────────────────────────────────
 
-def load_zonal_collection() -> Optional[ZonalCollection]:
-    """Загрузить текущий сбор данных"""
-    filepath = get_collection_file()
+def load_zonal_template() -> ReportTemplate:
+    """Загрузить текущий активный шаблон из zonal_template.json"""
+    filepath = get_template_file()
     if not filepath.exists():
-        print("[ZONAL_DATA] Файл сбора данных не найден")
-        return None
+        print("[ZONAL_DATA] Файл шаблона не найден, создаю пустой")
+        return ReportTemplate(name="Новая форма")
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
-        template = _template_from_dict(data.get("template", {"name": "Новая форма"}))
-        submissions = [_report_data_from_dict(s) for s in data.get("submissions", [])]
-        last_saved_str = data.get("last_saved")
-        last_saved = datetime.fromisoformat(last_saved_str) if last_saved_str else None
-        # Загружаем криминалистов
-        criminalists_data = data.get("criminalists", [])
-        if criminalists_data:
-            criminalists = [_criminalist_from_dict(c) for c in criminalists_data]
-        else:
-            criminalists = get_initial_criminalists()
-        collection = ZonalCollection(
-            template=template,
-            submissions=submissions,
-            last_saved=last_saved,
-            criminalists=criminalists,
-        )
-        print(f"[ZONAL_DATA] Сбор данных загружен: {template.name}, "
-              f"записей: {len(submissions)}, криминалистов: {len(criminalists)}")
-        return collection
+        template = _template_from_dict(data)
+        print(f"[ZONAL_DATA] Шаблон загружен: {template.name}, пунктов: {len(template.items)}")
+        return template
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка загрузки сбора данных: {e}")
-        return None
+        print(f"[ZONAL_DATA] Ошибка загрузки шаблона: {e}")
+        return ReportTemplate(name="Новая форма")
 
 
-def save_zonal_collection(collection: ZonalCollection) -> None:
-    """Сохранить сбор данных"""
-    filepath = get_collection_file()
+def save_zonal_template_to_file(template: ReportTemplate) -> None:
+    """Сохранить текущий шаблон в zonal_template.json"""
+    filepath = get_template_file()
     try:
-        now = datetime.now()
-        collection.last_saved = now
-        data = {
-            "template": _template_to_dict(collection.template),
-            "submissions": [_report_data_to_dict(s) for s in collection.submissions],
-            "last_saved": now.isoformat(),
-            "criminalists": [_criminalist_to_dict(c) for c in collection.criminalists],
-        }
+        data = _template_to_dict(template)
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[ZONAL_DATA] Сбор данных сохранён: {filepath}")
+        print(f"[ZONAL_DATA] Шаблон сохранён: {filepath}")
     except Exception as e:
-        print(f"[ZONAL_DATA] Ошибка сохранения сбора данных: {e}")
+        print(f"[ZONAL_DATA] Ошибка сохранения шаблона: {e}")
         raise
 
 
 # ────────────────────────────────────────────────────────────
-# КРИМИНАЛИСТЫ
+# ДАННЫЕ ОТЧЁТОВ / SUBMISSIONS (РАЗДЕЛЁННОЕ ХРАНЕНИЕ)
+# ────────────────────────────────────────────────────────────
+
+def load_zonal_submissions() -> List[ReportData]:
+    """Загрузить данные отчётов из zonal_submissions.json"""
+    filepath = get_submissions_file()
+    if not filepath.exists():
+        print("[ZONAL_DATA] Файл данных не найден, будет создан пустой")
+        return []
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        submissions = [_report_data_from_dict(s) for s in data.get("submissions", [])]
+        print(f"[ZONAL_DATA] Загружено данных: {len(submissions)}")
+        return submissions
+    except Exception as e:
+        print(f"[ZONAL_DATA] Ошибка загрузки данных: {e}")
+        return []
+
+
+def save_zonal_submissions(submissions: List[ReportData]) -> None:
+    """Сохранить данные отчётов в zonal_submissions.json"""
+    filepath = get_submissions_file()
+    try:
+        data = {"submissions": [_report_data_to_dict(s) for s in submissions]}
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"[ZONAL_DATA] Данные сохранены ({len(submissions)} записей): {filepath}")
+    except Exception as e:
+        print(f"[ZONAL_DATA] Ошибка сохранения данных: {e}")
+        raise
+
+
+def clear_zonal_submissions() -> None:
+    """Очистить все данные отчётов (сброс данных)"""
+    filepath = get_submissions_file()
+    try:
+        if filepath.exists():
+            # Backup перед удалением
+            backup_path = get_data_path() / "zonal_submissions_backup.json"
+            filepath.rename(backup_path)
+            print(f"[ZONAL_DATA] Данные перемещены в backup: {backup_path}")
+        data = {"submissions": []}
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"[ZONAL_DATA] Данные очищены: {filepath}")
+    except Exception as e:
+        print(f"[ZONAL_DATA] Ошибка очистки данных: {e}")
+        # Если backup не удался, просто записываем пустой файл
+        data = {"submissions": []}
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# ────────────────────────────────────────────────────────────
+# КРИМИНАЛИСТЫ (РАЗДЕЛЁННОЕ ХРАНЕНИЕ)
 # ────────────────────────────────────────────────────────────
 
 def load_criminalists() -> List[Criminalist]:
@@ -284,6 +329,108 @@ def save_criminalists(criminalists: List[Criminalist]) -> None:
 
 
 # ────────────────────────────────────────────────────────────
+# КОЛЛЕКЦИЯ (ОБЪЕДИНЯЕТ ВСЕ ЧАСТИ)
+# ────────────────────────────────────────────────────────────
+
+def _migrate_old_collection() -> bool:
+    """
+    Миграция старого zonal_collection.json в новые файлы.
+    Возвращает True, если миграция выполнена.
+    """
+    old_file = get_collection_file()
+    if not old_file.exists():
+        return False
+    
+    print("[ZONAL_DATA] Обнаружен старый формат данных, выполняю миграцию...")
+    try:
+        with open(old_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        # Миграция шаблона
+        template_data = data.get("template", {"name": "Новая форма"})
+        template = _template_from_dict(template_data)
+        save_zonal_template_to_file(template)
+        
+        # Миграция submissions
+        submissions_data = data.get("submissions", [])
+        submissions = [_report_data_from_dict(s) for s in submissions_data]
+        save_zonal_submissions(submissions)
+        
+        # Миграция криминалистов
+        criminalists_data = data.get("criminalists", [])
+        if criminalists_data:
+            criminalists = [_criminalist_from_dict(c) for c in criminalists_data]
+        else:
+            criminalists = get_initial_criminalists()
+        save_criminalists(criminalists)
+        
+        # Backup старого файла
+        backup_path = old_file.with_suffix(".json.old")
+        old_file.rename(backup_path)
+        print(f"[ZONAL_DATA] Миграция завершена. Старый файл: {backup_path}")
+        return True
+        
+    except Exception as e:
+        print(f"[ZONAL_DATA] Ошибка миграции: {e}")
+        return False
+
+
+def load_zonal_collection() -> Optional[ZonalCollection]:
+    """
+    Загрузить текущий сбор данных.
+    Автоматически выполняет миграцию при наличии старого формата.
+    """
+    # Проверяем миграцию
+    _migrate_old_collection()
+    
+    # Загружаем из раздельных файлов
+    template = load_zonal_template()
+    submissions = load_zonal_submissions()
+    criminalists = load_criminalists()
+    
+    # Если нет данных — создаём новую коллекцию
+    if not criminalists:
+        criminalists = get_initial_criminalists()
+        save_criminalists(criminalists)
+    
+    # Получаем время последнего сохранения из submissions
+    last_saved = None
+    for sub in submissions:
+        if sub.updated_at and (last_saved is None or sub.updated_at > last_saved):
+            last_saved = sub.updated_at
+    
+    collection = ZonalCollection(
+        template=template,
+        submissions=submissions,
+        last_saved=last_saved,
+        criminalists=criminalists,
+    )
+    print(f"[ZONAL_DATA] Коллекция загружена: {template.name}, "
+          f"submissions: {len(submissions)}, криминалистов: {len(criminalists)}")
+    return collection
+
+
+def save_zonal_collection(collection: ZonalCollection) -> None:
+    """
+    Сохранить сбор данных в раздельные файлы.
+    """
+    try:
+        # Сохраняем шаблон
+        save_zonal_template_to_file(collection.template)
+        
+        # Сохраняем submissions
+        save_zonal_submissions(collection.submissions)
+        
+        # Сохраняем криминалистов
+        save_criminalists(collection.criminalists)
+        
+        print(f"[ZONAL_DATA] Коллекция сохранена")
+    except Exception as e:
+        print(f"[ZONAL_DATA] Ошибка сохранения коллекции: {e}")
+        raise
+
+
+# ────────────────────────────────────────────────────────────
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ────────────────────────────────────────────────────────────
 
@@ -307,13 +454,22 @@ def get_report_data(
 
 
 def get_summary(collection: ZonalCollection) -> dict:
-    """Подсчитать сводку по всем криминалистам"""
+    """
+    Подсчитать сводку по активным криминалистам.
+    Неактивные исключаются из подсчёта.
+    """
     summary = {}
+    
+    # Фильтруем только активных криминалистов
+    active_criminalists = [c for c in collection.criminalists if c.is_active]
+    total_active = len(active_criminalists)
+    
     for item in collection.template.items:
         total_value = 0
         submitted_count = 0
         filled_count = 0
-        for crim in collection.criminalists:
+        
+        for crim in active_criminalists:
             rd = None
             for sub in collection.submissions:
                 if sub.criminalist_id == crim.id and sub.template_item_id == item.id:
@@ -329,11 +485,13 @@ def get_summary(collection: ZonalCollection) -> dict:
                 if rd.is_submitted:
                     submitted_count += 1
                     filled_count += 1
+        
         summary[item.id] = {
             "item": item,
             "total_value": total_value,
             "submitted_count": submitted_count,
             "filled_count": filled_count,
-            "total_criminalists": len(collection.criminalists),
+            "total_criminalists": total_active,  # Только активные
+            "total_all": len(collection.criminalists),  # Все (для информации)
         }
     return summary

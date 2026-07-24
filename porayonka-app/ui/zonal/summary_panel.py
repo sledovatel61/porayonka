@@ -9,12 +9,17 @@ from core.constants import COLORS, INITIAL_DEPARTMENTS
 def create_summary_panel(collection: ZonalCollection) -> ft.Column:
     """
     Создать панель общей сводки.
-    Показывает итоги по пунктам + детализацию по криминалистам И ОТДЕЛАМ.
+    Показывает итоги по пунктам + детализацию по активным криминалистам.
+    Неактивные исключаются из подсчёта.
     """
     print("[SUMMARY] Создаю сводку")
     print(f"[SUMMARY] Режим по отделам: {collection.template.use_departments_mode}")
     controls      = []
     use_dept_mode = collection.template.use_departments_mode
+    
+    # Фильтруем только активных криминалистов
+    active_criminalists = [c for c in collection.criminalists if c.is_active]
+    inactive_count = len(collection.criminalists) - len(active_criminalists)
 
     header = ft.Container(
         content=ft.Row(
@@ -25,6 +30,19 @@ def create_summary_panel(collection: ZonalCollection) -> ft.Column:
                     size=15,
                     weight=ft.FontWeight.BOLD,
                     color=COLORS["text_light"],
+                ),
+                # Бейдж с информацией о неактивных
+                ft.Container(
+                    content=ft.Text(
+                        f"👁 {len(active_criminalists)}",
+                        size=12,
+                        color=COLORS["text_light"],
+                        weight=ft.FontWeight.W_500,
+                    ),
+                    bgcolor=COLORS["btn_save"],
+                    border_radius=8,
+                    padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                    visible=inactive_count > 0,
                 ),
             ],
             spacing=8,
@@ -96,7 +114,7 @@ def create_summary_panel(collection: ZonalCollection) -> ft.Column:
             )
             body_controls.append(item_header)
 
-            for crim in collection.criminalists:
+            for crim in active_criminalists:  # Только активные
                 rd = None
                 for sub in collection.submissions:
                     if sub.criminalist_id == crim.id and sub.template_item_id == item.id:
