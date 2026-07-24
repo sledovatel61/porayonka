@@ -644,8 +644,16 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         spacing=12,
         run_spacing=12,
         controls=[],
+        expand=True,
     )
     responsive_row_ref["control"] = responsive_row
+
+    # Обертка для ResponsiveRow с ограничением ширины
+    responsive_row_container = ft.Container(
+        content=responsive_row,
+        expand=True,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+    )
 
     # Первичное наполнение сетки
     for crim in collection.criminalists:
@@ -679,7 +687,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ft.Container(height=6),
             visible_count_text,
             ft.Container(height=10),
-            responsive_row,
+            responsive_row_container,
             ft.Container(height=16),
             ft.Row(controls=[export_btn], alignment=ft.MainAxisAlignment.END),
             ft.Container(height=20),

@@ -166,13 +166,14 @@ def main(page: ft.Page) -> None:
         selected_index=0,
         animation_duration=200,
         expand=True,
+        expand_loose=True,
         tabs=[
             ft.Tab(
-                text="🏛 Следственные отделы",
+                text="Sledstvennye otdely",
                 content=tab1_content,
             ),
             ft.Tab(
-                text="🔬 Зональные",
+                text="Zonalnye",
                 content=tab2_content,
             ),
         ],
