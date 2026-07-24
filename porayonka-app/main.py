@@ -130,7 +130,7 @@ def main(page: ft.Page) -> None:
                 ft.Container(height=20),
             ],
             spacing=0,
-            expand=True,
+            scroll=ft.ScrollMode.AUTO,
         ),
         padding=ft.padding.all(20),
         expand=True,
@@ -147,28 +147,40 @@ def main(page: ft.Page) -> None:
             padding=ft.padding.all(20),
             expand=True,
         )
-        print("[MAIN] [OK] Вкладка Зональные создана")
+        print("[MAIN] [OK] Vkladka Zonalnye sozdana")
     except Exception as e:
         import traceback
-        print(f"[MAIN] [ERROR] Ошибка создания вкладки Зональные: {e}")
+        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Zonalnye: {e}")
         traceback.print_exc()
         tab2_content = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text(f"Ошибка загрузки вкладки: {e}", color="#dc2626"),
+                    ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
                 ],
             ),
             padding=ft.padding.all(20),
+            expand=True,
         )
 
     # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
-    content_area = ft.Container(
+    tab1_container = ft.Container(
         content=tab1_content,
+        expand=True,
+        visible=True,
+    )
+    tab2_container = ft.Container(
+        content=tab2_content,
+        expand=True,
+        visible=False,
+    )
+    content_area = ft.Stack(
+        controls=[tab1_container, tab2_container],
         expand=True,
     )
 
     def _switch_tab(index: int):
-        content_area.content = tab1_content if index == 0 else tab2_content
+        tab1_container.visible = (index == 0)
+        tab2_container.visible = (index == 1)
         btn_tab1.style.bgcolor = COLORS["btn_save"] if index == 0 else COLORS["primary_light"]
         btn_tab2.style.bgcolor = COLORS["btn_save"] if index == 1 else COLORS["primary_light"]
         try:

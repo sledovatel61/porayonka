@@ -446,7 +446,7 @@ React-версия использует похожие цвета, но hardcode
 3. Явная высота `ft.Tabs` (`tabs.height = page.window.height - 84`) + `page.on_resize` для пересчёта — содержимое всё равно не появилось.
 4. `expand=True` для `scroll_area`/`rows_column`/`table_container` в `ui/department_table.py` и обёртка `ResponsiveRow` в `ft.Container(expand=True)` в `ui/zonal/zonal_tab.py` — не решило проблему.
 5. **Фикс v2 (агенты 1 и 2):** убирание `scroll=ft.ScrollMode.AUTO` у `tab1_content`, убирание `expand=True` у `responsive_row`/`responsive_row_container` и `progress_area`, замена emoji на `ft.icons.*`, ASCII-логи — вкладки остались пустыми.
-6. **Фикс v3:** замена двух `visible`-контейнеров на один `content_area` с динамической сменой `content`, убирание `expand=True` у корневой колонки `tab_content` — требует проверки пользователем.
+6. **Фикс v4 (радикальный):** замена `content_area` на `ft.Stack` с двумя `ft.Container(expand=True, visible=True/False)`, отказ от всех `expand=True` в `department_table.py` (`table_container`, `scroll_area`, `rows_column`) — требует проверки.
 
 ### 15.3 Последний экспериментальный фикс (v3)
 
@@ -455,7 +455,19 @@ React-версия использует похожие цвета, но hardcode
 - `main.py` — заменена схема с двумя `ft.Container(..., visible=True/False)` на **один `content_area`** (`ft.Container`), в котором меняется `content` при переключении вкладки. Это исключает участие невидимого контейнера в layout и устраняет возможный конфликт двух `expand=True` контейнеров, из которых один скрыт.
 - `porayonka-app/ui/zonal/zonal_tab.py` — у корневой колонки вкладки `tab_content` убран `expand=True`, оставлен только `scroll=ft.ScrollMode.AUTO`. Корневая колонка зональной вкладки теперь получает высоту от родительского `content_area` и скроллится внутри него, вместо того чтобы растягиваться в бесконечную высоту.
 
-### 15.4 Что нужно проверить сейчас
+**Результат:** не помогло. Скрины показывают, что шапка и таб-бар отображаются, но содержимое вкладок пустое, а layout выглядит «съехавшим» (поисковое поле оказалось вверху, затем иконка/название, затем кнопки). Это говорит о том, что проблема глубже, чем просто `expand/scroll`.
+
+### 15.4 Радикальный фикс (v4) — `ft.Stack` + отказ от вложенных `expand`
+
+Применена радикальная упрощение layout:
+
+- `main.py` — вместо `content_area` с динамической сменой `content` используется `ft.Stack` с двумя `ft.Container(..., expand=True, visible=True/False)`. Stack не делит пространство между видимыми и невидимыми контейнерами, а предоставляет constraints каждому из них.
+- `main.py` — `tab1_content` стал `ft.Column` с `scroll=ft.ScrollMode.AUTO` (без `expand=True`), обёрнутым в `ft.Container(expand=True)`. Вся первая вкладка скроллится как единое целое.
+- `porayonka-app/ui/department_table.py` — убраны все `expand=True` из `table_container`, `scroll_area` и `rows_column`. Таблица отделов теперь занимает высоту по содержимому (29 строк + заголовок + футер), а скроллинг происходит на уровне вкладки, а не внутри таблицы.
+
+**Гипотеза:** в Flet 0.23.2 на Windows вложенная цепочка `Column(expand) → Container(expand) → Column(scroll, expand) → Container(expand) → Column(scroll, expand)` приводит к полному схлопыванию или неправильному порядку рендеринга. Упрощение до `Stack → Container(expand) → Column(scroll)` должно устранить эту цепочку.
+
+**Результат:** требует проверки пользователем.
 
 ```bash
 cd porayonka-app
@@ -501,7 +513,7 @@ python main.py
 7. Замена всех emoji-строк на `ft.icons.*`.
 8. Перевод всех `print()` на ASCII.
 9. Замена двух visible-контейнеров на один `content_area` с динамической сменой `content`.
-10. Убирание `expand=True` у корневой колонки вкладки «Зональные».
+11. Радикальный фикс v4: `ft.Stack` с двумя `ft.Container(expand=True, visible=True/False)` вместо `content_area` + отказ от всех `expand=True` внутри `department_table.py` (`table_container`, `scroll_area`, `rows_column`).
 
 **Что нужно сделать:**
 

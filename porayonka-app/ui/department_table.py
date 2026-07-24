@@ -186,7 +186,6 @@ def create_department_table(
         controls=rows,
         spacing=0,
         scroll=ft.ScrollMode.AUTO,
-        expand=True,
     )
 
     scroll_area = ft.Container(
@@ -196,7 +195,6 @@ def create_department_table(
             left=ft.BorderSide(1, COLORS["border"]),
             right=ft.BorderSide(1, COLORS["border"]),
         ),
-        expand=True,
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
@@ -211,7 +209,6 @@ def create_department_table(
                     ],
                     spacing=0,
                     tight=False,
-                    expand=True,
                 ),
                 border_radius=10,
                 border=ft.border.all(1, COLORS["border"]),
@@ -222,11 +219,9 @@ def create_department_table(
                     offset=ft.Offset(0, 2),
                 ),
                 clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                expand=True,
             ),
         ],
         spacing=0,
-        expand=True,
     )
 
     page.status_cells    = status_cells
