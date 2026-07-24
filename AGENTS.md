@@ -446,7 +446,7 @@ React-версия использует похожие цвета, но hardcode
 3. Явная высота `ft.Tabs` (`tabs.height = page.window.height - 84`) + `page.on_resize` для пересчёта — содержимое всё равно не появилось.
 4. `expand=True` для `scroll_area`/`rows_column`/`table_container` в `ui/department_table.py` и обёртка `ResponsiveRow` в `ft.Container(expand=True)` в `ui/zonal/zonal_tab.py` — не решило проблему.
 5. **Фикс v2 (агенты 1 и 2):** убирание `scroll=ft.ScrollMode.AUTO` у `tab1_content`, убирание `expand=True` у `responsive_row`/`responsive_row_container` и `progress_area`, замена emoji на `ft.icons.*`, ASCII-логи — вкладки остались пустыми.
-6. **Фикс v4 (радикальный):** замена `content_area` на `ft.Stack` с двумя `ft.Container(expand=True, visible=True/False)`, отказ от всех `expand=True` в `department_table.py` (`table_container`, `scroll_area`, `rows_column`) — требует проверки.
+7. **Фикс v5 (Agent 3):** `fit=ft.StackFit.EXPAND` в `main.py`, убран внутренний scroll у `rows_column`, убраны проблемные вертикальные `expand=True` из `stats_bar.py`, `template_builder.py`, `criminalist_tile.py`, поисковое поле зональных получило фиксированную ширину вместо `expand=True` внутри `Row(wrap=True)` — требует проверки.
 
 ### 15.3 Последний экспериментальный фикс (v3)
 
@@ -466,6 +466,33 @@ React-версия использует похожие цвета, но hardcode
 - `porayonka-app/ui/department_table.py` — убраны все `expand=True` из `table_container`, `scroll_area` и `rows_column`. Таблица отделов теперь занимает высоту по содержимому (29 строк + заголовок + футер), а скроллинг происходит на уровне вкладки, а не внутри таблицы.
 
 **Гипотеза:** в Flet 0.23.2 на Windows вложенная цепочка `Column(expand) → Container(expand) → Column(scroll, expand) → Container(expand) → Column(scroll, expand)` приводит к полному схлопыванию или неправильному порядку рендеринга. Упрощение до `Stack → Container(expand) → Column(scroll)` должно устранить эту цепочку.
+
+**Результат:** не помогло. v4 оставил `Stack` без `fit=ft.StackFit.EXPAND` и не убрал проблемные `expand=True` из внутренних компонентов.
+
+### 15.5 Фикс v5 (Agent 3) — `StackFit.EXPAND` + чистка внутренних `expand` и вложенного scroll
+
+После анализа трёх отчётов агентов применён фикс на основе самого глубокого разбора (Agent 3):
+
+**Основная причина, по которой v4 не работал:**
+- `expand=True` в Flet работает только для дочерних элементов `Row`, `Column` и `View`. Внутри `ft.Stack` этот параметр игнорируется, если не задан `fit=ft.StackFit.EXPAND`.
+- Два вертикальных ScrollView: `tab1_content` (scroll) и `rows_column` внутри таблицы (scroll). Внутренний получал неограниченную высоту.
+- Вертикальные `expand=True` внутри колонок, которые в процессе layout получают неограниченную высоту (`stats_bar.py`, `template_builder.py`, `criminalist_tile.py`).
+- `Expanded` внутри `Wrap` (`Row(wrap=True)` с `expand=True` в поисковом поле).
+
+**Внесённые изменения:**
+
+- `main.py` — добавлен `fit=ft.StackFit.EXPAND` к `ft.Stack`. Теперь дочерние контейнеры вкладок растягиваются на всю доступную область Stack.
+- `ui/department_table.py` — убран `scroll=ft.ScrollMode.AUTO` у `rows_column`. Скролл принадлежит только корню вкладки.
+- `ui/stats_bar.py` — убран `expand=True` у `ProgressBar` (вертикальный Expanded в колонке, которая может получить неограниченную высоту).
+- `ui/zonal/template_builder.py` — убран `expand=True` у поля названия шаблона (та же причина).
+- `ui/zonal/criminalist_tile.py` — `expand=True` перенесён с `Row` на сам `ProgressBar` (в `Row` это корректное горизонтальное расширение, но на `Row` внутри `Column` может быть проблемой; на `ProgressBar` внутри `Row` — однозначно горизонтальное).
+- `ui/zonal/zonal_tab.py` — убран `expand=True` у поискового поля, добавлена фиксированная ширина `width=320` (поле находилось внутри `Row(wrap=True)`, где `expand` превращается в `Expanded`, допустимый только в `Row`/`Column`, но не в `Wrap`).
+
+**Почему это должно сработать:**
+- `StackFit.EXPAND` гарантирует, что дочерние вкладки получат конечные constraints от `Stack`.
+- Один вертикальный ScrollView на вкладку (корень вкладки).
+- Отсутствие вертикальных `Expanded` внутри прокручиваемого содержимого.
+- Только корректное горизонтальное расширение внутри обычных `Row`.
 
 **Результат:** требует проверки пользователем.
 
@@ -513,7 +540,7 @@ python main.py
 7. Замена всех emoji-строк на `ft.icons.*`.
 8. Перевод всех `print()` на ASCII.
 9. Замена двух visible-контейнеров на один `content_area` с динамической сменой `content`.
-11. Радикальный фикс v4: `ft.Stack` с двумя `ft.Container(expand=True, visible=True/False)` вместо `content_area` + отказ от всех `expand=True` внутри `department_table.py` (`table_container`, `scroll_area`, `rows_column`).
+12. Фикс v5 (Agent 3): `fit=ft.StackFit.EXPAND` в `main.py`, убран внутренний scroll у `rows_column`, убраны проблемные вертикальные `expand=True` из `stats_bar.py`, `template_builder.py`, `criminalist_tile.py`, поисковое поле зональных получило фиксированную ширину вместо `expand=True` внутри `Row(wrap=True)`.
 
 **Что нужно сделать:**
 

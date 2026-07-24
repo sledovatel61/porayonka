@@ -175,6 +175,7 @@ def main(page: ft.Page) -> None:
     )
     content_area = ft.Stack(
         controls=[tab1_container, tab2_container],
+        fit=ft.StackFit.EXPAND,
         expand=True,
     )
 

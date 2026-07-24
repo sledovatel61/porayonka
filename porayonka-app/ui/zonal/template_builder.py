@@ -35,7 +35,8 @@ def create_template_builder(
         color=COLORS["text"],    # ТЁМНЫЙ ТЕКСТ
         height=44,
         text_size=14,
-        expand=True,
+        # Do not use expand in a Column nested in the tab's ScrollView:
+        # Flet maps it to vertical Expanded, which has unbounded height here.
         # ИСПРАВЛЕНИЕ: hint_style вместо hint_text_color
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
     )

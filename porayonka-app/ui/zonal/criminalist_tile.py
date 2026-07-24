@@ -141,6 +141,7 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         color=bar_color,
         bgcolor=COLORS["border"],
         border_radius=4,
+        expand=True,
     )
     progress_label = ft.Text(
         f"{pct}%  ({fill['filled_items']}/{fill['total_items']})",
@@ -154,7 +155,6 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
                 controls=[progress_bar, progress_label],
                 spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                expand=True,
             ),
         ],
         spacing=4,

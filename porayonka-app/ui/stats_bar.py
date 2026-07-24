@@ -139,7 +139,6 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
         color=COLORS["btn_save"],
         border_radius=4,
         height=6,
-        expand=True,
     )
     page.stats_progress_bar = progress_bar
 
