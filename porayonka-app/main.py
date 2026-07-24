@@ -161,45 +161,71 @@ def main(page: ft.Page) -> None:
             padding=ft.padding.all(20),
         )
 
-    # ── Вкладки ─────────────────────────────────────────────────
-    HEADER_HEIGHT = 84
+    # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
+    def _switch_tab(index: int):
+        tab1_container.visible = (index == 0)
+        tab2_container.visible = (index == 1)
+        btn_tab1.style.bgcolor = COLORS["btn_save"] if index == 0 else COLORS["primary_light"]
+        btn_tab2.style.bgcolor = COLORS["btn_save"] if index == 1 else COLORS["primary_light"]
+        try:
+            tab1_container.update()
+            tab2_container.update()
+            btn_tab1.update()
+            btn_tab2.update()
+        except Exception:
+            pass
 
-    tabs = ft.Tabs(
-        selected_index=0,
-        animation_duration=200,
-        tabs=[
-            ft.Tab(
-                text="Следственные отделы",
-                content=tab1_content,
-            ),
-            ft.Tab(
-                text="Зональные",
-                content=tab2_content,
-            ),
-        ],
-        indicator_color=COLORS["btn_save"],
-        label_color=COLORS["text"],
-        unselected_label_color=COLORS["text_secondary"],
+    btn_tab1 = ft.ElevatedButton(
+        text="Следственные отделы",
+        color=COLORS["text"],
+        bgcolor=COLORS["btn_save"],
+        height=40,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=8),
+            padding=ft.padding.symmetric(horizontal=16),
+        ),
+        on_click=lambda e: _switch_tab(0),
+    )
+    btn_tab2 = ft.ElevatedButton(
+        text="Зональные",
+        color=COLORS["text"],
+        bgcolor=COLORS["primary_light"],
+        height=40,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=8),
+            padding=ft.padding.symmetric(horizontal=16),
+        ),
+        on_click=lambda e: _switch_tab(1),
+    )
+    tab_bar = ft.Container(
+        content=ft.Row(
+            controls=[btn_tab1, btn_tab2],
+            spacing=12,
+            alignment=ft.MainAxisAlignment.START,
+        ),
+        padding=ft.padding.symmetric(horizontal=20, vertical=8),
+        bgcolor=COLORS["primary"],
     )
 
-    def _sync_tabs_height():
-        available_height = int(page.window.height - HEADER_HEIGHT)
-        if available_height > 0:
-            tabs.height = available_height
-            try:
-                tabs.update()
-            except Exception:
-                pass
-
-    page.on_resize = lambda e: _sync_tabs_height()
-    _sync_tabs_height()
+    tab1_container = ft.Container(
+        content=tab1_content,
+        expand=True,
+        visible=True,
+    )
+    tab2_container = ft.Container(
+        content=tab2_content,
+        expand=True,
+        visible=False,
+    )
 
     # ── Сборка страницы ──────────────────────────────────────────
     page.add(
         ft.Column(
             controls=[
                 header,
-                tabs,
+                tab_bar,
+                tab1_container,
+                tab2_container,
             ],
             spacing=0,
             expand=True,
