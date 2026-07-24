@@ -79,8 +79,10 @@ class ZonalExcelExporter:
         ws.row_dimensions[row].height = 20
         row += 1
 
-        # Данные по каждому криминалисту
+        # Данные по каждому активному криминалисту
         for crim in collection.criminalists:
+            if not crim.is_active:
+                continue  # Пропускаем неактивных
             # Строка криминалиста
             ws.merge_cells(f"A{row}:F{row}")
             name_val = f"👤 {crim.full_name}"
@@ -259,7 +261,11 @@ class ZonalExcelExporter:
         # Сводка
         row += 1
         ws.merge_cells(f"A{row}:F{row}")
-        sum_title = ws.cell(row=row, column=1, value="ОБЩАЯ СВОДКА")
+        
+        # Информация о неактивных
+        inactive_count = sum(1 for c in collection.criminalists if not c.is_active)
+        inactive_note = f" ({inactive_count} неактивных пропущено)" if inactive_count else ""
+        sum_title = ws.cell(row=row, column=1, value=f"ОБЩАЯ СВОДКА{inactive_note}")
         sum_title.fill = header_fill
         sum_title.font = header_font
         sum_title.alignment = center
