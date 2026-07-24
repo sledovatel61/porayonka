@@ -156,7 +156,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _apply_filter()
         from ui.toast import show_toast
         status = "vklyuchen" if crim.is_active else "otklyuchen"
-        show_toast(page, f"{crim.full_name} — {status}", icon="👁" if crim.is_active else "🚫")
+        show_toast(page, f"{crim.full_name} — {status}", icon=ft.icons.VISIBILITY if crim.is_active else ft.icons.CANCEL)
 
     def _on_open_form(crim: Criminalist):
         dialog = create_form_input_modal(
@@ -185,7 +185,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             _refresh_summary()
             _apply_filter()
             from ui.toast import show_toast
-            show_toast(page, f"Sohraneno: {full_name}", icon="✏️")
+            show_toast(page, f"Sohraneno: {full_name}", icon=ft.icons.EDIT)
 
         dialog = create_add_criminalist_modal(
             page=page,
@@ -208,7 +208,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             dialog.open = False
             page.update()
             from ui.toast import show_toast
-            show_toast(page, f"Udalen: {criminalist.full_name}", icon="🗑️")
+            show_toast(page, f"Udalen: {criminalist.full_name}", icon=ft.icons.DELETE)
 
         def cancel_delete(e=None):
             dialog.open = False
@@ -256,7 +256,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             _refresh_summary()
             _apply_filter()
             from ui.toast import show_toast
-            show_toast(page, f"Dobavlen: {full_name}", icon="➕")
+            show_toast(page, f"Dobavlen: {full_name}", icon=ft.icons.ADD)
 
         dialog = create_add_criminalist_modal(
             page=page,
@@ -275,7 +275,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             print(f"[ZONAL_TAB] Oshibka clipboard: {ex}")
         non = get_non_submitters(collection)
         from ui.toast import show_toast
-        show_toast(page, f"Skopirovan spisok ne sdavshih: {len(non)}", icon="📋")
+        show_toast(page, f"Skopirovan spisok ne sdavshih: {len(non)}", icon=ft.icons.CONTENT_COPY)
 
     # ── Шаблон / экспорт / сброс (как в фазе 1) ────────────────
     def on_template_changed():
@@ -288,7 +288,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             save_zonal_template(collection.template)
             autosave()
             from ui.toast import show_toast
-            show_toast(page, f"Shablon '{name}' sohranen", icon="💾")
+            show_toast(page, f"Shablon '{name}' sohranen", icon=ft.icons.SAVE)
         except Exception as e:
             print(f"[ZONAL_TAB] Oshibka sohraneniya shablena: {e}")
             from ui.toast import show_error_toast
@@ -310,7 +310,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 dialog.open = False
                 page.update()
                 from ui.toast import show_toast
-                show_toast(page, f"Shablon '{t.name}' zagruzhen (dannye sbroseny)", icon="📂")
+                show_toast(page, f"Shablon '{t.name}' zagruzhen (dannye sbroseny)", icon=ft.icons.FOLDER)
 
             def cancel_load(e=None):
                 dialog.open = False
@@ -344,13 +344,13 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             _rebuild_template_builder()
             refresh_all_tiles()
             from ui.toast import show_toast
-            show_toast(page, f"Shablon '{t.name}' zagruzhen", icon="📂")
+            show_toast(page, f"Shablon '{t.name}' zagruzhen", icon=ft.icons.FOLDER)
 
     def _open_template_loader():
         templates = load_zonal_templates()
         if not templates:
             from ui.toast import show_toast
-            show_toast(page, "Net sohranennyh shablenov", icon="📂")
+            show_toast(page, "Net sohranennyh shablenov", icon=ft.icons.FOLDER)
             return
 
         def _select_template(t):
@@ -363,7 +363,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 dialog.open = False
                 page.update()
                 from ui.toast import show_toast
-                show_toast(page, f"Shablon '{t.name}' udalen", icon="🗑️")
+                show_toast(page, f"Shablon '{t.name}' udalen", icon=ft.icons.DELETE)
             except Exception as e:
                 from ui.toast import show_error_toast
                 show_error_toast(page, f"Oshibka udaleniya: {e}")
@@ -439,13 +439,13 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _rebuild_template_builder()
         refresh_all_tiles()
         from ui.toast import show_toast
-        show_toast(page, "Forma ochischena", icon="🗑️")
+        show_toast(page, "Forma ochischena", icon=ft.icons.DELETE)
 
     def on_reset_data():
         has_data = len(collection.submissions) > 0
         if not has_data:
             from ui.toast import show_toast
-            show_toast(page, "Dannye uzhe pusty", icon="ℹ️")
+            show_toast(page, "Dannye uzhe pusty", icon=ft.icons.INFO)
             return
 
         def confirm_reset(e=None):
@@ -456,7 +456,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             dialog.open = False
             page.update()
             from ui.toast import show_toast
-            show_toast(page, "Dannye sbroseny, shablon sohranen", icon="🧹")
+            show_toast(page, "Dannye sbroseny, shablon sohranen", icon=ft.icons.CLEANING_SERVICES)
 
         def cancel_reset(e=None):
             dialog.open = False
@@ -644,14 +644,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         spacing=12,
         run_spacing=12,
         controls=[],
-        expand=True,
     )
     responsive_row_ref["control"] = responsive_row
 
     # Обертка для ResponsiveRow с ограничением ширины
     responsive_row_container = ft.Container(
         content=responsive_row,
-        expand=True,
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 

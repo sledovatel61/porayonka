@@ -130,7 +130,7 @@ def main(page: ft.Page) -> None:
                 ft.Container(height=20),
             ],
             spacing=0,
-            scroll=ft.ScrollMode.AUTO,
+            expand=True,
         ),
         padding=ft.padding.all(20),
         expand=True,

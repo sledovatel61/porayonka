@@ -7,7 +7,7 @@ from core.constants import COLORS
 def show_toast(
     page: ft.Page,
     message: str = "Данные сохранены",
-    icon: str = "✓",
+    icon: str = ft.icons.CHECK_CIRCLE,
     duration_ms: int = 2500,
     is_error: bool = False,
 ) -> None:
@@ -63,19 +63,19 @@ def show_toast(
 
 def show_save_toast(page: ft.Page) -> None:
     """Быстрый вызов уведомления о сохранении"""
-    show_toast(page, "Данные сохранены", icon="✓")
+    show_toast(page, "Данные сохранены", icon=ft.icons.CHECK_CIRCLE)
 
 
 def show_reset_toast(page: ft.Page) -> None:
     """Уведомление о сбросе"""
-    show_toast(page, "Все статусы сброшены", icon="↺")
+    show_toast(page, "Все статусы сброшены", icon=ft.icons.REFRESH)
 
 
 def show_export_toast(page: ft.Page, format_name: str) -> None:
     """Уведомление об экспорте"""
-    show_toast(page, f"Файл {format_name} скачан", icon="📁")
+    show_toast(page, f"Файл {format_name} скачан", icon=ft.icons.FOLDER)
 
 
 def show_error_toast(page: ft.Page, message: str) -> None:
     """Уведомление об ошибке"""
-    show_toast(page, message, icon="✕", is_error=True)
+    show_toast(page, message, icon=ft.icons.CLOSE, is_error=True)

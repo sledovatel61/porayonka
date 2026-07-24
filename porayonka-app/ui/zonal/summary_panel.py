@@ -77,13 +77,11 @@ def create_summary_panel(collection) -> ft.Column:
                 ),
             ],
             spacing=6,
-            expand=True,
         ),
         padding=ft.padding.symmetric(horizontal=14, vertical=8),
         bgcolor=COLORS["card"],
         border=ft.border.all(1, COLORS["border"]),
         border_radius=10,
-        expand=True,
     )
 
     header = ft.Container(

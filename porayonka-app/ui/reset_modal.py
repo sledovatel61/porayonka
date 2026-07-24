@@ -26,7 +26,7 @@ def create_reset_modal(
         title=ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Text("⚠️", size=22),
+                    ft.Icon(ft.icons.WARNING, size=22, color="white"),
                     ft.Text(
                         "Сброс данных",
                         size=18,
@@ -52,7 +52,7 @@ def create_reset_modal(
                 controls=[
                     ft.Container(height=8),
                     ft.Container(
-                        content=ft.Text("🔄", size=48),
+                        content=ft.Icon(ft.icons.REFRESH, size=48, color=COLORS["text"]),
                         alignment=ft.alignment.center,
                     ),
                     ft.Container(height=12),
