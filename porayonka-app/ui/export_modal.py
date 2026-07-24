@@ -145,7 +145,7 @@ def create_export_modal(
         return card
 
     def do_export_excel(e):
-        print("[EXPORT] ▶ Нажата кнопка Excel")
+        print("[EXPORT] [START] Нажата кнопка Excel")
         print(f"[EXPORT] Количество отделов: {len(departments)}")
         try:
             try:
@@ -158,24 +158,24 @@ def create_export_modal(
             filepath  = os.path.join(downloads, filename)
             print(f"[EXPORT] Сохраняю Excel в: {filepath}")
             ExcelExporter().export(departments, filepath)
-            print(f"[EXPORT] ✓ Excel успешно сохранён: {filepath}")
+            print(f"[EXPORT] [OK] Excel успешно сохранён: {filepath}")
             if os.path.exists(filepath):
                 size = os.path.getsize(filepath)
                 print(f"[EXPORT] Размер файла: {size} байт")
             else:
-                print("[EXPORT] ⚠ Файл не найден после сохранения!")
+                print("[EXPORT] [WARN] Файл не найден после сохранения!")
             excel_badge.visible = True
             excel_badge.update()
             from ui.toast import show_export_toast
             show_export_toast(page, "Excel")
         except Exception as ex:
-            print(f"[EXPORT] ✕ Ошибка Excel: {ex}")
+            print(f"[EXPORT] [ERROR] Ошибка Excel: {ex}")
             traceback.print_exc()
             from ui.toast import show_error_toast
             show_error_toast(page, f"Ошибка экспорта Excel: {ex}")
 
     def do_export_html(e):
-        print("[EXPORT] ▶ Нажата кнопка HTML")
+        print("[EXPORT] [START] Нажата кнопка HTML")
         print(f"[EXPORT] Количество отделов: {len(departments)}")
         try:
             downloads = _get_downloads_path()
@@ -183,12 +183,12 @@ def create_export_modal(
             filepath  = os.path.join(downloads, filename)
             print(f"[EXPORT] Сохраняю HTML в: {filepath}")
             HTMLExporter().export(departments, filepath)
-            print(f"[EXPORT] ✓ HTML успешно сохранён: {filepath}")
+            print(f"[EXPORT] [OK] HTML успешно сохранён: {filepath}")
             if os.path.exists(filepath):
                 size = os.path.getsize(filepath)
                 print(f"[EXPORT] Размер файла: {size} байт")
             else:
-                print("[EXPORT] ⚠ Файл не найден после сохранения!")
+                print("[EXPORT] [WARN] Файл не найден после сохранения!")
             html_badge.visible = True
             html_badge.update()
             try:
@@ -197,11 +197,11 @@ def create_export_modal(
                 print(f"[EXPORT] Открываю браузер: {file_url}")
                 webbrowser.open(file_url)
             except Exception as browser_ex:
-                print(f"[EXPORT] ⚠ Не удалось открыть браузер: {browser_ex}")
+                print(f"[EXPORT] [WARN] Не удалось открыть браузер: {browser_ex}")
             from ui.toast import show_export_toast
             show_export_toast(page, "HTML")
         except Exception as ex:
-            print(f"[EXPORT] ✕ Ошибка HTML: {ex}")
+            print(f"[EXPORT] [ERROR] Ошибка HTML: {ex}")
             traceback.print_exc()
             from ui.toast import show_error_toast
             show_error_toast(page, f"Ошибка экспорта HTML: {ex}")
@@ -240,7 +240,7 @@ def create_export_modal(
                         expand=True,
                     ),
                     ft.IconButton(
-                        icon=ft.Icons.CLOSE,
+                        icon=ft.icons.CLOSE,
                         icon_color=COLORS["text_light"],
                         icon_size=18,
                         on_click=close_dialog,

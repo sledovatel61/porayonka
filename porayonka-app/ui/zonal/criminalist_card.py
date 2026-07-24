@@ -19,6 +19,7 @@ def create_criminalist_card(
     on_data_change: Callable,
     on_zone_edit: Callable,
     on_delete_criminalist: Callable,
+    on_toggle_active: Callable,  # ← НОВЫЙ колбэк
     dept_map: Dict[int, str],
 ) -> ft.Column:
     """
@@ -344,23 +345,51 @@ def create_criminalist_card(
         visible=bool(criminalist.note),
     )
 
-    # Кнопки управления (зоны + удалить)
+    # Кнопки управления (активность + зоны + удалить)
+    
+    # КНОПКА: Активность
+    active_icon = ft.icons.VISIBILITY if criminalist.is_active else ft.icons.VISIBILITY_OFF
+    active_color = COLORS["btn_save"] if criminalist.is_active else "#64748b"
+    active_tooltip = "Активен — участвует в сборе" if criminalist.is_active else "Отключён — не участвует в сборе"
+    
+    def _on_toggle_active_click(e):
+        e.stop_propagation()
+        on_toggle_active(criminalist)
+    
+    toggle_active_btn = ft.IconButton(
+        icon=active_icon,
+        icon_size=18,
+        icon_color=active_color,
+        tooltip=active_tooltip,
+        on_click=_on_toggle_active_click,
+        style=ft.ButtonStyle(padding=ft.padding.all(4)),
+    )
+    
+    # КНОПКА: Редактировать зоны
+    def _on_edit_zone_click(e):
+        e.stop_propagation()
+        on_zone_edit(criminalist)
+    
     edit_zone_btn = ft.IconButton(
-        icon=ft.Icons.EDIT,
+        icon=ft.icons.EDIT,
         icon_size=18,
         icon_color=COLORS["btn_save"],
         tooltip="Редактировать зоны",
-        on_click=lambda e: on_zone_edit(criminalist),
+        on_click=_on_edit_zone_click,
         style=ft.ButtonStyle(padding=ft.padding.all(4)),
     )
     
     # КНОПКА: Удалить
+    def _on_delete_click(e):
+        e.stop_propagation()
+        on_delete_criminalist(criminalist)
+    
     delete_btn = ft.IconButton(
-        icon=ft.Icons.DELETE_OUTLINE,
+        icon=ft.icons.DELETE_OUTLINE,
         icon_size=18,
         icon_color="#f87171",  # ТЁМНЫЙ КРАСНЫЙ
         tooltip="Удалить криминалиста",
-        on_click=lambda e: on_delete_criminalist(criminalist),
+        on_click=_on_delete_click,
         style=ft.ButtonStyle(padding=ft.padding.all(4)),
     )
 
@@ -370,6 +399,8 @@ def create_criminalist_card(
                 ft.Text("👤", size=16),
                 name_text,
                 note_text,
+                ft.Container(width=4),  # Отступ
+                toggle_active_btn,  # Кнопка активности
                 edit_zone_btn,
                 delete_btn,
                 expand_icon,

@@ -1,5 +1,6 @@
-# [DARK THEME] Обновлено только визуально, логика сохранена.
 # ui/zonal/zonal_tab.py
+# Вкладка "Зональные криминалисты"
+# [DARK THEME] Обновлено: is_active, разделение данных, сброс данных
 import flet as ft
 from typing import List, Optional, Callable
 from core.zonal_models import (
@@ -8,11 +9,12 @@ from core.zonal_models import (
 )
 from core.zonal_data import (
     load_zonal_collection, save_zonal_collection,
+    load_zonal_submissions, save_zonal_submissions,
+    clear_zonal_submissions,
     get_initial_criminalists, get_report_data,
     load_zonal_templates, save_zonal_template,
     save_criminalists,
 )
-from core.zonal_constants import get_initial_criminalists
 from core.constants import COLORS, INITIAL_DEPARTMENTS
 from .template_builder import create_template_builder
 from .criminalist_card import create_criminalist_card
@@ -37,12 +39,17 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         if not collection.criminalists:
             collection.criminalists = get_initial_criminalists()
     print(f"[ZONAL_TAB] Криминалистов: {len(collection.criminalists)}")
+    print(f"[ZONAL_TAB] Активных: {sum(1 for c in collection.criminalists if c.is_active)}")
     print(f"[ZONAL_TAB] Пунктов шаблона: {len(collection.template.items)}")
 
     criminalist_cards: dict  = {}
     summary_ref: dict        = {"panel": None}
     template_builder_ref: dict = {"control": None}
     cards_column_ref: dict   = {"control": None}
+    
+    # Состояние: показывать ли неактивных криминалистов
+    show_inactive_ref: dict = {"value": False}
+    show_inactive_checkbox: ft.Checkbox = None
 
     dept_map = {d["id"]: d["name"] for d in INITIAL_DEPARTMENTS}
 
@@ -53,6 +60,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             print(f"[ZONAL_TAB] Ошибка автосохранения: {e}")
 
     def refresh_all_cards():
+        """Обновить все карточки"""
         print("[ZONAL_TAB] Обновляю все карточки...")
         for crim_id, card_col in criminalist_cards.items():
             crim = next((c for c in collection.criminalists if c.id == crim_id), None)
@@ -65,6 +73,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 on_data_change=_on_data_change,
                 on_zone_edit=_on_zone_edit,
                 on_delete_criminalist=_on_delete_criminalist,
+                on_toggle_active=_on_toggle_active,
                 dept_map=dept_map,
             )
             card_col.controls = new_card.controls
@@ -77,6 +86,20 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     def _on_zone_edit(criminalist: Criminalist):
         _open_zone_editor(criminalist)
+    
+    def _on_toggle_active(criminalist: Criminalist):
+        """Переключить статус активности криминалиста"""
+        criminalist.is_active = not criminalist.is_active
+        save_criminalists(collection.criminalists)
+        autosave()
+        _refresh_cards_list()
+        status = "активен" if criminalist.is_active else "отключён"
+        from ui.toast import show_toast
+        show_toast(
+            page, 
+            f"{criminalist.full_name} — {status}", 
+            icon="👁" if criminalist.is_active else "🚫"
+        )
 
     def _refresh_summary():
         if summary_ref["panel"] is not None:
@@ -97,6 +120,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             on_save=on_template_save,
             on_load=on_template_load,
             on_clear=on_template_clear,
+            on_reset_data=on_reset_data,
             on_departments_mode_changed=on_departments_mode_changed,
         )
         template_builder_ref["control"].controls = [new_builder]
@@ -129,6 +153,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 on_data_change=_on_data_change,
                 on_zone_edit=_on_zone_edit,
                 on_delete_criminalist=_on_delete_criminalist,
+                on_toggle_active=_on_toggle_active,
                 dept_map=dept_map,
             )
             card_col.controls = new_card.controls
@@ -148,6 +173,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 id=new_id,
                 full_name=full_name,
                 note=note,
+                is_active=True,  # Новые криминалисты всегда активны
                 zone=CriminalistZone(
                     criminalist_id=new_id,
                     department_ids=department_ids,
@@ -212,11 +238,16 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         page.update()
 
     def _refresh_cards_list():
-        """Полностью пересобрать список карточек"""
+        """Полностью пересобрать список карточек с учётом фильтра"""
         print("[ZONAL_TAB] Пересобираю список карточек...")
         criminalist_cards.clear()
         new_cards = []
+        
+        # Фильтрация по активности
         for crim in collection.criminalists:
+            if not crim.is_active and not show_inactive_ref["value"]:
+                continue  # Пропускаем неактивных, если фильтр выключен
+            
             card_col = create_criminalist_card(
                 page=page,
                 criminalist=crim,
@@ -224,14 +255,21 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 on_data_change=_on_data_change,
                 on_zone_edit=_on_zone_edit,
                 on_delete_criminalist=_on_delete_criminalist,
+                on_toggle_active=_on_toggle_active,
                 dept_map=dept_map,
             )
             criminalist_cards[crim.id] = card_col
             new_cards.append(card_col)
+        
         if cards_column_ref["control"]:
             cards_column_ref["control"].controls = new_cards
             cards_column_ref["control"].update()
         _refresh_summary()
+
+    def _on_show_inactive_changed(e):
+        """Переключить отображение неактивных"""
+        show_inactive_ref["value"] = e.control.value
+        _refresh_cards_list()
 
     def on_template_changed():
         autosave()
@@ -252,6 +290,67 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     def on_template_load():
         _open_template_loader()
 
+    def _load_template_with_warning(t: ReportTemplate):
+        """Загрузить шаблон с предупреждением о сбросе данных"""
+        # Проверяем, есть ли текущие данные
+        has_data = len(collection.submissions) > 0
+        
+        if has_data:
+            # Показываем предупреждение
+            def confirm_load(e=None):
+                # Очищаем данные
+                collection.submissions.clear()
+                clear_zonal_submissions()
+                # Загружаем шаблон
+                collection.template = t
+                save_zonal_collection(collection)
+                _rebuild_template_builder()
+                _refresh_cards_list()
+                dialog.open = False
+                page.update()
+                from ui.toast import show_toast
+                show_toast(page, f"Шаблон '{t.name}' загружен (данные сброшены)", icon="📂")
+            
+            def cancel_load(e=None):
+                dialog.open = False
+                page.update()
+            
+            inactive_count = sum(1 for c in collection.criminalists if not c.is_active)
+            inactive_note = f"\n\n({inactive_count} криминалистов отключено)" if inactive_count else ""
+            
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("⚠️ Загрузка шаблона", size=16,
+                              weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+                content=ft.Text(
+                    f"Шаблон '{t.name}' загрузит {len(t.items)} пунктов.\n\n"
+                    f"Текущие данные будут удалены!{inactive_note}",
+                    size=13,
+                    color=COLORS["text"],
+                ),
+                actions=[
+                    ft.TextButton("Отмена", on_click=cancel_load),
+                    ft.ElevatedButton(
+                        "Загрузить",
+                        bgcolor=COLORS["btn_save"],
+                        color=COLORS["text_light"],
+                        on_click=confirm_load,
+                    ),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            page.overlay.append(dialog)
+            dialog.open = True
+            page.update()
+        else:
+            # Нет данных — загружаем сразу
+            collection.template = t
+            autosave()
+            _rebuild_template_builder()
+            refresh_all_cards()
+            from ui.toast import show_toast
+            show_toast(page, f"Шаблон '{t.name}' загружен", icon="📂")
+
     def _open_template_loader():
         templates = load_zonal_templates()
         if not templates:
@@ -260,14 +359,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             return
 
         def _select_template(t):
-            collection.template = t
-            autosave()
-            _rebuild_template_builder()
-            refresh_all_cards()
-            dialog.open = False
-            page.update()
-            from ui.toast import show_toast
-            show_toast(page, f"Шаблон '{t.name}' загружен", icon="📂")
+            _load_template_with_warning(t)
 
         def _delete_template(t):
             from core.zonal_data import delete_zonal_template
@@ -283,7 +375,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         items_list = ft.Column(spacing=8)
         for t in templates:
-            # Контейнер для каждой кнопки с шаблоном
             template_row = ft.Row(
                 controls=[
                     ft.ElevatedButton(
@@ -297,7 +388,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                         on_click=lambda e, t=t: _select_template(t),
                     ),
                     ft.IconButton(
-                        icon=ft.Icons.DELETE_OUTLINE,
+                        icon=ft.icons.DELETE_OUTLINE,
                         icon_color="#ef4444",
                         tooltip="Удалить шаблон",
                         on_click=lambda e, t=t: _delete_template(t),
@@ -313,7 +404,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         dialog = ft.AlertDialog(
             modal=True,
-            bgcolor=COLORS["primary_light"],  # ← Тёмный фон
+            bgcolor=COLORS["primary_light"],
             title=ft.Container(
                 content=ft.Row(
                     controls=[
@@ -357,6 +448,54 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         refresh_all_cards()
         from ui.toast import show_toast
         show_toast(page, "Форма очищена", icon="🗑️")
+    
+    def on_reset_data():
+        """Сбросить все данные, сохранив шаблон"""
+        has_data = len(collection.submissions) > 0
+        
+        if not has_data:
+            from ui.toast import show_toast
+            show_toast(page, "Данные уже пусты", icon="ℹ️")
+            return
+        
+        def confirm_reset(e=None):
+            collection.submissions.clear()
+            clear_zonal_submissions()
+            autosave()
+            refresh_all_cards()
+            dialog.open = False
+            page.update()
+            from ui.toast import show_toast
+            show_toast(page, "Данные сброшены, шаблон сохранён", icon="🧹")
+        
+        def cancel_reset(e=None):
+            dialog.open = False
+            page.update()
+        
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("🧹 Сброс данных", size=16,
+                          weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+            content=ft.Text(
+                f"Очистить все введённые данные ({len(collection.submissions)} записей)?\n\n"
+                f"Структура шаблона будет сохранена.",
+                size=13,
+                color=COLORS["text"],
+            ),
+            actions=[
+                ft.TextButton("Отмена", on_click=cancel_reset),
+                ft.ElevatedButton(
+                    "Сбросить",
+                    bgcolor="#f59e0b",
+                    color=COLORS["text_light"],
+                    on_click=confirm_reset,
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
 
     def on_departments_mode_changed(use_dept_mode: bool):
         collection.template.use_departments_mode = use_dept_mode
@@ -391,6 +530,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         on_save=on_template_save,
         on_load=on_template_load,
         on_clear=on_template_clear,
+        on_reset_data=on_reset_data,
         on_departments_mode_changed=on_departments_mode_changed,
     )
 
@@ -400,14 +540,26 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     )
     template_builder_ref["control"] = template_builder_wrapper
 
+    # Чекбокс показа неактивных
+    inactive_count = sum(1 for c in collection.criminalists if not c.is_active)
+    show_inactive_checkbox = ft.Checkbox(
+        label=f"Показывать отключённых ({inactive_count})" if inactive_count else "Показывать отключённых",
+        value=False,
+        active_color=COLORS["btn_save"],
+        label_style=ft.TextStyle(size=12, color=COLORS["text_secondary"]),
+        on_change=_on_show_inactive_changed,
+        visible=inactive_count > 0,  # Показываем только если есть неактивные
+    )
+    
+    # Кнопка добавления
     add_criminalist_btn = ft.ElevatedButton(
-        text="➕ Добавить криминалиста",
+        text="➕ Добавить",
         bgcolor=COLORS["btn_save"],
         color=COLORS["text_light"],
-        height=40,
+        height=36,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=8),
-            padding=ft.padding.symmetric(horizontal=16),
+            padding=ft.padding.symmetric(horizontal=14),
         ),
         on_click=lambda e: _on_add_criminalist(),
     )
@@ -421,6 +573,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 color=COLORS["text"],
             ),
             ft.Container(expand=True),
+            show_inactive_checkbox,
+            ft.Container(width=8),
             add_criminalist_btn,
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -428,7 +582,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     )
 
     cards_column = ft.Column(spacing=12)
+    
+    # Строим карточки с учётом фильтра
     for crim in collection.criminalists:
+        if not crim.is_active and not show_inactive_ref["value"]:
+            continue
+        
         card_col = create_criminalist_card(
             page=page,
             criminalist=crim,
@@ -436,6 +595,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             on_data_change=_on_data_change,
             on_zone_edit=_on_zone_edit,
             on_delete_criminalist=_on_delete_criminalist,
+            on_toggle_active=_on_toggle_active,
             dept_map=dept_map,
         )
         criminalist_cards[crim.id] = card_col

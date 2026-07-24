@@ -106,7 +106,7 @@ def create_reset_modal(
             ),
             ft.ElevatedButton(
                 text="Сбросить",
-                icon=ft.Icons.DELETE_SWEEP_OUTLINED,
+                icon=ft.icons.DELETE_SWEEP_OUTLINED,
                 bgcolor="#dc2626",
                 color="white",
                 elevation=2,

@@ -13,7 +13,7 @@ TARGET_FILES = [
 
 def fix_file(filepath):
     if not os.path.exists(filepath):
-        print(f"⚠️ {filepath} не найден, пропускаем.")
+        print(f"[WARN] {filepath} не найден, пропускаем.")
         return
 
     with open(filepath, "r", encoding="utf-8") as f:
@@ -30,12 +30,12 @@ def fix_file(filepath):
     if new_content != content:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(new_content)
-        print(f"✅ Исправлено: {filepath}")
+        print(f"[OK] Исправлено: {filepath}")
     else:
-        print(f"⏭️ {filepath} уже в порядке")
+        print(f"[SKIP] {filepath} уже в порядке")
 
 if __name__ == "__main__":
-    print("🔍 Поиск и исправление несовместимых параметров Flet...")
+    print("[SCAN] Поиск и исправление несовместимых параметров Flet...")
     for f in TARGET_FILES:
         fix_file(f)
-    print("✨ Готово! Запусти main.py снова.")
+    print("[DONE] Готово! Запусти main.py снова.")

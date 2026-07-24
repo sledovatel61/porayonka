@@ -50,3 +50,8 @@ porayonka-app/**/*.json
 .env
 .env.local
 *.key
+
+# Local working folders
+LLM/
+Бэкапы/
+backups/

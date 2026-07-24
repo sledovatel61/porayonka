@@ -116,7 +116,7 @@ def update_status_cell(cell: ft.Container, dept: Department) -> None:
 
     inner_row = cell.content
     if not isinstance(inner_row, ft.Row) or len(inner_row.controls) < 2:
-        print(f"[UPDATE_CELL] ⚠ Неожиданная структура cell.content: {type(inner_row)}")
+        print(f"[UPDATE_CELL] [WARN] Неожиданная структура cell.content: {type(inner_row)}")
         cell.update()
         return
 
@@ -133,4 +133,4 @@ def update_status_cell(cell: ft.Container, dept: Department) -> None:
         label_widget.color = cfg["text_color"]
 
     cell.update()
-    print(f"[UPDATE_CELL] ✓ Ячейка обновлена для '{dept.name}'")
+    print(f"[UPDATE_CELL] [OK] Ячейка обновлена для '{dept.name}'")

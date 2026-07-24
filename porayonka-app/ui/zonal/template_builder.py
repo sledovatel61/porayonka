@@ -16,6 +16,7 @@ def create_template_builder(
     on_save: Callable,        # on_save(name: str)
     on_load: Callable,
     on_clear: Callable,
+    on_reset_data: Callable,  # on_reset_data() — сброс данных без потери шаблона
     on_departments_mode_changed: Callable,  # on_departments_mode_changed(bool)
 ) -> ft.Container:
     """
@@ -113,7 +114,7 @@ def create_template_builder(
 
         # Кнопка удаления
         delete_btn = ft.IconButton(
-            icon=ft.Icons.CLOSE,
+            icon=ft.icons.CLOSE,
             icon_size=16,
             icon_color="#f87171",  # ТЁМНЫЙ КРАСНЫЙ
             tooltip="Удалить пункт",
@@ -175,7 +176,7 @@ def create_template_builder(
     # Кнопка добавления пункта
     add_btn = ft.TextButton(
         text="+ Добавить пункт",
-        icon=ft.Icons.ADD,
+        icon=ft.icons.ADD,
         style=ft.ButtonStyle(
             color=COLORS["btn_save"],
         ),
@@ -247,6 +248,19 @@ def create_template_builder(
         on_click=lambda e: on_clear(),
     )
 
+    btn_reset_data = ft.OutlinedButton(
+        text="🧹 Сброс данных",
+        height=38,
+        tooltip="Очистить все введённые значения, сохранив структуру формы",
+        style=ft.ButtonStyle(
+            color="#f59e0b",  # Оранжевый
+            side=ft.BorderSide(1, "#f59e0b"),
+            shape=ft.RoundedRectangleBorder(radius=8),
+            padding=ft.padding.symmetric(horizontal=14),
+        ),
+        on_click=lambda e: on_reset_data(),
+    )
+
     # Инициальное построение списка
     rebuild_items_list()
 
@@ -306,7 +320,7 @@ def create_template_builder(
                             ft.Container(height=12),
                             # Кнопки
                             ft.Row(
-                                controls=[btn_save, btn_load, btn_clear],
+                                controls=[btn_save, btn_load, btn_clear, btn_reset_data],
                                 spacing=10,
                                 wrap=True,
                             ),
