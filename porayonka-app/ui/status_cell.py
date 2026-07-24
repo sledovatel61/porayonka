@@ -8,7 +8,7 @@ from core.constants import COLORS
 _STATUS_CONFIG = {
     Status.RECEIVED: {
         "label":      "Получено",
-        "icon":       "✓",
+        "icon":       ft.icons.CHECK,
         "icon_bg":    COLORS["received"],
         "bg":         COLORS["received_bg"],
         "hover_bg":   COLORS["received_hover"],
@@ -17,7 +17,7 @@ _STATUS_CONFIG = {
     },
     Status.IN_PROGRESS: {
         "label":      "В работе",
-        "icon":       "↻",
+        "icon":       ft.icons.REFRESH,
         "icon_bg":    COLORS["in_progress"],
         "bg":         COLORS["in_progress_bg"],
         "hover_bg":   COLORS["in_progress_hover"],
@@ -26,7 +26,7 @@ _STATUS_CONFIG = {
     },
     Status.EMPTY: {
         "label":      "Не получено",
-        "icon":       "○",
+        "icon":       ft.icons.RADIO_BUTTON_UNCHECKED,
         "icon_bg":    COLORS["empty"],
         "bg":         COLORS["empty_bg"],
         "hover_bg":   COLORS["empty_hover"],

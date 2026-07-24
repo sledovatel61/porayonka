@@ -38,7 +38,7 @@ def create_export_modal(
     print("[EXPORT_MODAL] Создаю модальное окно экспорта...")
 
     excel_badge = ft.Container(
-        content=ft.Text("Скачан ✓", size=11, color=COLORS["text_light"],
+        content=ft.Text("Скачан", size=11, color=COLORS["text_light"],
                         weight=ft.FontWeight.W_600),
         bgcolor=COLORS["received"],
         border_radius=10,
@@ -46,7 +46,7 @@ def create_export_modal(
         visible=False,
     )
     html_badge = ft.Container(
-        content=ft.Text("Скачан ✓", size=11, color=COLORS["text_light"],
+        content=ft.Text("Скачан", size=11, color=COLORS["text_light"],
                         weight=ft.FontWeight.W_600),
         bgcolor=COLORS["received"],
         border_radius=10,
@@ -207,14 +207,14 @@ def create_export_modal(
             show_error_toast(page, f"Ошибка экспорта HTML: {ex}")
 
     card_excel = _make_export_card(
-        icon="📊",
+        icon=ft.icons.TABLE_CHART,
         title="CSV / Excel",
         description="Открывается в Microsoft Excel, LibreOffice Calc и Google Таблицах",
         badge=excel_badge,
         on_click_handler=do_export_excel,
     )
     card_html = _make_export_card(
-        icon="🖨️",
+        icon=ft.icons.PRINT,
         title="HTML (печать)",
         description="Красиво оформленная таблица. Откройте в браузере и нажмите Ctrl+P",
         badge=html_badge,

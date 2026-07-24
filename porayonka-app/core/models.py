@@ -6,13 +6,15 @@ from enum import Enum
 from datetime import datetime
 from typing import Optional
 
+import flet as ft
+
 
 class Status(Enum):
     """
     Три состояния статуса отдела:
-    EMPTY       — не получено (⬜)
-    RECEIVED    — получено   (✅)
-    IN_PROGRESS — в работе   (🔄)
+    EMPTY       — не получено
+    RECEIVED    — получено
+    IN_PROGRESS — в работе
     """
     EMPTY = "empty"
     RECEIVED = "received"
@@ -60,8 +62,8 @@ class Department:
     def get_status_icon(self) -> str:
         """Иконка статуса"""
         icons = {
-            Status.EMPTY: "○",
-            Status.RECEIVED: "✓",
-            Status.IN_PROGRESS: "↻",
+            Status.EMPTY: ft.icons.RADIO_BUTTON_UNCHECKED,
+            Status.RECEIVED: ft.icons.CHECK,
+            Status.IN_PROGRESS: ft.icons.REFRESH,
         }
         return icons[self.status]

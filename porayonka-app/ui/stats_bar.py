@@ -82,7 +82,7 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
     )
     page.stats_received_text = received_text
     card_received = _stat_card(
-        icon="✓",
+        icon=ft.icons.CHECK,
         icon_bg=COLORS["received"],
         value_text=received_text,
         label="Получено",
@@ -99,7 +99,7 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
     )
     page.stats_in_progress_text = in_progress_text
     card_in_progress = _stat_card(
-        icon="↻",
+        icon=ft.icons.REFRESH,
         icon_bg=COLORS["in_progress"],
         value_text=in_progress_text,
         label="В работе",
@@ -116,7 +116,7 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
     )
     page.stats_empty_text = empty_text
     card_empty = _stat_card(
-        icon="○",
+        icon=ft.icons.RADIO_BUTTON_UNCHECKED,
         icon_bg=COLORS["empty"],
         value_text=empty_text,
         label="Не получено",
@@ -156,7 +156,7 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
                 ft.Row(
                     controls=[
                         ft.Container(
-                            content=ft.Text("📊", size=16),
+                            content=ft.Icon(ft.icons.INSIGHTS, size=16, color=COLORS["text_light"]),
                             width=40,
                             height=40,
                             bgcolor=COLORS["btn_save"],
