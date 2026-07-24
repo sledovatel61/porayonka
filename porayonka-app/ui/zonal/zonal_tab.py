@@ -36,7 +36,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     collection = load_zonal_collection()
     if collection is None:
         collection = ZonalCollection(
-            template=ReportTemplate(name="Novaya forma"),
+            template=ReportTemplate(name="Новая форма"),
             criminalists=get_initial_criminalists(),
         )
         print("[ZONAL_TAB] Sozdana novaya kollekciya")
@@ -129,7 +129,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 pass
         # Обновим счётчик видимых
         try:
-            visible_count_text.value = f"Pokazano: {len(visible)} iz {len(collection.criminalists)}"
+            visible_count_text.value = f"Показано: {len(visible)} из {len(collection.criminalists)}"
             visible_count_text.update()
         except Exception:
             pass
@@ -433,7 +433,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     def on_template_clear():
         collection.template.items.clear()
-        collection.template.name = "Novaya forma"
+        collection.template.name = "Новая форма"
         collection.template.use_departments_mode = False
         autosave()
         _rebuild_template_builder()
@@ -544,7 +544,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # Поиск
     search_field = ft.TextField(
         value="",
-        hint_text="Poisk po FIO...",
+        hint_text="Поиск по ФИО...",
         prefix_icon=ft.icons.SEARCH,
         border_radius=8,
         border_color=COLORS["border"],
@@ -583,9 +583,9 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     filter_row = ft.Row(
         controls=[
-            _mk_filter_btn("all", "Vse"),
-            _mk_filter_btn("pending", "Ne zapolnivshie"),
-            _mk_filter_btn("inactive", "Neaktivnye"),
+            _mk_filter_btn("all", "Все"),
+            _mk_filter_btn("pending", "Не заполнившие"),
+            _mk_filter_btn("inactive", "Неактивные"),
         ],
         spacing=8,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -593,7 +593,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     # Кнопка добавления
     add_btn = ft.ElevatedButton(
-        text="Dobavit",
+        text="Добавить",
         icon=ft.icons.ADD,
         bgcolor=COLORS["btn_save"],
         color=COLORS["text_light"],
@@ -607,7 +607,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     # Кнопка копирования списка не сдавших (заглушка под Telegram/Messenger MAX)
     copy_btn = ft.OutlinedButton(
-        text="Kopirovat ne sdavshih",
+        text="Копировать не сдавших",
         icon=ft.icons.CONTENT_COPY,
         height=40,
         style=ft.ButtonStyle(
@@ -617,7 +617,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             padding=ft.padding.symmetric(horizontal=14),
         ),
         on_click=_on_copy_non_submitters,
-        tooltip="Skopirovat v bufer spisok FIO + otdely teh, kto ne sdal formu",
+        tooltip="Скопировать в буфер список ФИО + отделы тех, кто не сдал форму",
     )
 
     toolbar = ft.Row(
@@ -663,7 +663,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     summary_ref["panel"] = summary_col
 
     export_btn = ft.ElevatedButton(
-        text="Eksport v Excel",
+        text="Экспорт в Excel",
         icon=ft.icons.DOWNLOAD,
         bgcolor=COLORS["btn_export"],
         color=COLORS["text_light"],
