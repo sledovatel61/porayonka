@@ -553,8 +553,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
         height=40,
+        width=280,
         text_size=13,
-        expand=True,
         on_change=lambda e: (_set_search(e.control.value),),
     )
 

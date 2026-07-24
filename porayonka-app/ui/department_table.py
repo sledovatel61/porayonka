@@ -182,10 +182,13 @@ def create_department_table(
 
     print(f"[TABLE] Итого строк: {len(rows)}, отделов: {len(departments)}")
 
+    # Вертикальный скролл принадлежит корню вкладки (main.py). Не создаём
+    # второй viewport без явной высоты: в Flet 0.23.2 такой Column внутри
+    # другого scrollable Column может получить нулевые/неопределённые
+    # constraints и скрыть всю таблицу.
     rows_column = ft.Column(
         controls=rows,
         spacing=0,
-        scroll=ft.ScrollMode.AUTO,
     )
 
     scroll_area = ft.Container(

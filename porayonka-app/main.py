@@ -163,24 +163,18 @@ def main(page: ft.Page) -> None:
         )
 
     # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
-    tab1_container = ft.Container(
-        content=tab1_content,
-        expand=True,
-        visible=True,
-    )
-    tab2_container = ft.Container(
-        content=tab2_content,
-        expand=True,
-        visible=False,
-    )
-    content_area = ft.Stack(
-        controls=[tab1_container, tab2_container],
+    # Не используем Stack с двумя expand-контейнерами: Stack — это overlay,
+    # а не flex-контейнер, и в Flet 0.23.2 expand его детей не является
+    # надёжным контрактом вертикальной высоты. Один активный ребёнок в
+    # обычной Column получает однозначные constraints от страницы.
+    content_area = ft.Column(
+        controls=[tab1_content],
+        spacing=0,
         expand=True,
     )
 
     def _switch_tab(index: int):
-        tab1_container.visible = (index == 0)
-        tab2_container.visible = (index == 1)
+        content_area.controls = [tab1_content if index == 0 else tab2_content]
         btn_tab1.style.bgcolor = COLORS["btn_save"] if index == 0 else COLORS["primary_light"]
         btn_tab2.style.bgcolor = COLORS["btn_save"] if index == 1 else COLORS["primary_light"]
         try:
