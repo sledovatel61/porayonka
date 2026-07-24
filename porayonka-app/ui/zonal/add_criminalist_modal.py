@@ -136,7 +136,7 @@ def create_add_criminalist_modal(
                         expand=True,
                     ),
                     ft.IconButton(
-                        icon=ft.Icons.CLOSE,
+                        icon=ft.icons.CLOSE,
                         icon_color="white",
                         icon_size=18,
                         on_click=_close_dialog,

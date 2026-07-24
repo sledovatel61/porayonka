@@ -274,12 +274,13 @@ def save_zonal_submissions(submissions: List[ReportData]) -> None:
 
 
 def clear_zonal_submissions() -> None:
-    """Очистить все данные отчётов (сброс данных)"""
+    """Очистить все данные отчётов (сброс данных) с резервной копией."""
     filepath = get_submissions_file()
     try:
         if filepath.exists():
-            # Backup перед удалением
-            backup_path = get_data_path() / "zonal_submissions_backup.json"
+            # Backup перед удалением с уникальным именем, чтобы не конфликтовать
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = get_data_path() / f"zonal_submissions_backup_{timestamp}.json"
             filepath.rename(backup_path)
             print(f"[ZONAL_DATA] Данные перемещены в backup: {backup_path}")
         data = {"submissions": []}

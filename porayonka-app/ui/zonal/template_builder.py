@@ -114,7 +114,7 @@ def create_template_builder(
 
         # Кнопка удаления
         delete_btn = ft.IconButton(
-            icon=ft.Icons.CLOSE,
+            icon=ft.icons.CLOSE,
             icon_size=16,
             icon_color="#f87171",  # ТЁМНЫЙ КРАСНЫЙ
             tooltip="Удалить пункт",
@@ -176,7 +176,7 @@ def create_template_builder(
     # Кнопка добавления пункта
     add_btn = ft.TextButton(
         text="+ Добавить пункт",
-        icon=ft.Icons.ADD,
+        icon=ft.icons.ADD,
         style=ft.ButtonStyle(
             color=COLORS["btn_save"],
         ),

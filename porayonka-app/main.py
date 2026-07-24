@@ -108,7 +108,7 @@ def main(page: ft.Page) -> None:
     toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset)
     legend = create_legend()
 
-    print(f"✓ Departments loaded: {len(departments)}")
+    print(f"[OK] Departments loaded: {len(departments)}")
 
     table = create_department_table(page, departments, on_status_change)
     export_modal = create_export_modal(page, departments)
@@ -147,10 +147,10 @@ def main(page: ft.Page) -> None:
             padding=ft.padding.all(20),
             expand=True,
         )
-        print("[MAIN] ✓ Вкладка Зональные создана")
+        print("[MAIN] [OK] Вкладка Зональные создана")
     except Exception as e:
         import traceback
-        print(f"[MAIN] ✕ Ошибка создания вкладки Зональные: {e}")
+        print(f"[MAIN] [ERROR] Ошибка создания вкладки Зональные: {e}")
         traceback.print_exc()
         tab2_content = ft.Container(
             content=ft.Column(

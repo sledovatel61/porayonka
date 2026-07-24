@@ -15,7 +15,6 @@ from core.zonal_data import (
     load_zonal_templates, save_zonal_template,
     save_criminalists,
 )
-from core.zonal_constants import get_initial_criminalists
 from core.constants import COLORS, INITIAL_DEPARTMENTS
 from .template_builder import create_template_builder
 from .criminalist_card import create_criminalist_card
@@ -389,7 +388,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                         on_click=lambda e, t=t: _select_template(t),
                     ),
                     ft.IconButton(
-                        icon=ft.Icons.DELETE_OUTLINE,
+                        icon=ft.icons.DELETE_OUTLINE,
                         icon_color="#ef4444",
                         tooltip="Удалить шаблон",
                         on_click=lambda e, t=t: _delete_template(t),

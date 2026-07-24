@@ -307,4 +307,4 @@ class ZonalExcelExporter:
         ws.page_margins.right = 0.5
 
         wb.save(filepath)
-        print(f"[ZONAL_EXCEL] ✓ Файл сохранён: {filepath}")
+        print(f"[ZONAL_EXCEL] [OK] Файл сохранён: {filepath}")

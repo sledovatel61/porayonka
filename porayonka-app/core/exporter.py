@@ -47,7 +47,7 @@ class ExcelExporter:
             from openpyxl.utils import get_column_letter
             print("[EXCEL] openpyxl импортирован успешно")
         except ImportError as ie:
-            print(f"[EXCEL] ✕ ImportError: {ie}")
+            print(f"[EXCEL] [ERROR] ImportError: {ie}")
             raise ImportError(
                 "Библиотека openpyxl не установлена.\n"
                 "Выполните: pip install openpyxl"
@@ -153,7 +153,7 @@ class ExcelExporter:
         # ── Сохранить ─────────────────────────────────────────────
         print(f"[EXCEL] Сохраняю файл...")
         wb.save(filepath)
-        print(f"[EXCEL] ✓ Файл сохранён: {filepath}")
+        print(f"[EXCEL] [OK] Файл сохранён: {filepath}")
 
 
 class HTMLExporter:
@@ -274,4 +274,4 @@ class HTMLExporter:
 </html>"""
 
         Path(filepath).write_text(html, encoding="utf-8")
-        print(f"[HTML] ✓ Файл сохранён: {filepath}")
+        print(f"[HTML] [OK] Файл сохранён: {filepath}")

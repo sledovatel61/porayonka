@@ -17,7 +17,7 @@ def create_toolbar(
     # ── Поле поиска ──────────────────────────────────────────
     search_field = ft.TextField(
         hint_text=" Поиск по отделам...",
-        prefix_icon=ft.Icons.SEARCH,
+        prefix_icon=ft.icons.SEARCH,
         border_radius=10,
         border_color=COLORS["border"],
         focused_border_color=COLORS["btn_save"],
@@ -53,7 +53,7 @@ def create_toolbar(
 
     # Кнопка очистки поиска
     clear_btn = ft.IconButton(
-        icon=ft.Icons.CLOSE,
+        icon=ft.icons.CLOSE,
         icon_size=18,
         icon_color=COLORS["text_secondary"],
         tooltip="Очистить поиск",
@@ -74,7 +74,7 @@ def create_toolbar(
     # ── Кнопка «Сохранить» ───────────────────────────────────
     btn_save = ft.ElevatedButton(
         text="Сохранить",
-        icon=ft.Icons.SAVE_OUTLINED,
+        icon=ft.icons.SAVE_OUTLINED,
         bgcolor=COLORS["btn_save"],
         color="white",
         elevation=2,
@@ -90,7 +90,7 @@ def create_toolbar(
     # ── Кнопка «Экспорт» ─────────────────────────────────────
     btn_export = ft.ElevatedButton(
         text="Экспорт",
-        icon=ft.Icons.UPLOAD_FILE_OUTLINED,
+        icon=ft.icons.UPLOAD_FILE_OUTLINED,
         bgcolor=COLORS["btn_export"],
         color="white",
         elevation=2,
@@ -105,7 +105,7 @@ def create_toolbar(
 
     # ── Кнопка «Сброс» (маленькая, только иконка) ────────────
     btn_reset = ft.IconButton(
-        icon=ft.Icons.RESTART_ALT_OUTLINED,
+        icon=ft.icons.RESTART_ALT_OUTLINED,
         icon_color=COLORS["text_secondary"],
         icon_size=22,
         tooltip="Сбросить все статусы",
