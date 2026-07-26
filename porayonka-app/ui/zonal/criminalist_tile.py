@@ -8,7 +8,16 @@ from core.zonal_data import get_criminalist_fill
 from core.constants import COLORS
 
 
+_TILE_WIDTH = 280
 _TILE_HEIGHT = 95
+_TILE_PADDING_X = 10
+_TILE_PADDING_Y = 8
+_ACTIONS_WIDTH = 30
+_CONTENT_GAP = 8
+_LEFT_WIDTH = _TILE_WIDTH - (_TILE_PADDING_X * 2) - _ACTIONS_WIDTH - _CONTENT_GAP
+_NAME_WIDTH = 126
+_ZONE_TEXT_WIDTH = _LEFT_WIDTH - 16
+_PROGRESS_BAR_WIDTH = _LEFT_WIDTH - 44
 
 
 def _truncate(text: str, limit: int = 40) -> str:
@@ -25,7 +34,7 @@ def _safe_stop(e):
 
 
 def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict):
-    """Внутреннее содержимое плашки (для обновления без перерисовки всей сетки)."""
+    """Внутреннее содержимое плашки с фиксированными размерами для стабильного рендера."""
 
     # ── ФИО + чип активности ──
     name_text = ft.Text(
@@ -35,6 +44,8 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         color=COLORS["text"],
         max_lines=1,
         overflow=ft.TextOverflow.ELLIPSIS,
+        width=_NAME_WIDTH,
+        tooltip=criminalist.full_name,
     )
 
     if criminalist.is_active:
@@ -55,6 +66,8 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
                 ft.Text(chip_text, size=9, color=chip_color, weight=ft.FontWeight.W_500),
             ],
             spacing=2,
+            tight=True,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         bgcolor=chip_bg,
         border_radius=8,
@@ -82,9 +95,12 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
                 color=COLORS.get("text_secondary", "#94a3b8"),
                 max_lines=1,
                 overflow=ft.TextOverflow.ELLIPSIS,
+                width=_ZONE_TEXT_WIDTH,
+                tooltip=full_zone_text,
             ),
         ],
         spacing=4,
+        tight=True,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
@@ -103,6 +119,7 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
 
     progress_bar = ft.ProgressBar(
         value=pct / 100.0,
+        width=_PROGRESS_BAR_WIDTH,
         height=5,
         color=bar_color,
         bgcolor=COLORS.get("border", "#334155"),
@@ -113,52 +130,67 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         size=10,
         color=pct_color,
         weight=ft.FontWeight.W_500,
+        width=32,
+        text_align=ft.TextAlign.RIGHT,
     )
     progress_row = ft.Row(
         controls=[progress_bar, progress_label],
         spacing=6,
+        tight=True,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
     # ── Кнопки (справа) ──
     edit_btn = ft.IconButton(
         icon=ft.icons.EDIT_OUTLINED,
-        icon_size=16,
+        icon_size=15,
         icon_color=COLORS.get("btn_save", "#3b82f6"),
         tooltip="Редактировать",
+        width=28,
+        height=28,
         on_click=lambda e: (_safe_stop(e), callbacks["on_edit"](criminalist)),
-        style=ft.ButtonStyle(padding=ft.padding.all(2)),
+        style=ft.ButtonStyle(padding=ft.padding.all(0)),
     )
     delete_btn = ft.IconButton(
         icon=ft.icons.DELETE_OUTLINE,
-        icon_size=16,
+        icon_size=15,
         icon_color="#ef4444",
         tooltip="Удалить",
+        width=28,
+        height=28,
         on_click=lambda e: (_safe_stop(e), callbacks["on_delete"](criminalist)),
-        style=ft.ButtonStyle(padding=ft.padding.all(2)),
+        style=ft.ButtonStyle(padding=ft.padding.all(0)),
     )
 
     actions_col = ft.Column(
         controls=[edit_btn, delete_btn],
         spacing=2,
+        width=_ACTIONS_WIDTH,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        alignment=ft.MainAxisAlignment.CENTER,
+        tight=True,
     )
 
-    # Левая колонка: ФИО+чип, отделы, прогресс
+    header_row = ft.Row(
+        controls=[name_text, chip],
+        spacing=6,
+        tight=True,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
     left_col = ft.Column(
-        controls=[
-            ft.Row(controls=[name_text, chip], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            zone_row,
-            progress_row,
-        ],
+        controls=[header_row, zone_row, progress_row],
         spacing=4,
+        width=_LEFT_WIDTH,
         alignment=ft.MainAxisAlignment.CENTER,
+        tight=True,
     )
 
     # Итоговый Row без expand — фиксированные размеры задаёт внешний Container
     return ft.Row(
         controls=[left_col, actions_col],
-        spacing=8,
+        spacing=_CONTENT_GAP,
+        tight=True,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
@@ -177,9 +209,10 @@ def create_criminalist_tile(
 
     tile = ft.Container(
         content=_build_tile_content(criminalist, collection, dept_map, callbacks),
+        width=_TILE_WIDTH,
         height=_TILE_HEIGHT,
         alignment=ft.alignment.center_left,
-        padding=ft.padding.symmetric(horizontal=10, vertical=8),
+        padding=ft.padding.symmetric(horizontal=_TILE_PADDING_X, vertical=_TILE_PADDING_Y),
         bgcolor=COLORS.get("card", "#15202e"),
         border=ft.border.all(1, COLORS.get("border", "#334155")),
         border_radius=10,
@@ -201,6 +234,8 @@ def create_criminalist_tile(
 def rebuild_tile_content(tile: ft.Container, criminalist, collection, dept_map: dict, callbacks: dict):
     """Обновить содержимое существующей плашки без перерисовки всей сетки."""
     tile.content = _build_tile_content(criminalist, collection, dept_map, callbacks)
+    tile.width = _TILE_WIDTH
+    tile.height = _TILE_HEIGHT
     tile.opacity = 1.0 if criminalist.is_active else 0.5
     try:
         tile.update()

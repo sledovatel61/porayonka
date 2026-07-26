@@ -112,8 +112,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 continue
             visible.append(c)
 
-        grid = responsive_row_ref["control"]
-        if grid is not None:
+        tiles_wrap = responsive_row_ref["control"]
+        if tiles_wrap is not None:
             new_controls = []
             for c in visible:
                 tile = tiles.get(c.id)
@@ -121,12 +121,9 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                     tile = create_criminalist_tile(c, collection, dept_map, callbacks)
                     tiles[c.id] = tile
                 new_controls.append(tile)
-            grid.controls = new_controls
-            # Обновляем высоту GridView под текущее количество рядов
-            rows_needed = max(1, (len(visible) + tiles_per_row - 1) // tiles_per_row)
-            grid.height = rows_needed * tile_height + (rows_needed - 1) * 12
+            tiles_wrap.controls = new_controls
             try:
-                grid.update()
+                tiles_wrap.update()
             except Exception:
                 pass
         # Обновим счётчик видимых
@@ -643,30 +640,24 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         color=COLORS["text_secondary"],
     )
 
-    # Сетка плашек через GridView (Flet 0.23.2)
-    tile_width = 280
-    tile_height = 95
-    tiles_per_row = 4
-    visible_count = len(collection.criminalists)
-    rows_needed = max(1, (visible_count + tiles_per_row - 1) // tiles_per_row)
-    grid_height = rows_needed * tile_height + (rows_needed - 1) * 12
-
-    tiles_grid = ft.GridView(
-        max_extent=tile_width,
-        child_aspect_ratio=tile_width / tile_height,
+    # Плашки через обычный переносимый Row вместо GridView.
+    # В Flet 0.23.2 GridView внутри прокручиваемой вкладки стабильно создавал ячейки,
+    # но на Windows не отрисовывал вложенный content плашек. Row(wrap=True) не
+    # виртуализирует элементы, зато даёт обычные конечные constraints и сохраняет
+    # компактную раскладку с переносом строк.
+    tiles_wrap = ft.Row(
         spacing=12,
         run_spacing=12,
-        expand=False,
-        height=grid_height,
-        padding=0,
+        wrap=True,
+        vertical_alignment=ft.CrossAxisAlignment.START,
     )
-    responsive_row_ref["control"] = tiles_grid
+    responsive_row_ref["control"] = tiles_wrap
 
-    # Первичное наполнение сетки
+    # Первичное наполнение плашек
     for crim in collection.criminalists:
         tile = create_criminalist_tile(crim, collection, dept_map, callbacks)
         tiles[crim.id] = tile
-        tiles_grid.controls.append(tile)
+        tiles_wrap.controls.append(tile)
 
     summary_col = create_summary_panel(collection, summary_ref, _refresh_summary)
     summary_ref["panel"] = summary_col
@@ -694,7 +685,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ft.Container(height=6),
             visible_count_text,
             ft.Container(height=10),
-            tiles_grid,
+            tiles_wrap,
             ft.Container(height=16),
             ft.Row(controls=[export_btn], alignment=ft.MainAxisAlignment.END),
             ft.Container(height=20),
