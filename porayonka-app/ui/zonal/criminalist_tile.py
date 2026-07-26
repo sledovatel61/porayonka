@@ -172,6 +172,7 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
             progress_row,
         ],
         spacing=4,
+        expand=True,
     )
 
     # Итоговый Row
@@ -179,6 +180,7 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         controls=[left_col, actions_row],
         spacing=8,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        expand=True,
     )
 
     return main_row
