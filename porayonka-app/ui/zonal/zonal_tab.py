@@ -641,18 +641,18 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         color=COLORS["text_secondary"],
     )
 
-    # Сетка плашек
-    responsive_row = ft.ResponsiveRow(
-        columns=12,
+    # Сетка плашек (Row с wrap=True — более предсказуемое поведение высоты в Flet 0.23.2)
+    tiles_row = ft.Row(
+        wrap=True,
         spacing=12,
         run_spacing=12,
         controls=[],
     )
-    responsive_row_ref["control"] = responsive_row
+    responsive_row_ref["control"] = tiles_row
 
-    # Обертка для ResponsiveRow с ограничением ширины
-    responsive_row_container = ft.Container(
-        content=responsive_row,
+    # Обертка для сетки плашек
+    tiles_container = ft.Container(
+        content=tiles_row,
         expand=False,
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
@@ -661,7 +661,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     for crim in collection.criminalists:
         tile = create_criminalist_tile(crim, collection, dept_map, callbacks)
         tiles[crim.id] = tile
-        responsive_row.controls.append(tile)
+        tiles_row.controls.append(tile)
 
     summary_col = create_summary_panel(collection, summary_ref, _refresh_summary)
     summary_ref["panel"] = summary_col
@@ -689,7 +689,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ft.Container(height=6),
             visible_count_text,
             ft.Container(height=10),
-            responsive_row_container,
+            tiles_container,
             ft.Container(height=16),
             ft.Row(controls=[export_btn], alignment=ft.MainAxisAlignment.END),
             ft.Container(height=20),

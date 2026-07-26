@@ -198,7 +198,7 @@ def create_criminalist_tile(
 
     tile = ft.Container(
         content=_build_tile_content(criminalist, collection, dept_map, callbacks),
-        col=_TILE_COL,
+        width=280,
         height=95,
         expand=False,
         alignment=ft.alignment.top_left,
