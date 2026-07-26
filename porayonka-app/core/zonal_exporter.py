@@ -12,9 +12,9 @@ class ZonalExcelExporter:
 
     def export(self, collection: ZonalCollection, filepath: str) -> None:
         """Создать и сохранить .xlsx файл с зональными данными"""
-        print(f"[ZONAL_EXCEL] Начинаю экспорт, криминалистов: {len(collection.criminalists)}")
-        print(f"[ZONAL_EXCEL] Файл: {filepath}")
-        print(f"[ZONAL_EXCEL] Режим по отделам: {collection.template.use_departments_mode}")
+        print(f"[ZONAL_EXCEL] Export started, criminalists: {len(collection.criminalists)}")
+        print(f"[ZONAL_EXCEL] File: {filepath}")
+        print(f"[ZONAL_EXCEL] Departments mode: {collection.template.use_departments_mode}")
 
         try:
             from openpyxl import Workbook
@@ -307,4 +307,4 @@ class ZonalExcelExporter:
         ws.page_margins.right = 0.5
 
         wb.save(filepath)
-        print(f"[ZONAL_EXCEL] [OK] Файл сохранён: {filepath}")
+        print(f"[ZONAL_EXCEL] [OK] File saved: {filepath}")

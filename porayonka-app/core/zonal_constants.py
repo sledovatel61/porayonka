@@ -164,5 +164,5 @@ def get_initial_criminalists() -> list:
             zone=zone,
         )
         result.append(criminalist)
-    print(f"[ZONAL_CONST] Загружено криминалистов: {len(result)}")
+    print(f"[ZONAL_CONST] Criminalists loaded: {len(result)}")
     return result

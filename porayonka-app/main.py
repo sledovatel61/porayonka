@@ -137,7 +137,7 @@ def main(page: ft.Page) -> None:
     )
 
     # ── Создать вторую вкладку (Зональные) ──────────────────────
-    print("[MAIN] Создаю вкладку Зональные...")
+    print("[MAIN] Creating zonal tab...")
     try:
         from ui.zonal.zonal_tab import create_zonal_tab
         zonal_content_raw = create_zonal_tab(page)
@@ -147,15 +147,15 @@ def main(page: ft.Page) -> None:
             padding=ft.padding.all(20),
             expand=True,
         )
-        print("[MAIN] [OK] Vkladka Zonalnye sozdana")
+        print("[MAIN] [OK] Zonal tab created")
     except Exception as e:
         import traceback
-        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Zonalnye: {e}")
+        print(f"[MAIN] [ERROR] Zonal tab creation failed: {e}")
         traceback.print_exc()
         tab2_content = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
+                    ft.Text(f"Ошибка загрузки вкладки: {e}", color="#dc2626"),
                 ],
             ),
             padding=ft.padding.all(20),

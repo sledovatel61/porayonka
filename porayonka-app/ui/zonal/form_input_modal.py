@@ -19,7 +19,7 @@ def create_form_input_modal(
     Создать модальное окно заполнения формы для криминалиста.
     on_saved(criminalist) вызывается после сохранения (для обновления плашки).
     """
-    print(f"[FORM_MODAL] Otkryvayu formu dlya: {criminalist.full_name}")
+    print(f"[FORM_MODAL] Opening form for criminalist id={criminalist.id}")
 
     items_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
 
@@ -27,7 +27,7 @@ def create_form_input_modal(
         try:
             save_zonal_collection(collection)
         except Exception as e:
-            print(f"[FORM_MODAL] Oshibka avtosohraneniya: {e}")
+            print(f"[FORM_MODAL] Autosave error: {e}")
 
     def _rebuild_items():
         items_list.controls.clear()
@@ -139,5 +139,5 @@ def create_form_input_modal(
         shape=ft.RoundedRectangleBorder(radius=12),
     )
 
-    print(f"[FORM_MODAL] Dialog sozdan dlya {criminalist.full_name}")
+    print(f"[FORM_MODAL] Dialog created for criminalist id={criminalist.id}")
     return dialog

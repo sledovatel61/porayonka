@@ -406,8 +406,8 @@ def load_zonal_collection() -> Optional[ZonalCollection]:
         last_saved=last_saved,
         criminalists=criminalists,
     )
-    print(f"[ZONAL_DATA] Kollekciya zagruzhena: {template.name}, "
-          f"submissions: {len(submissions)}, криминалистов: {len(criminalists)}")
+    print(f"[ZONAL_DATA] Collection loaded: items={len(template.items)}, "
+          f"submissions={len(submissions)}, criminalists={len(criminalists)}")
     return collection
 
 
@@ -596,12 +596,12 @@ def build_non_submitters_text(collection: ZonalCollection, dept_map: dict) -> st
         fill = get_criminalist_fill(collection, c)
         if fill["percent"] >= 100:
             continue
-        zone_names = [dept_map.get(did, f"Otdel {did}") for did in c.zone.department_ids]
-        zone_text = ", ".join(zone_names) if zone_names else "zony ne zakrepleny"
+        zone_names = [dept_map.get(did, f"Отдел {did}") for did in c.zone.department_ids]
+        zone_text = ", ".join(zone_names) if zone_names else "отделы не закреплены"
         lines.append(f"{c.full_name} ({fill['percent']}%) - {zone_text}")
     if not lines:
-        return "Vse aktivnye kriminalisty sdalii formu (100%)."
-    header = "Ne sdali formu:"
+        return "Все активные криминалисты сдали форму (100%)."
+    header = "Не сдали форму:"
     return header + "\n" + "\n".join(lines)
 
 

@@ -1,6 +1,21 @@
 # ui/zonal/zonal_tab.py
-# Вкладка "Зональные криминалисты" — ФАЗА 2.
-# Сетка квадратных плашек вместо раскрывающихся карточек.
+# Вкладка "Зональные криминалисты" — ФАЗА 3 (компактный редизайн).
+#
+# Структура экрана сверху вниз:
+#   1. Однострочная сводка (активных / сдано / общий прогресс).
+#   2. Свёрнутая секция "Настройка сбора данных" (конструктор шаблона).
+#   3. Свёрнутая секция "Подробная сводка".
+#   4. Тулбар: поиск, фильтры, добавить, копировать не сдавших, экспорт.
+#   5. Сетка компактных плашек криминалистов (360x88).
+#
+# LAYOUT (Flet 0.23.2):
+#   Корень вкладки — ft.Column(scroll=AUTO) без expand.
+#   Внутри прокручиваемой колонки НЕТ вертикальных expand=True.
+#   Сетка плашек — ft.Row(wrap=True) с детьми фиксированного размера
+#   (не ResponsiveRow: его дети получают долю ширины, но неограниченную
+#   высоту внутри ScrollView, что и раздувало плашки).
+#
+# Все print() — только ASCII. Весь UI-текст — на русском.
 # [DARK THEME] + ft.icons.* + hint_style (Flet 0.23.2)
 import flet as ft
 from typing import List, Optional, Callable, Dict
@@ -23,7 +38,8 @@ from .template_builder import create_template_builder
 from .criminalist_tile import create_criminalist_tile, rebuild_tile_content
 from .form_input_modal import create_form_input_modal
 from .add_criminalist_modal import create_add_criminalist_modal
-from .summary_panel import create_summary_panel
+from .summary_panel import create_summary_panel, create_summary_line
+from .collapsible import create_collapsible_section
 
 
 def create_zonal_tab(page: ft.Page) -> ft.Column:
@@ -31,7 +47,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     Создать вкладку 'Зональные'.
     Возвращает ft.Column с полным содержимым вкладки.
     """
-    print("[ZONAL_TAB] Inicializaciya vkladki Zonalnye (faza 2: setka plashek)")
+    print("[ZONAL_TAB] Init zonal tab (phase 3: compact redesign)")
 
     collection = load_zonal_collection()
     if collection is None:
@@ -39,23 +55,24 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             template=ReportTemplate(name="Новая форма"),
             criminalists=get_initial_criminalists(),
         )
-        print("[ZONAL_TAB] Sozdana novaya kollekciya")
+        print("[ZONAL_TAB] New collection created")
     else:
         if not collection.criminalists:
             collection.criminalists = get_initial_criminalists()
-    print(f"[ZONAL_TAB] Kriminalistov: {len(collection.criminalists)}")
-    print(f"[ZONAL_TAB] Aktivnyh: {sum(1 for c in collection.criminalists if c.is_active)}")
-    print(f"[ZONAL_TAB] Punktov shablena: {len(collection.template.items)}")
+    print(f"[ZONAL_TAB] Criminalists: {len(collection.criminalists)}")
+    print(f"[ZONAL_TAB] Active: {sum(1 for c in collection.criminalists if c.is_active)}")
+    print(f"[ZONAL_TAB] Template items: {len(collection.template.items)}")
 
     dept_map = {d["id"]: d["name"] for d in INITIAL_DEPARTMENTS}
 
     # ── Состояние UI ────────────────────────────────────────────
     tiles: Dict[int, ft.Container] = {}          # id -> плашка
-    summary_ref: Dict = {"panel": None}
+    summary_line_ref: Dict = {"control": None}   # однострочная сводка
+    summary_ref: Dict = {"panel": None}          # подробная сводка
     template_builder_ref: Dict = {"control": None}
     search_ref: Dict = {"value": ""}
     filter_ref: Dict = {"value": "all"}          # all | pending | inactive
-    responsive_row_ref: Dict = {"control": None}
+    grid_ref: Dict = {"control": None}
 
     # ── Колбэки для плашек ──────────────────────────────────────
     callbacks = {
@@ -69,9 +86,17 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         try:
             save_zonal_collection(collection)
         except Exception as e:
-            print(f"[ZONAL_TAB] Oshibka avtosohraneniya: {e}")
+            print(f"[ZONAL_TAB] Autosave error: {e}")
 
     def _refresh_summary():
+        """Обновить однострочную и подробную сводку."""
+        if summary_line_ref["control"] is not None:
+            new_line = create_summary_line(collection)
+            summary_line_ref["control"].controls = new_line.controls
+            try:
+                summary_line_ref["control"].update()
+            except Exception:
+                pass
         if summary_ref["panel"] is not None:
             new_summary = create_summary_panel(collection)
             summary_ref["panel"].controls = new_summary.controls
@@ -88,7 +113,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     def refresh_all_tiles():
         """Обновить все плашки (например, после изменения шаблона)."""
-        print("[ZONAL_TAB] Obnovlyayu vse plashki...")
+        print("[ZONAL_TAB] Refreshing all tiles")
         for c in collection.criminalists:
             tile = tiles.get(c.id)
             if tile is None:
@@ -120,16 +145,34 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 tiles[c.id] = tile
             new_controls.append(tile)
 
-        rr = responsive_row_ref["control"]
-        if rr is not None:
-            rr.controls = new_controls
+        if not new_controls:
+            new_controls = [
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.icons.SEARCH_OFF, size=18, color=COLORS["text_muted"]),
+                            ft.Text("Ничего не найдено по текущему фильтру",
+                                    size=13, color=COLORS["text_muted"], italic=True),
+                        ],
+                        spacing=8,
+                        tight=True,
+                    ),
+                    padding=ft.padding.all(16),
+                )
+            ]
+
+        grid = grid_ref["control"]
+        if grid is not None:
+            grid.controls = new_controls
             try:
-                rr.update()
+                grid.update()
             except Exception:
                 pass
         # Обновим счётчик видимых
         try:
-            visible_count_text.value = f"Показано: {len(visible)} из {len(collection.criminalists)}"
+            visible_count_text.value = (
+                f"Показано: {len(visible)} из {len(collection.criminalists)}"
+            )
             visible_count_text.update()
         except Exception:
             pass
@@ -138,8 +181,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         filter_ref["value"] = value
         for v, btn in filter_buttons.items():
             selected = (v == value)
-            btn.bgcolor = COLORS["btn_save"] if selected else COLORS["empty_bg"]
-            btn.color = "white" if selected else COLORS["text_secondary"]
+            btn.style.color = "white" if selected else COLORS["text_secondary"]
+            btn.style.bgcolor = COLORS["btn_save"] if selected else COLORS["empty_bg"]
             try:
                 btn.update()
             except Exception:
@@ -155,8 +198,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _refresh_summary()
         _apply_filter()
         from ui.toast import show_toast
-        status = "vklyuchen" if crim.is_active else "otklyuchen"
-        show_toast(page, f"{crim.full_name} — {status}", icon=ft.icons.VISIBILITY if crim.is_active else ft.icons.CANCEL)
+        status = "включён в сбор" if crim.is_active else "отключён от сбора"
+        show_toast(
+            page,
+            f"{crim.full_name} — {status}",
+            icon=ft.icons.VISIBILITY if crim.is_active else ft.icons.VISIBILITY_OFF,
+        )
 
     def _on_open_form(crim: Criminalist):
         dialog = create_form_input_modal(
@@ -185,7 +232,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             _refresh_summary()
             _apply_filter()
             from ui.toast import show_toast
-            show_toast(page, f"Sohraneno: {full_name}", icon=ft.icons.EDIT)
+            show_toast(page, f"Сохранено: {full_name}", icon=ft.icons.EDIT)
 
         dialog = create_add_criminalist_modal(
             page=page,
@@ -208,7 +255,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             dialog.open = False
             page.update()
             from ui.toast import show_toast
-            show_toast(page, f"Udalen: {criminalist.full_name}", icon=ft.icons.DELETE)
+            show_toast(page, f"Удалён: {criminalist.full_name}", icon=ft.icons.DELETE)
 
         def cancel_delete(e=None):
             dialog.open = False
@@ -216,18 +263,19 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Udalenie kriminalista", size=16,
+            bgcolor=COLORS["primary_light"],
+            title=ft.Text("Удаление криминалиста", size=16,
                           weight=ft.FontWeight.BOLD, color=COLORS["text"]),
             content=ft.Text(
-                f"Vy uvereny, chto hotite udalit {criminalist.full_name}?\n\n"
-                f"Vse dannye po etomu kriminalistu budut poteryany.",
+                f"Вы уверены, что хотите удалить {criminalist.full_name}?\n\n"
+                f"Все данные по этому криминалисту будут потеряны.",
                 size=13,
                 color=COLORS["text"],
             ),
             actions=[
-                ft.TextButton("Otmena", on_click=cancel_delete),
+                ft.TextButton("Отмена", on_click=cancel_delete),
                 ft.ElevatedButton(
-                    "Udalit",
+                    "Удалить",
                     bgcolor="#dc2626",
                     color=COLORS["text_light"],
                     on_click=confirm_delete,
@@ -256,7 +304,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             _refresh_summary()
             _apply_filter()
             from ui.toast import show_toast
-            show_toast(page, f"Dobavlen: {full_name}", icon=ft.icons.ADD)
+            show_toast(page, f"Добавлен: {full_name}", icon=ft.icons.ADD)
 
         dialog = create_add_criminalist_modal(
             page=page,
@@ -272,12 +320,13 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         try:
             page.set_clipboard(text)
         except Exception as ex:
-            print(f"[ZONAL_TAB] Oshibka clipboard: {ex}")
+            print(f"[ZONAL_TAB] Clipboard error: {ex}")
         non = get_non_submitters(collection)
         from ui.toast import show_toast
-        show_toast(page, f"Skopirovan spisok ne sdavshih: {len(non)}", icon=ft.icons.CONTENT_COPY)
+        show_toast(page, f"Скопирован список не сдавших: {len(non)}",
+                   icon=ft.icons.CONTENT_COPY)
 
-    # ── Шаблон / экспорт / сброс (как в фазе 1) ────────────────
+    # ── Шаблон / экспорт / сброс ────────────────────────────────
     def on_template_changed():
         autosave()
         refresh_all_tiles()
@@ -288,11 +337,11 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             save_zonal_template(collection.template)
             autosave()
             from ui.toast import show_toast
-            show_toast(page, f"Shablon '{name}' sohranen", icon=ft.icons.SAVE)
+            show_toast(page, f"Форма «{name}» сохранена", icon=ft.icons.SAVE)
         except Exception as e:
-            print(f"[ZONAL_TAB] Oshibka sohraneniya shablena: {e}")
+            print(f"[ZONAL_TAB] Template save error: {e}")
             from ui.toast import show_error_toast
-            show_error_toast(page, f"Oshibka: {e}")
+            show_error_toast(page, f"Ошибка сохранения: {e}")
 
     def on_template_load():
         _open_template_loader()
@@ -310,27 +359,31 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 dialog.open = False
                 page.update()
                 from ui.toast import show_toast
-                show_toast(page, f"Shablon '{t.name}' zagruzhen (dannye sbroseny)", icon=ft.icons.FOLDER)
+                show_toast(page, f"Форма «{t.name}» загружена (данные сброшены)",
+                           icon=ft.icons.FOLDER_OPEN)
 
             def cancel_load(e=None):
                 dialog.open = False
                 page.update()
 
             inactive_count = sum(1 for c in collection.criminalists if not c.is_active)
-            inactive_note = f"\n\n({inactive_count} kriminalistov otklyucheno)" if inactive_count else ""
+            inactive_note = (
+                f"\n\n(отключено криминалистов: {inactive_count})" if inactive_count else ""
+            )
             dialog = ft.AlertDialog(
                 modal=True,
-                title=ft.Text("Zagruzka shablena", size=16,
+                bgcolor=COLORS["primary_light"],
+                title=ft.Text("Загрузка формы", size=16,
                               weight=ft.FontWeight.BOLD, color=COLORS["text"]),
                 content=ft.Text(
-                    f"Shablon '{t.name}' zagruzit {len(t.items)} punktov.\n\n"
-                    f"Tekuschie dannye budut udaleny!{inactive_note}",
+                    f"Форма «{t.name}» содержит пунктов: {len(t.items)}.\n\n"
+                    f"Текущие введённые данные будут удалены!{inactive_note}",
                     size=13,
                     color=COLORS["text"],
                 ),
                 actions=[
-                    ft.TextButton("Otmena", on_click=cancel_load),
-                    ft.ElevatedButton("Zagruzit", bgcolor=COLORS["btn_save"],
+                    ft.TextButton("Отмена", on_click=cancel_load),
+                    ft.ElevatedButton("Загрузить", bgcolor=COLORS["btn_save"],
                                       color=COLORS["text_light"], on_click=confirm_load),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
@@ -344,13 +397,13 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             _rebuild_template_builder()
             refresh_all_tiles()
             from ui.toast import show_toast
-            show_toast(page, f"Shablon '{t.name}' zagruzhen", icon=ft.icons.FOLDER)
+            show_toast(page, f"Форма «{t.name}» загружена", icon=ft.icons.FOLDER_OPEN)
 
     def _open_template_loader():
         templates = load_zonal_templates()
         if not templates:
             from ui.toast import show_toast
-            show_toast(page, "Net sohranennyh shablenov", icon=ft.icons.FOLDER)
+            show_toast(page, "Нет сохранённых форм", icon=ft.icons.FOLDER_OPEN)
             return
 
         def _select_template(t):
@@ -363,17 +416,18 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 dialog.open = False
                 page.update()
                 from ui.toast import show_toast
-                show_toast(page, f"Shablon '{t.name}' udalen", icon=ft.icons.DELETE)
+                show_toast(page, f"Форма «{t.name}» удалена", icon=ft.icons.DELETE)
             except Exception as e:
                 from ui.toast import show_error_toast
-                show_error_toast(page, f"Oshibka udaleniya: {e}")
+                show_error_toast(page, f"Ошибка удаления: {e}")
 
-        items_list = ft.Column(spacing=8)
+        items_list = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO)
         for t in templates:
             template_row = ft.Row(
                 controls=[
                     ft.ElevatedButton(
-                        text=f"📋 {t.name} ({len(t.items)} punktov)",
+                        text=f"{t.name} — пунктов: {len(t.items)}",
+                        icon=ft.icons.DESCRIPTION,
                         style=ft.ButtonStyle(
                             bgcolor=COLORS["card"],
                             color=COLORS["text"],
@@ -385,7 +439,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                     ft.IconButton(
                         icon=ft.icons.DELETE_OUTLINE,
                         icon_color="#ef4444",
-                        tooltip="Udalit shablon",
+                        tooltip="Удалить форму",
                         on_click=lambda e, t=t: _delete_template(t),
                     ),
                 ],
@@ -403,8 +457,9 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             title=ft.Container(
                 content=ft.Row(
                     controls=[
-                        ft.Text("📂 ", size=18),
-                        ft.Text("Vybor shablena", size=16, weight=ft.FontWeight.BOLD, color="white"),
+                        ft.Icon(ft.icons.FOLDER_OPEN, size=18, color="white"),
+                        ft.Text("Выбор формы", size=16,
+                                weight=ft.FontWeight.BOLD, color="white"),
                     ],
                     spacing=8,
                 ),
@@ -423,7 +478,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 bgcolor=COLORS["primary_light"],
                 padding=ft.padding.all(12),
             ),
-            actions=[ft.TextButton("Otmena", on_click=_close_dialog)],
+            actions=[ft.TextButton("Отмена", on_click=_close_dialog)],
             actions_alignment=ft.MainAxisAlignment.END,
             shape=ft.RoundedRectangleBorder(radius=12),
         )
@@ -439,13 +494,13 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _rebuild_template_builder()
         refresh_all_tiles()
         from ui.toast import show_toast
-        show_toast(page, "Forma ochischena", icon=ft.icons.DELETE)
+        show_toast(page, "Форма очищена", icon=ft.icons.DELETE)
 
     def on_reset_data():
         has_data = len(collection.submissions) > 0
         if not has_data:
             from ui.toast import show_toast
-            show_toast(page, "Dannye uzhe pusty", icon=ft.icons.INFO)
+            show_toast(page, "Данные уже пусты", icon=ft.icons.INFO)
             return
 
         def confirm_reset(e=None):
@@ -456,7 +511,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             dialog.open = False
             page.update()
             from ui.toast import show_toast
-            show_toast(page, "Dannye sbroseny, shablon sohranen", icon=ft.icons.CLEANING_SERVICES)
+            show_toast(page, "Данные сброшены, структура формы сохранена",
+                       icon=ft.icons.CLEANING_SERVICES)
 
         def cancel_reset(e=None):
             dialog.open = False
@@ -464,17 +520,18 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Sbros dannyh", size=16,
+            bgcolor=COLORS["primary_light"],
+            title=ft.Text("Сброс данных", size=16,
                           weight=ft.FontWeight.BOLD, color=COLORS["text"]),
             content=ft.Text(
-                f"Ochistit vse vvedennye dannye ({len(collection.submissions)} zapisey)?\n\n"
-                f"Struktura shablena budet sohranena.",
+                f"Очистить все введённые данные (записей: {len(collection.submissions)})?\n\n"
+                f"Структура формы будет сохранена.",
                 size=13,
                 color=COLORS["text"],
             ),
             actions=[
-                ft.TextButton("Otmena", on_click=cancel_reset),
-                ft.ElevatedButton("Sbrosit", bgcolor="#f59e0b",
+                ft.TextButton("Отмена", on_click=cancel_reset),
+                ft.ElevatedButton("Сбросить", bgcolor="#f59e0b",
                                   color=COLORS["text_light"], on_click=confirm_reset),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
@@ -489,7 +546,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         refresh_all_tiles()
 
     def on_export_excel():
-        import os
         from pathlib import Path
         from datetime import datetime
         from core.zonal_exporter import ZonalExcelExporter
@@ -502,11 +558,11 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             filepath = str(downloads / filename)
             ZonalExcelExporter().export(collection, filepath)
             from ui.toast import show_export_toast
-            show_export_toast(page, "Zonalnye Excel")
+            show_export_toast(page, "Зональные Excel")
         except Exception as e:
-            print(f"[ZONAL_TAB] Oshibka eksporta: {e}")
+            print(f"[ZONAL_TAB] Export error: {e}")
             from ui.toast import show_error_toast
-            show_error_toast(page, f"Oshibka eksporta: {e}")
+            show_error_toast(page, f"Ошибка экспорта: {e}")
 
     def _rebuild_template_builder():
         if template_builder_ref["control"] is None:
@@ -527,7 +583,15 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         except Exception:
             pass
 
-    # ── Построение UI ───────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────
+    # ПОСТРОЕНИЕ UI
+    # ────────────────────────────────────────────────────────────
+
+    # ── 1. Однострочная сводка ──────────────────────────────────
+    summary_line = create_summary_line(collection)
+    summary_line_ref["control"] = summary_line
+
+    # ── 2. Конструктор шаблона (свёрнут по умолчанию) ───────────
     template_builder = create_template_builder(
         page=page,
         collection=collection,
@@ -538,10 +602,34 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         on_reset_data=on_reset_data,
         on_departments_mode_changed=on_departments_mode_changed,
     )
-    template_builder_wrapper = ft.Column(controls=[template_builder], spacing=0)
+    template_builder_wrapper = ft.Column(controls=[template_builder], spacing=0, tight=True)
     template_builder_ref["control"] = template_builder_wrapper
 
-    # Поиск
+    template_section = create_collapsible_section(
+        title="Настройка сбора данных",
+        icon=ft.icons.TUNE,
+        body=template_builder_wrapper,
+        expanded=False,
+        subtitle="конструктор формы, сохранение и сброс",
+    )
+
+    # ── 3. Подробная сводка (свёрнута по умолчанию) ─────────────
+    summary_panel = create_summary_panel(collection)
+    summary_ref["panel"] = summary_panel
+
+    summary_section = create_collapsible_section(
+        title="Подробная сводка",
+        icon=ft.icons.INSIGHTS,
+        body=summary_panel,
+        expanded=False,
+        subtitle="статистика по всем криминалистам",
+    )
+
+    # ── 4. Тулбар ───────────────────────────────────────────────
+    def _set_search(value: str):
+        search_ref["value"] = value
+        _apply_filter()
+
     search_field = ft.TextField(
         value="",
         hint_text="Поиск по ФИО...",
@@ -553,28 +641,26 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
         height=40,
-        width=320,
+        width=280,
         text_size=13,
-        on_change=lambda e: (_set_search(e.control.value),),
+        content_padding=ft.padding.symmetric(horizontal=10, vertical=8),
+        on_change=lambda e: _set_search(e.control.value),
     )
 
-    def _set_search(value: str):
-        search_ref["value"] = value
-        _apply_filter()
-
-    # Кнопки фильтра
     filter_buttons: Dict[str, ft.OutlinedButton] = {}
 
-    def _mk_filter_btn(value: str, label: str) -> ft.OutlinedButton:
+    def _mk_filter_btn(value: str, label: str, tooltip: str) -> ft.OutlinedButton:
         selected = (value == filter_ref["value"])
         btn = ft.OutlinedButton(
             text=label,
+            height=40,
+            tooltip=tooltip,
             style=ft.ButtonStyle(
                 color="white" if selected else COLORS["text_secondary"],
                 bgcolor=COLORS["btn_save"] if selected else COLORS["empty_bg"],
                 side=ft.BorderSide(1, COLORS["border"]),
                 shape=ft.RoundedRectangleBorder(radius=8),
-                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                padding=ft.padding.symmetric(horizontal=12),
             ),
             on_click=lambda e, v=value: _set_filter(v),
         )
@@ -583,21 +669,22 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     filter_row = ft.Row(
         controls=[
-            _mk_filter_btn("all", "Все"),
-            _mk_filter_btn("pending", "Не заполнившие"),
-            _mk_filter_btn("inactive", "Неактивные"),
+            _mk_filter_btn("all", "Все", "Показать всех криминалистов"),
+            _mk_filter_btn("pending", "Не сдали", "Только те, кто заполнил форму не полностью"),
+            _mk_filter_btn("inactive", "Отключённые", "Только отключённые от сбора"),
         ],
-        spacing=8,
+        spacing=6,
+        tight=True,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # Кнопка добавления
     add_btn = ft.ElevatedButton(
         text="Добавить",
-        icon=ft.icons.ADD,
+        icon=ft.icons.PERSON_ADD,
         bgcolor=COLORS["btn_save"],
         color=COLORS["text_light"],
         height=40,
+        tooltip="Добавить нового криминалиста",
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=8),
             padding=ft.padding.symmetric(horizontal=14),
@@ -605,7 +692,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         on_click=lambda e: _on_add_criminalist(),
     )
 
-    # Кнопка копирования списка не сдавших (заглушка под Telegram/Messenger MAX)
     copy_btn = ft.OutlinedButton(
         text="Копировать не сдавших",
         icon=ft.icons.CONTENT_COPY,
@@ -617,82 +703,86 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             padding=ft.padding.symmetric(horizontal=14),
         ),
         on_click=_on_copy_non_submitters,
-        tooltip="Скопировать в буфер список ФИО + отделы тех, кто не сдал форму",
+        tooltip="Скопировать в буфер обмена список ФИО и отделов тех, кто не сдал форму",
     )
-
-    toolbar = ft.Row(
-        controls=[
-            search_field,
-            filter_row,
-            add_btn,
-            copy_btn,
-        ],
-        spacing=10,
-        wrap=True,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-    )
-
-    visible_count_text = ft.Text(
-        f"Pokazano: {len(collection.criminalists)} iz {len(collection.criminalists)}",
-        size=12,
-        color=COLORS["text_secondary"],
-    )
-
-    # Сетка плашек
-    responsive_row = ft.ResponsiveRow(
-        columns=12,
-        spacing=12,
-        run_spacing=12,
-        controls=[],
-    )
-    responsive_row_ref["control"] = responsive_row
-
-    # Обертка для ResponsiveRow с ограничением ширины
-    responsive_row_container = ft.Container(
-        content=responsive_row,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
-    )
-
-    # Первичное наполнение сетки
-    for crim in collection.criminalists:
-        tile = create_criminalist_tile(crim, collection, dept_map, callbacks)
-        tiles[crim.id] = tile
-        responsive_row.controls.append(tile)
-
-    summary_col = create_summary_panel(collection)
-    summary_ref["panel"] = summary_col
 
     export_btn = ft.ElevatedButton(
         text="Экспорт в Excel",
         icon=ft.icons.DOWNLOAD,
         bgcolor=COLORS["btn_export"],
         color=COLORS["text_light"],
-        height=44,
+        height=40,
+        tooltip="Выгрузить собранные данные в файл Excel",
         style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(horizontal=20),
+            shape=ft.RoundedRectangleBorder(radius=8),
+            padding=ft.padding.symmetric(horizontal=14),
         ),
         on_click=lambda e: on_export_excel(),
     )
 
+    toolbar = ft.Row(
+        controls=[search_field, filter_row, add_btn, copy_btn, export_btn],
+        spacing=8,
+        wrap=True,
+        run_spacing=8,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    visible_count_text = ft.Text(
+        f"Показано: {len(collection.criminalists)} из {len(collection.criminalists)}",
+        size=12,
+        color=COLORS["text_secondary"],
+    )
+
+    # ── 5. Сетка компактных плашек ──────────────────────────────
+    # Row(wrap=True) c детьми фиксированного размера: строки переносятся
+    # по ширине окна, высота сетки считается по содержимому.
+    grid = ft.Row(
+        controls=[],
+        spacing=10,
+        run_spacing=10,
+        wrap=True,
+        vertical_alignment=ft.CrossAxisAlignment.START,
+    )
+    grid_ref["control"] = grid
+
+    for crim in collection.criminalists:
+        tile = create_criminalist_tile(crim, collection, dept_map, callbacks)
+        tiles[crim.id] = tile
+        grid.controls.append(tile)
+
+    hint_text = ft.Text(
+        "Нажмите на плашку, чтобы заполнить форму. Меню справа — редактирование, "
+        "включение и удаление.",
+        size=11,
+        color=COLORS["text_muted"],
+        italic=True,
+    )
+
+    # ── Корневая колонка вкладки ────────────────────────────────
     tab_content = ft.Column(
         controls=[
-            template_builder_wrapper,
-            ft.Container(height=16),
-            summary_col,
+            summary_line,
+            ft.Container(height=10),
+            template_section,
+            ft.Container(height=8),
+            summary_section,
             ft.Container(height=12),
             toolbar,
             ft.Container(height=6),
-            visible_count_text,
+            ft.Row(
+                controls=[visible_count_text, hint_text],
+                spacing=14,
+                wrap=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
             ft.Container(height=10),
-            responsive_row_container,
-            ft.Container(height=16),
-            ft.Row(controls=[export_btn], alignment=ft.MainAxisAlignment.END),
+            grid,
             ft.Container(height=20),
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,
     )
 
-    print("[ZONAL_TAB] Vkladka sozdana uspeshno (faza 2)")
+    print("[ZONAL_TAB] Zonal tab created (phase 3)")
     return tab_content
