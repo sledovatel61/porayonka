@@ -653,6 +653,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # Обертка для ResponsiveRow с ограничением ширины
     responsive_row_container = ft.Container(
         content=responsive_row,
+        expand=False,
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 

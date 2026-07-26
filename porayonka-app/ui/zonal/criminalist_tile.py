@@ -166,14 +166,12 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
             ft.Row(
                 controls=[name_text, chip],
                 spacing=6,
-                expand=True,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             zone_row,
             progress_row,
         ],
         spacing=4,
-        expand=True,
     )
 
     # Итоговый Row
@@ -181,7 +179,6 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         controls=[left_col, actions_row],
         spacing=8,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        expand=True,
     )
 
     return main_row
@@ -203,6 +200,8 @@ def create_criminalist_tile(
         content=_build_tile_content(criminalist, collection, dept_map, callbacks),
         col=_TILE_COL,
         height=95,
+        expand=False,
+        alignment=ft.alignment.top_left,
         padding=ft.padding.symmetric(horizontal=10, vertical=8),
         bgcolor=COLORS["card"],
         border=ft.border.all(1, COLORS["border"]),
