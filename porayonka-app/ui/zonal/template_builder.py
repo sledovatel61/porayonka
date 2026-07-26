@@ -1,6 +1,12 @@
 # ui/zonal/template_builder.py
-# Конструктор шаблонов — панель настройки сбора данных
-# [DARK THEME] Обновлено визуально + исправлено hint_text_color
+# Конструктор шаблонов — панель "Настройка сбора данных".
+#
+# Редизайн (фаза 3):
+#   - собственный крупный заголовок панели убран: панель теперь живёт внутри
+#     сворачиваемой секции (ui/zonal/collapsible.py), которая и рисует заголовок;
+#   - emoji в подписях кнопок заменены на ft.icons.*;
+#   - уменьшены отступы и высоты полей, панель стала заметно компактнее.
+# [DARK THEME] + ft.icons.* + hint_style (Flet 0.23.2)
 import flet as ft
 from typing import Callable, Optional
 from core.zonal_models import (
@@ -22,7 +28,7 @@ def create_template_builder(
     """
     Создать панель конструктора шаблонов.
     """
-    print("[TEMPLATE_BUILDER] Sozdayu konstruktor shablonov")
+    print("[TEMPLATE_BUILDER] Building template constructor")
 
     # ── Поле названия формы ──────────────────────────────────────
     name_field = ft.TextField(
@@ -33,8 +39,8 @@ def create_template_builder(
         focused_border_color=COLORS["btn_save"],
         bgcolor=COLORS["card"],  # ТЁМНЫЙ ФОН
         color=COLORS["text"],    # ТЁМНЫЙ ТЕКСТ
-        height=44,
-        text_size=14,
+        height=40,
+        text_size=13,
         # Do not use expand in a Column nested in the tab's ScrollView:
         # Flet maps it to vertical Expanded, which has unbounded height here.
         # ИСПРАВЛЕНИЕ: hint_style вместо hint_text_color
@@ -186,7 +192,7 @@ def create_template_builder(
 
     # ── Переключатель режима "По отделам" ────────────────────────
     dept_mode_checkbox = ft.Checkbox(
-        label="☑ Работать по отделам (детализация по районам)",
+        label="Работать по отделам (детализация по районам)",
         value=collection.template.use_departments_mode,
         active_color=COLORS["btn_save"],
         label_style=ft.TextStyle(
@@ -214,7 +220,8 @@ def create_template_builder(
         on_save(name)
 
     btn_save = ft.ElevatedButton(
-        text="💾 Сохранить форму",
+        text="Сохранить форму",
+        icon=ft.icons.SAVE,
         bgcolor=COLORS["btn_save"],
         color="white",
         height=38,
@@ -226,7 +233,8 @@ def create_template_builder(
     )
 
     btn_load = ft.OutlinedButton(
-        text="📂 Загрузить форму",
+        text="Загрузить форму",
+        icon=ft.icons.FOLDER_OPEN,
         height=38,
         style=ft.ButtonStyle(
             color=COLORS["text"],
@@ -238,7 +246,8 @@ def create_template_builder(
     )
 
     btn_clear = ft.OutlinedButton(
-        text="🗑️ Очистить",
+        text="Очистить форму",
+        icon=ft.icons.DELETE_OUTLINE,
         height=38,
         style=ft.ButtonStyle(
             color="#f87171",  # ТЁМНЫЙ КРАСНЫЙ
@@ -250,7 +259,8 @@ def create_template_builder(
     )
 
     btn_reset_data = ft.OutlinedButton(
-        text="🧹 Сброс данных",
+        text="Сброс данных",
+        icon=ft.icons.CLEANING_SERVICES,
         height=38,
         tooltip="Очистить все введённые значения, сохранив структуру формы",
         style=ft.ButtonStyle(
@@ -266,87 +276,43 @@ def create_template_builder(
     rebuild_items_list()
 
     # ── Сборка всей панели ───────────────────────────────────────
+    # Заголовок панели не рисуется здесь: его даёт сворачиваемая секция.
     panel = ft.Container(
         content=ft.Column(
             controls=[
-                # Заголовок панели
-                ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            ft.Text("🔧 ", size=18),
-                            ft.Text(
-                                "Настройка сбора данных",
-                                size=15,
-                                weight=ft.FontWeight.BOLD,
-                                color="white",
-                            ),
-                        ],
-                        spacing=8,
-                    ),
-                    gradient=ft.LinearGradient(
-                        begin=ft.alignment.center_left,
-                        end=ft.alignment.center_right,
-                        colors=[COLORS["primary"], COLORS["primary_light"]],
-                    ),
-                    padding=ft.padding.symmetric(horizontal=16, vertical=12),
-                    border_radius=ft.border_radius.only(top_left=10, top_right=10),
-                ),
-                # Тело панели
+                ft.Text("Название формы:", size=12, weight=ft.FontWeight.W_600,
+                        color=COLORS["text"]),
+                name_field,
+                ft.Container(height=8),
+                ft.Text("Пункты для сбора:", size=12, weight=ft.FontWeight.W_600,
+                        color=COLORS["text"]),
                 ft.Container(
                     content=ft.Column(
-                        controls=[
-                            # Название формы
-                            ft.Text("Название формы:", size=13, weight=ft.FontWeight.W_600,
-                                    color=COLORS["text"]),
-                            name_field,
-                            ft.Container(height=12),
-                            # Пункты шаблона
-                            ft.Text("Пункты для сбора:", size=13, weight=ft.FontWeight.W_600,
-                                    color=COLORS["text"]),
-                            ft.Container(height=4),
-                            ft.Container(
-                                content=ft.Column(
-                                    controls=[
-                                        items_column,
-                                        ft.Container(height=4),
-                                        add_btn,
-                                    ],
-                                    spacing=4,
-                                ),
-                                bgcolor=COLORS["primary_light"],  # ТЁМНЫЙ ФОН
-                                border=ft.border.all(1, COLORS["border"]),
-                                border_radius=8,
-                                padding=ft.padding.all(12),
-                            ),
-                            ft.Container(height=12),
-                            # Кнопки
-                            ft.Row(
-                                controls=[btn_save, btn_load, btn_clear, btn_reset_data],
-                                spacing=10,
-                                wrap=True,
-                            ),
-                            ft.Container(height=8),
-                            # Переключатель режима
-                            dept_mode_checkbox,
-                        ],
-                        spacing=6,
+                        controls=[items_column, add_btn],
+                        spacing=4,
+                        tight=True,
                     ),
-                    padding=ft.padding.all(16),
-                    bgcolor=COLORS["card"],  # ТЁМНЫЙ ФОН
-                    border_radius=ft.border_radius.only(bottom_left=10, bottom_right=10),
+                    bgcolor=COLORS["primary_light"],
+                    border=ft.border.all(1, COLORS["border"]),
+                    border_radius=8,
+                    padding=ft.padding.all(10),
                 ),
+                ft.Container(height=8),
+                ft.Row(
+                    controls=[btn_save, btn_load, btn_clear, btn_reset_data],
+                    spacing=8,
+                    wrap=True,
+                ),
+                dept_mode_checkbox,
             ],
-            spacing=0,
+            spacing=6,
+            tight=True,
         ),
+        padding=ft.padding.all(12),
+        bgcolor=COLORS["card"],
         border=ft.border.all(1, COLORS["border"]),
         border_radius=10,
-        shadow=ft.BoxShadow(
-            spread_radius=0,
-            blur_radius=8,
-            color="#00000060",  # ТЁМНАЯ ТЕНЬ
-            offset=ft.Offset(0, 2),
-        ),
     )
 
-    print("[TEMPLATE_BUILDER] Konstruktor sozdan")
+    print("[TEMPLATE_BUILDER] Template constructor built")
     return panel

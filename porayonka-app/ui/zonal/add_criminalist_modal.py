@@ -19,7 +19,7 @@ def create_add_criminalist_modal(
     Создать модальное окно добавления/редактирования криминалиста.
     В режиме редактирования (criminalist != None) возможно удаление (on_delete).
     """
-    print("[ADD_CRIM_MODAL] Sozdayu dialog dobavleniya/redaktirovaniya kriminalista")
+    print("[ADD_CRIM_MODAL] Building add/edit criminalist dialog")
     is_edit = criminalist is not None
 
     # Поле ФИО
