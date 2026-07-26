@@ -643,7 +643,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         color=COLORS["text_secondary"],
     )
 
-    # Сетка плашек через GridView с фиксированной высотой (Flet 0.23.2 корректно считает размеры)
+    # Сетка плашек через GridView (Flet 0.23.2)
     tile_width = 280
     tile_height = 95
     tiles_per_row = 4
@@ -652,7 +652,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     grid_height = rows_needed * tile_height + (rows_needed - 1) * 12
 
     tiles_grid = ft.GridView(
-        runs_count=tiles_per_row,
         max_extent=tile_width,
         child_aspect_ratio=tile_width / tile_height,
         spacing=12,
