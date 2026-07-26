@@ -98,27 +98,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _apply_filter()
 
     # ── Фильтрация / поиск ─────────────────────────────────────
-    def _build_tiles_grid(visible_criminalists: list, columns: int = 4):
-        """Построить сетку плашек из нескольких Row по N штук в ряду."""
-        rows = []
-        for i in range(0, len(visible_criminalists), columns):
-            row_tiles = []
-            for c in visible_criminalists[i:i + columns]:
-                tile = tiles.get(c.id)
-                if tile is None:
-                    tile = create_criminalist_tile(c, collection, dept_map, callbacks)
-                    tiles[c.id] = tile
-                row_tiles.append(tile)
-            rows.append(
-                ft.Row(
-                    controls=row_tiles,
-                    spacing=12,
-                    alignment=ft.MainAxisAlignment.START,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                )
-            )
-        return rows
-
     def _apply_filter():
         """Пересобрать сетку плашек по поиску и фильтру (без полной перерисовки таба)."""
         query = search_ref["value"].strip().lower()
@@ -135,7 +114,17 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         grid = responsive_row_ref["control"]
         if grid is not None:
-            grid.controls = _build_tiles_grid(visible)
+            new_controls = []
+            for c in visible:
+                tile = tiles.get(c.id)
+                if tile is None:
+                    tile = create_criminalist_tile(c, collection, dept_map, callbacks)
+                    tiles[c.id] = tile
+                new_controls.append(tile)
+            grid.controls = new_controls
+            # Обновляем высоту GridView под текущее количество рядов
+            rows_needed = max(1, (len(visible) + tiles_per_row - 1) // tiles_per_row)
+            grid.height = rows_needed * tile_height + (rows_needed - 1) * 12
             try:
                 grid.update()
             except Exception:
@@ -654,22 +643,31 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         color=COLORS["text_secondary"],
     )
 
-    # Сетка плашек: Column с Row по 4 плашки в ряду (Flet 0.23.2 корректно считает высоту)
-    tiles_grid = ft.Column(
+    # Сетка плашек через GridView с фиксированной высотой (Flet 0.23.2 корректно считает размеры)
+    tile_width = 280
+    tile_height = 95
+    tiles_per_row = 4
+    visible_count = len(collection.criminalists)
+    rows_needed = max(1, (visible_count + tiles_per_row - 1) // tiles_per_row)
+    grid_height = rows_needed * tile_height + (rows_needed - 1) * 12
+
+    tiles_grid = ft.GridView(
+        runs_count=tiles_per_row,
+        max_extent=tile_width,
+        child_aspect_ratio=tile_width / tile_height,
         spacing=12,
-        controls=[],
+        run_spacing=12,
+        expand=False,
+        height=grid_height,
+        padding=0,
     )
     responsive_row_ref["control"] = tiles_grid
 
-    # Обертка для сетки плашек
-    tiles_container = ft.Container(
-        content=tiles_grid,
-        expand=False,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
-    )
-
     # Первичное наполнение сетки
-    tiles_grid.controls = _build_tiles_grid(collection.criminalists)
+    for crim in collection.criminalists:
+        tile = create_criminalist_tile(crim, collection, dept_map, callbacks)
+        tiles[crim.id] = tile
+        tiles_grid.controls.append(tile)
 
     summary_col = create_summary_panel(collection, summary_ref, _refresh_summary)
     summary_ref["panel"] = summary_col
@@ -697,7 +695,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ft.Container(height=6),
             visible_count_text,
             ft.Container(height=10),
-            tiles_container,
+            tiles_grid,
             ft.Container(height=16),
             ft.Row(controls=[export_btn], alignment=ft.MainAxisAlignment.END),
             ft.Container(height=20),
