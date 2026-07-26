@@ -1,6 +1,9 @@
 # ui/zonal/zonal_tab.py
-# Вкладка "Зональные криминалисты" — ФАЗА 2.
-# Сетка компактных плашек вместо раскрывающихся карточек.
+# Вкладка "Зональные криминалисты" — ФАЗА 2 (фикс: фиксированные ряды вместо Row(wrap=True)/GridView).
+# Проблема Row(wrap=True) внутри Column(scroll=AUTO): получает неограниченную ширину,
+# плашки растягиваются на весь экран, контент схлопывается.
+# Решение: Column из Row — каждый Row имеет фиксированную ширину (кол-во плашек * 280 + spacing).
+# Row не использует wrap, поэтому ширина bounded, плашки компактные.
 # [DARK THEME] + ft.icons.* + hint_style (Flet 0.23.2)
 import flet as ft
 from typing import List, Optional, Callable, Dict
@@ -25,13 +28,15 @@ from .form_input_modal import create_form_input_modal
 from .add_criminalist_modal import create_add_criminalist_modal
 from .summary_panel import create_summary_panel
 
+_TILES_PER_ROW = 4
+_TILE_SPACING = 12
 
 def create_zonal_tab(page: ft.Page) -> ft.Column:
     """
     Создать вкладку 'Зональные'.
     Возвращает ft.Column с полным содержимым вкладки.
     """
-    print("[ZONAL_TAB] Initializing zonal tab (phase 2: compact tiles)")
+    print("[ZONAL_TAB] Initializing zonal tab (phase 2: compact tiles - fixed rows)")
 
     collection = load_zonal_collection()
     if collection is None:
@@ -55,7 +60,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     template_builder_ref: Dict = {"control": None, "is_expanded": False}
     search_ref: Dict = {"value": ""}
     filter_ref: Dict = {"value": "all"}          # all | pending | inactive
-    responsive_row_ref: Dict = {"control": None}
+    tiles_column_ref: Dict = {"control": None}
 
     # ── Колбэки для плашек ──────────────────────────────────────
     callbacks = {
@@ -97,9 +102,42 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _refresh_summary()
         _apply_filter()
 
+    # ── Построение строк плашек ─────────────────────────────────
+    def _build_tile_rows(visible_list):
+        """Разбить видимые криминалисты на ряды по _TILES_PER_ROW."""
+        rows = []
+        # Предварительно создаем/получаем плитки
+        for crim in visible_list:
+            if crim.id not in tiles:
+                tiles[crim.id] = create_criminalist_tile(crim, collection, dept_map, callbacks)
+
+        for i in range(0, len(visible_list), _TILES_PER_ROW):
+            chunk = visible_list[i:i+_TILES_PER_ROW]
+            row_controls = [tiles[c.id] for c in chunk if c.id in tiles]
+            row = ft.Row(
+                controls=row_controls,
+                spacing=_TILE_SPACING,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                alignment=ft.MainAxisAlignment.START,
+            )
+            rows.append(row)
+        if not rows:
+            # Пустое состояние
+            rows.append(
+                ft.Container(
+                    content=ft.Text(
+                        "Нет криминалистов по текущему фильтру",
+                        size=13,
+                        color=COLORS["text_secondary"],
+                    ),
+                    padding=ft.padding.all(12),
+                )
+            )
+        return rows
+
     # ── Фильтрация / поиск ─────────────────────────────────────
     def _apply_filter():
-        """Пересобрать сетку плашек по поиску и фильтру (без полной перерисовки таба)."""
+        """Пересобрать сетку плашек по поиску и фильтру."""
         query = search_ref["value"].strip().lower()
         fmode = filter_ref["value"]
         visible = []
@@ -112,18 +150,11 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 continue
             visible.append(c)
 
-        tiles_wrap = responsive_row_ref["control"]
-        if tiles_wrap is not None:
-            new_controls = []
-            for c in visible:
-                tile = tiles.get(c.id)
-                if tile is None:
-                    tile = create_criminalist_tile(c, collection, dept_map, callbacks)
-                    tiles[c.id] = tile
-                new_controls.append(tile)
-            tiles_wrap.controls = new_controls
+        tiles_col = tiles_column_ref["control"]
+        if tiles_col is not None:
+            tiles_col.controls = _build_tile_rows(visible)
             try:
-                tiles_wrap.update()
+                tiles_col.update()
             except Exception:
                 pass
         # Обновим счётчик видимых
@@ -640,24 +671,27 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         color=COLORS["text_secondary"],
     )
 
-    # Плашки через обычный переносимый Row вместо GridView.
-    # В Flet 0.23.2 GridView внутри прокручиваемой вкладки стабильно создавал ячейки,
-    # но на Windows не отрисовывал вложенный content плашек. Row(wrap=True) не
-    # виртуализирует элементы, зато даёт обычные конечные constraints и сохраняет
-    # компактную раскладку с переносом строк.
-    tiles_wrap = ft.Row(
-        spacing=12,
-        run_spacing=12,
-        wrap=True,
-        vertical_alignment=ft.CrossAxisAlignment.START,
+    # ── НОВЫЙ LAYOUT: фиксированные ряды вместо Row(wrap=True) ──
+    # Row(wrap=True) внутри Column(scroll=AUTO) давал unbounded width -> плашки растягивались.
+    # Здесь используем Column, где каждый child = Row с максимум 4 плашками фиксированной ширины 280.
+    # Ширина каждого Row = n*280 + (n-1)*12 <= 1156, то есть bounded, не растягивается на весь экран.
+    tiles_column = ft.Column(
+        spacing=_TILE_SPACING,
+        tight=False,
+        horizontal_alignment=ft.CrossAxisAlignment.START,
     )
-    responsive_row_ref["control"] = tiles_wrap
+    tiles_column_ref["control"] = tiles_column
 
-    # Первичное наполнение плашек
-    for crim in collection.criminalists:
-        tile = create_criminalist_tile(crim, collection, dept_map, callbacks)
-        tiles[crim.id] = tile
-        tiles_wrap.controls.append(tile)
+    # Первичное наполнение — через построение рядов
+    tiles_column.controls = _build_tile_rows(collection.criminalists)
+
+    # Обертка для_tiles_column с левым выравниванием и минимальной шириной,
+    # чтобы Column(scroll) не пытался растянуть Row на бесконечность.
+    # Контейнер без expand, с alignment top_left.
+    tiles_wrapper = ft.Container(
+        content=tiles_column,
+        alignment=ft.alignment.top_left,
+    )
 
     summary_col = create_summary_panel(collection, summary_ref, _refresh_summary)
     summary_ref["panel"] = summary_col
@@ -675,6 +709,18 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         on_click=lambda e: on_export_excel(),
     )
 
+    # ── Минимальный тест (закомментирован): одна плашка с одним текстом ──
+    # Чтобы проверить, что Column рендерит хоть что-то, раскомментируйте:
+    # debug_test_tile = ft.Container(
+    #     width=280, height=95,
+    #     bgcolor=COLORS["card"],
+    #     border=ft.border.all(1, COLORS["border"]),
+    #     border_radius=10,
+    #     content=ft.Text("Test", color="white"),
+    #     alignment=ft.alignment.center,
+    # )
+    # В итоговой версии используем tiles_wrapper.
+
     tab_content = ft.Column(
         controls=[
             template_builder_wrapper,
@@ -685,7 +731,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ft.Container(height=6),
             visible_count_text,
             ft.Container(height=10),
-            tiles_wrap,
+            tiles_wrapper,
             ft.Container(height=16),
             ft.Row(controls=[export_btn], alignment=ft.MainAxisAlignment.END),
             ft.Container(height=20),
@@ -694,5 +740,5 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         scroll=ft.ScrollMode.AUTO,
     )
 
-    print("[ZONAL_TAB] Zonal tab created successfully (phase 2)")
+    print("[ZONAL_TAB] Zonal tab created successfully (phase 2 - fixed rows)")
     return tab_content
