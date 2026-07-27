@@ -1,14 +1,8 @@
 # ui/zonal/criminalist_tile.py
-# Компактная плашка криминалиста — исправленная версия.
-# Проблема оригинала: Row(wrap=True) внутри Column(scroll=AUTO) давал неограниченную ширину,
-# плашки растягивались на весь экран, а content схлопывался.
-# Решение:
-# - Убраны все tight=True (источник схлопывания в Flet 0.23.2)
-# - Плитка = Container фиксированной ширины/высоты с простым Column внутри
-# - Внутри нет неограниченных вложенностей, только Row/Column с bounded width
-# - ProgressBar без border_radius (совместимость 0.23.2)
-# - Нет тени/shadow, которая в GridView перекрывала контент (упрощено, но оставлено nhẹ)
-# - Левый блок expand=True (горизонтальный expand внутри Row с фикс шириной — допустимо)
+# Компактная плашка криминалиста — редизайн с анимациями.
+# Сохранена стабильность: фиксированный размер 280x96, без tight, без wrap-проблем.
+# Добавлено: hover-эффект (смена bgcolor, border, shadow), плавная анимация 200ms,
+# современные скругления 12, мягкие тени.
 # [DARK THEME] + ft.icons.* (Flet 0.23.2)
 import flet as ft
 from core.zonal_data import get_criminalist_fill
@@ -29,12 +23,10 @@ def _safe_stop(e):
         pass
 
 def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict):
-    """Внутреннее содержимое плашки — максимально простой layout."""
-
-    # ── ФИО ──
+    # ФИО
     name_text = ft.Text(
         criminalist.full_name,
-        size=12,
+        size=13,
         weight=ft.FontWeight.BOLD,
         color=COLORS["text"],
         max_lines=1,
@@ -43,34 +35,38 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         tooltip=criminalist.full_name,
     )
 
-    # ── Чип активности ──
+    # Чип активности
     if criminalist.is_active:
         chip_text = "Активен"
         chip_color = COLORS.get("received_text", "#22c55e")
         chip_bg = COLORS.get("received_bg", "#14532d")
+        chip_border = COLORS.get("received", "#22c55e")
         chip_icon = ft.icons.CHECK_CIRCLE
-        chip_tooltip = "Участвует (нажмите чтобы отключить)"
+        chip_tooltip = "Участвует в сборе (нажмите чтобы отключить)"
     else:
         chip_text = "Откл"
         chip_color = COLORS.get("text_muted", "#64748b")
         chip_bg = COLORS.get("empty_bg", "#1e293b")
+        chip_border = COLORS.get("border", "#334155")
         chip_icon = ft.icons.CANCEL
         chip_tooltip = "Не участвует (нажмите чтобы включить)"
 
     chip = ft.Container(
         content=ft.Row(
             controls=[
-                ft.Icon(chip_icon, size=10, color=chip_color),
-                ft.Text(chip_text, size=9, color=chip_color, weight=ft.FontWeight.W_500),
+                ft.Icon(chip_icon, size=11, color=chip_color),
+                ft.Text(chip_text, size=9, color=chip_color, weight=ft.FontWeight.W_600),
             ],
-            spacing=2,
+            spacing=3,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         bgcolor=chip_bg,
-        border_radius=6,
-        padding=ft.padding.symmetric(horizontal=5, vertical=2),
+        border=ft.border.all(1, chip_border),
+        border_radius=12,
+        padding=ft.padding.symmetric(horizontal=6, vertical=2),
         on_click=lambda e: (_safe_stop(e), callbacks["on_toggle_active"](criminalist)),
         tooltip=chip_tooltip,
+        animate=ft.animation.Animation(150, ft.AnimationCurve.EASE_OUT),
     )
 
     header_row = ft.Row(
@@ -80,18 +76,18 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
     )
 
-    # ── Отделы ──
+    # Отделы
     zone_names = [dept_map.get(did, f"Отдел {did}") for did in criminalist.zone.department_ids]
     if zone_names:
         full_zone_text = ", ".join(zone_names)
-        zone_text = _truncate(full_zone_text, 38)
+        zone_text = _truncate(full_zone_text, 40)
     else:
         full_zone_text = "Нет отделов"
         zone_text = full_zone_text
 
     zone_row = ft.Row(
         controls=[
-            ft.Icon(ft.icons.LOCATION_ON, size=11, color=COLORS.get("text_muted", "#64748b")),
+            ft.Icon(ft.icons.LOCATION_ON, size=12, color=COLORS.get("text_muted", "#64748b")),
             ft.Text(
                 zone_text,
                 size=10,
@@ -106,7 +102,7 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # ── Прогресс ──
+    # Прогресс
     fill = get_criminalist_fill(collection, criminalist)
     pct = fill["percent"]
     if pct >= 100:
@@ -119,7 +115,6 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
         bar_color = COLORS.get("empty", "#64748b")
         pct_color = COLORS.get("text_muted", "#64748b")
 
-    # В 0.23.2 border_radius у ProgressBar может отсутствовать — убираем
     progress_bar = ft.ProgressBar(
         value=pct / 100.0,
         color=bar_color,
@@ -129,54 +124,59 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
     )
     progress_label = ft.Text(
         f"{pct}%",
-        size=10,
+        size=11,
         color=pct_color,
-        weight=ft.FontWeight.W_500,
+        weight=ft.FontWeight.BOLD,
     )
 
     progress_row = ft.Row(
         controls=[progress_bar, progress_label],
-        spacing=6,
+        spacing=8,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # ── Основная левая колонка ──
     left_col = ft.Column(
         controls=[header_row, zone_row, progress_row],
-        spacing=4,
+        spacing=5,
         expand=True,
         alignment=ft.MainAxisAlignment.CENTER,
     )
 
-    # ── Кнопки справа ──
     edit_btn = ft.IconButton(
         icon=ft.icons.EDIT_OUTLINED,
-        icon_size=14,
+        icon_size=15,
         icon_color=COLORS.get("btn_save", "#3b82f6"),
         tooltip="Редактировать",
         width=26,
         height=26,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=6),
+            bgcolor={"hovered": COLORS["stat_blue_bg"]},
+        ),
         on_click=lambda e: (_safe_stop(e), callbacks["on_edit"](criminalist)),
     )
     delete_btn = ft.IconButton(
         icon=ft.icons.DELETE_OUTLINE,
-        icon_size=14,
+        icon_size=15,
         icon_color="#ef4444",
         tooltip="Удалить",
         width=26,
         height=26,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=6),
+            bgcolor={"hovered": "#3f1a1a"},
+        ),
         on_click=lambda e: (_safe_stop(e), callbacks["on_delete"](criminalist)),
     )
 
     actions_col = ft.Column(
         controls=[edit_btn, delete_btn],
-        spacing=1,
+        spacing=2,
         width=30,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         alignment=ft.MainAxisAlignment.CENTER,
     )
 
-    # ── Итоговый Row: слева контент, справа кнопки ──
     outer_row = ft.Row(
         controls=[left_col, actions_col],
         spacing=8,
@@ -186,42 +186,63 @@ def _build_tile_content(criminalist, collection, dept_map: dict, callbacks: dict
 
     return outer_row
 
-
-def create_criminalist_tile(
-    criminalist,
-    collection,
-    dept_map: dict,
-    callbacks: dict,
-) -> ft.Container:
-    """
-    Создать плашку криминалиста.
-    Фиксированный размер, без tight, без вложенного expand внутри scroll-контейнера.
-    """
+def create_criminalist_tile(criminalist, collection, dept_map: dict, callbacks: dict) -> ft.Container:
     print(f"[TILE] Creating tile: {criminalist.id}")
 
     tile = ft.Container(
         content=_build_tile_content(criminalist, collection, dept_map, callbacks),
         width=_TILE_WIDTH,
         height=_TILE_HEIGHT,
-        padding=ft.padding.all(8),
+        padding=ft.padding.symmetric(horizontal=10, vertical=8),
         bgcolor=COLORS.get("card", "#15202e"),
         border=ft.border.all(1, COLORS.get("border", "#334155")),
-        border_radius=10,
+        border_radius=12,
         ink=True,
         on_click=lambda e: callbacks["on_open_form"](criminalist),
         tooltip="Нажмите для заполнения формы",
+        animate=ft.animation.Animation(200, ft.AnimationCurve.EASE_OUT),
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=6,
+            color="#00000050",
+            offset=ft.Offset(0, 2),
+        ),
     )
-    # Полупрозрачность для неактивных — без opacity (opacity иногда не рендерится в GridView),
-    # делаем более темный фон
+
     if not criminalist.is_active:
         tile.opacity = 0.55
     else:
         tile.opacity = 1.0
+
+    def _on_hover(e):
+        try:
+            is_hover = e.data == "true"
+            if is_hover:
+                tile.bgcolor = COLORS.get("card_hover", "#1e293b")
+                tile.border = ft.border.all(1, COLORS.get("btn_save", "#3b82f6"))
+                tile.shadow = ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=14,
+                    color="#00000070",
+                    offset=ft.Offset(0, 4),
+                )
+            else:
+                tile.bgcolor = COLORS.get("card", "#15202e")
+                tile.border = ft.border.all(1, COLORS.get("border", "#334155"))
+                tile.shadow = ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=6,
+                    color="#00000050",
+                    offset=ft.Offset(0, 2),
+                )
+            tile.update()
+        except Exception:
+            pass
+
+    tile.on_hover = _on_hover
     return tile
 
-
 def rebuild_tile_content(tile: ft.Container, criminalist, collection, dept_map: dict, callbacks: dict):
-    """Обновить содержимое существующей плашки."""
     tile.content = _build_tile_content(criminalist, collection, dept_map, callbacks)
     tile.width = _TILE_WIDTH
     tile.height = _TILE_HEIGHT
