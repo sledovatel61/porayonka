@@ -24,6 +24,7 @@ from .criminalist_tile import create_criminalist_tile, rebuild_tile_content
 from .form_input_modal import create_form_input_modal
 from .add_criminalist_modal import create_add_criminalist_modal
 from .summary_panel import create_summary_panel
+from .criminalists_summary_panel import create_criminalists_summary_panel
 
 
 def create_zonal_tab(page: ft.Page) -> ft.Column:
@@ -56,10 +57,11 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # ── Состояние UI ────────────────────────────────────────────
     tiles: Dict[int, ft.Container] = {}          # id -> плашка
     summary_ref: Dict = {"panel": None, "is_expanded": False}
+    crim_summary_ref: Dict = {"panel": None, "is_expanded": False}
     template_builder_ref: Dict = {"control": None, "is_expanded": False}
-    search_ref: Dict = {"value": ""}
     filter_ref: Dict = {"value": "all"}          # all | pending | inactive
     tiles_column_ref: Dict = {"control": None}
+    counters_ref: Dict = {"control": None}
 
     # ── Колбэки для плашек ──────────────────────────────────────
     callbacks = {
@@ -75,14 +77,42 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         except Exception as e:
             print(f"[ZONAL_TAB] Autosave error: {e}")
 
-    def _refresh_summary():
+    def _refresh_general_summary():
         if summary_ref["panel"] is not None:
-            new_summary = create_summary_panel(collection, summary_ref, _refresh_summary)
+            new_summary = create_summary_panel(collection, summary_ref, _refresh_general_summary)
             summary_ref["panel"].controls = new_summary.controls
             try:
                 summary_ref["panel"].update()
             except Exception:
                 pass
+
+    def _refresh_crim_summary():
+        if crim_summary_ref["panel"] is not None:
+            new_panel = create_criminalists_summary_panel(
+                collection, crim_summary_ref, _refresh_crim_summary
+            )
+            crim_summary_ref["panel"].controls = new_panel.controls
+            try:
+                crim_summary_ref["panel"].update()
+            except Exception:
+                pass
+
+    def _refresh_counters():
+        """Обновить чипы-счётчики над сеткой плашек."""
+        box = counters_ref["control"]
+        if box is None:
+            return
+        try:
+            box.content = _build_counters_row()
+            box.update()
+        except Exception:
+            pass
+
+    def _refresh_summary():
+        """Обновить обе сводки и счётчики."""
+        _refresh_general_summary()
+        _refresh_crim_summary()
+        _refresh_counters()
 
     def _refresh_tile(crim: Criminalist):
         tile = tiles.get(crim.id)
@@ -123,15 +153,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             )
         return rows
 
-    # ── Фильтрация / поиск ─────────────────────────────────────
+    # ── Фильтрация ─────────────────────────────────────────────
     def _apply_filter():
-        """Пересобрать ряды плашек по поиску и фильтру (без полной перерисовки таба)."""
-        query = search_ref["value"].strip().lower()
+        """Пересобрать ряды плашек по фильтру (без полной перерисовки таба)."""
         fmode = filter_ref["value"]
         visible = []
         for c in collection.criminalists:
-            if query and query not in c.full_name.lower():
-                continue
             if fmode == "pending" and get_criminalist_fill(collection, c)["percent"] >= 100:
                 continue
             if fmode == "inactive" and c.is_active:
@@ -145,23 +172,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 tiles_column.update()
             except Exception:
                 pass
-        # Обновим счётчик видимых
-        try:
-            visible_count_text.value = f"Показано: {len(visible)} из {len(collection.criminalists)}"
-            visible_count_text.update()
-        except Exception:
-            pass
+        # Обновим счётчики
+        _refresh_counters()
 
     def _set_filter(value: str):
         filter_ref["value"] = value
-        for v, btn in filter_buttons.items():
-            selected = (v == value)
-            btn.bgcolor = COLORS["btn_save"] if selected else COLORS["empty_bg"]
-            btn.color = "white" if selected else COLORS["text_secondary"]
-            try:
-                btn.update()
-            except Exception:
-                pass
+        _restyle_filter_buttons()
         _apply_filter()
 
     # ── Действия с плашками ─────────────────────────────────────
@@ -502,6 +518,99 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         dialog.open = True
         page.update()
 
+    def _on_clear_all_data():
+        """
+        Кнопка тулбара «Очистить все данные».
+        Сбрасывает ТОЛЬКО collection.submissions.
+        Шаблон (template), список криминалистов и их is_active сохраняются.
+        """
+        filled = len(collection.submissions)
+        if filled == 0:
+            from ui.toast import show_toast
+            show_toast(page, "Данные уже пусты", icon=ft.icons.INFO_OUTLINE)
+            return
+
+        def confirm(e=None):
+            collection.submissions.clear()
+            clear_zonal_submissions()
+            autosave()
+            refresh_all_tiles()
+            dialog.open = False
+            page.update()
+            from ui.toast import show_toast
+            show_toast(page, "Все введённые данные очищены",
+                       icon=ft.icons.CLEANING_SERVICES)
+            print(f"[ZONAL_TAB] Submissions cleared: {filled} records")
+
+        def cancel(e=None):
+            dialog.open = False
+            page.update()
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, size=20, color="#f59e0b"),
+                    ft.Text("Очистить все данные", size=16,
+                            weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+                ],
+                spacing=8,
+            ),
+            content=ft.Container(
+                width=420,
+                content=ft.Column(
+                    controls=[
+                        ft.Text(
+                            "Очистить все введённые данные? "
+                            "Структура формы и список криминалистов сохранятся.",
+                            size=13,
+                            color=COLORS["text"],
+                        ),
+                        ft.Container(height=8),
+                        ft.Container(
+                            content=ft.Column(
+                                controls=[
+                                    ft.Text(f"Будет удалено записей: {filled}",
+                                            size=12, color=COLORS["in_progress_text"]),
+                                    ft.Text(
+                                        f"Сохранится: шаблон «{collection.template.name}» "
+                                        f"({len(collection.template.items)} пунктов), "
+                                        f"криминалистов: {len(collection.criminalists)}, "
+                                        f"их активность.",
+                                        size=12, color=COLORS["text_secondary"],
+                                    ),
+                                ],
+                                spacing=4,
+                                tight=True,
+                            ),
+                            bgcolor=COLORS["primary_light"],
+                            border=ft.border.all(1, COLORS["border"]),
+                            border_radius=8,
+                            padding=ft.padding.all(10),
+                        ),
+                    ],
+                    spacing=0,
+                    tight=True,
+                ),
+            ),
+            actions=[
+                ft.TextButton("Отмена", on_click=cancel),
+                ft.ElevatedButton(
+                    "Очистить",
+                    icon=ft.icons.CLEANING_SERVICES,
+                    bgcolor="#f59e0b",
+                    color=COLORS["text_light"],
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                    on_click=confirm,
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=14),
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
     def on_departments_mode_changed(use_dept_mode: bool):
         collection.template.use_departments_mode = use_dept_mode
         autosave()
@@ -562,71 +671,95 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     template_builder_wrapper = ft.Column(controls=[template_builder], spacing=0)
     template_builder_ref["control"] = template_builder_wrapper
 
-    # Поиск
-    search_field = ft.TextField(
-        value="",
-        hint_text="Поиск по ФИО...",
-        prefix_icon=ft.icons.SEARCH,
-        border_radius=8,
-        border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"],
-        color=COLORS["text"],
-        hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-        height=40,
-        width=320,
-        text_size=13,
-        on_change=lambda e: (_set_search(e.control.value),),
-    )
+    # ── Кнопки фильтра (сегментированный переключатель) ─────────
+    filter_buttons: Dict[str, ft.Container] = {}
 
-    def _set_search(value: str):
-        search_ref["value"] = value
-        _apply_filter()
+    def _filter_count(value: str) -> int:
+        if value == "all":
+            return len(collection.criminalists)
+        if value == "pending":
+            return sum(1 for c in collection.criminalists
+                       if get_criminalist_fill(collection, c)["percent"] < 100)
+        return sum(1 for c in collection.criminalists if not c.is_active)
 
-    # Кнопки фильтра
-    filter_buttons: Dict[str, ft.OutlinedButton] = {}
+    def _restyle_filter_buttons():
+        """Перекрасить сегменты фильтра под текущее значение."""
+        for v, btn in filter_buttons.items():
+            selected = (v == filter_ref["value"])
+            btn.bgcolor = COLORS["btn_save"] if selected else "transparent"
+            btn.shadow = ft.BoxShadow(
+                spread_radius=0, blur_radius=8,
+                color="#3b82f655", offset=ft.Offset(0, 2),
+            ) if selected else None
+            row = btn.content
+            try:
+                row.controls[0].color = COLORS["text_light"] if selected else COLORS["text_secondary"]
+                row.controls[1].color = COLORS["text_light"] if selected else COLORS["text_secondary"]
+                row.controls[1].value = str(_filter_count(v))
+            except Exception:
+                pass
+            try:
+                btn.update()
+            except Exception:
+                pass
 
-    def _mk_filter_btn(value: str, label: str) -> ft.OutlinedButton:
+    def _mk_filter_btn(value: str, label: str, icon) -> ft.Container:
         selected = (value == filter_ref["value"])
-        btn = ft.OutlinedButton(
-            text=label,
-            style=ft.ButtonStyle(
-                color="white" if selected else COLORS["text_secondary"],
-                bgcolor=COLORS["btn_save"] if selected else COLORS["empty_bg"],
-                side=ft.BorderSide(1, COLORS["border"]),
-                shape=ft.RoundedRectangleBorder(radius=8),
-                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        fg = COLORS["text_light"] if selected else COLORS["text_secondary"]
+        btn = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Text(label, size=12, weight=ft.FontWeight.W_600, color=fg),
+                    ft.Text(str(_filter_count(value)), size=11, color=fg),
+                ],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
+            height=34,
+            padding=ft.padding.symmetric(horizontal=14),
+            border_radius=8,
+            alignment=ft.alignment.center,
+            bgcolor=COLORS["btn_save"] if selected else "transparent",
+            ink=True,
+            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
             on_click=lambda e, v=value: _set_filter(v),
+            tooltip=f"Фильтр: {label}",
         )
         filter_buttons[value] = btn
         return btn
 
-    filter_row = ft.Row(
-        controls=[
-            _mk_filter_btn("all", "Все"),
-            _mk_filter_btn("pending", "Не заполнившие"),
-            _mk_filter_btn("inactive", "Неактивные"),
-        ],
-        spacing=8,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    filter_row = ft.Container(
+        content=ft.Row(
+            controls=[
+                _mk_filter_btn("all", "Все", ft.icons.GRID_VIEW),
+                _mk_filter_btn("pending", "Не заполнившие", ft.icons.PENDING_ACTIONS),
+                _mk_filter_btn("inactive", "Неактивные", ft.icons.PAUSE_CIRCLE_OUTLINE),
+            ],
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        bgcolor=COLORS["primary_light"],
+        border=ft.border.all(1, COLORS["border"]),
+        border_radius=10,
+        padding=ft.padding.all(3),
     )
 
-    # Кнопка добавления
+    # ── Кнопки тулбара ──────────────────────────────────────────
     add_btn = ft.ElevatedButton(
         text="Добавить",
-        icon=ft.icons.ADD,
+        icon=ft.icons.PERSON_ADD_ALT_1,
         bgcolor=COLORS["btn_save"],
         color=COLORS["text_light"],
         height=40,
         style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            padding=ft.padding.symmetric(horizontal=14),
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=16),
+            elevation={"": 2, "hovered": 6},
         ),
+        tooltip="Добавить нового криминалиста",
         on_click=lambda e: _on_add_criminalist(),
     )
 
-    # Кнопка копирования списка не сдавших
     copy_btn = ft.OutlinedButton(
         text="Копировать не сдавших",
         icon=ft.icons.CONTENT_COPY,
@@ -634,30 +767,121 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         style=ft.ButtonStyle(
             color=COLORS["btn_save"],
             side=ft.BorderSide(1, COLORS["btn_save"]),
-            shape=ft.RoundedRectangleBorder(radius=8),
-            padding=ft.padding.symmetric(horizontal=14),
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=16),
+            overlay_color="#3b82f622",
         ),
         on_click=_on_copy_non_submitters,
         tooltip="Скопировать в буфер список ФИО + отделы тех, кто не сдал форму",
     )
 
-    toolbar = ft.Row(
-        controls=[
-            search_field,
-            filter_row,
-            add_btn,
-            copy_btn,
-        ],
-        spacing=10,
-        wrap=True,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    clear_all_btn = ft.OutlinedButton(
+        text="Очистить все данные",
+        icon=ft.icons.CLEANING_SERVICES,
+        height=40,
+        style=ft.ButtonStyle(
+            color="#f59e0b",
+            side=ft.BorderSide(1, "#f59e0b"),
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=16),
+            overlay_color="#f59e0b22",
+        ),
+        on_click=lambda e: _on_clear_all_data(),
+        tooltip="Сбросить все введённые значения. Шаблон, список криминалистов и их активность сохранятся",
     )
 
-    visible_count_text = ft.Text(
-        f"Показано: {len(collection.criminalists)} из {len(collection.criminalists)}",
-        size=12,
-        color=COLORS["text_secondary"],
+    export_btn = ft.ElevatedButton(
+        text="Экспорт в Excel",
+        icon=ft.icons.FILE_DOWNLOAD_OUTLINED,
+        bgcolor=COLORS["btn_export"],
+        color=COLORS["text_light"],
+        height=40,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=18),
+            elevation={"": 2, "hovered": 6},
+        ),
+        on_click=lambda e: on_export_excel(),
+        tooltip="Выгрузить сводную таблицу в файл Excel",
     )
+
+    toolbar = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Icon(ft.icons.FILTER_ALT_OUTLINED, size=16,
+                                color=COLORS["text_secondary"]),
+                        filter_row,
+                    ],
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                add_btn,
+                copy_btn,
+                clear_all_btn,
+                export_btn,
+            ],
+            spacing=10,
+            wrap=True,
+            run_spacing=10,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        bgcolor=COLORS["card"],
+        border=ft.border.all(1, COLORS["border"]),
+        border_radius=12,
+        padding=ft.padding.symmetric(horizontal=12, vertical=10),
+    )
+
+    # ── Строка счётчиков над сеткой плашек ──────────────────────
+    def _counter_chip(icon, text: str, color: str) -> ft.Container:
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(icon, size=13, color=color),
+                    ft.Text(text, size=11, color=COLORS["text_secondary"]),
+                ],
+                spacing=5,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor=COLORS["primary_light"],
+            border=ft.border.all(1, COLORS["border"]),
+            border_radius=20,
+            padding=ft.padding.symmetric(horizontal=10, vertical=4),
+        )
+
+    def _build_counters_row() -> ft.Row:
+        total = len(collection.criminalists)
+        active = sum(1 for c in collection.criminalists if c.is_active)
+        done = sum(1 for c in collection.criminalists
+                   if c.is_active and get_criminalist_fill(collection, c)["percent"] >= 100)
+        pending = active - done
+        return ft.Row(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Icon(ft.icons.BADGE_OUTLINED, size=16, color=COLORS["btn_save"]),
+                        ft.Text("Криминалисты", size=13, weight=ft.FontWeight.BOLD,
+                                color=COLORS["text"]),
+                    ],
+                    spacing=6,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                _counter_chip(ft.icons.GROUPS, f"Всего: {total}", COLORS["text_secondary"]),
+                _counter_chip(ft.icons.PERSON_OUTLINE, f"Активных: {active}",
+                              COLORS["received_text"]),
+                _counter_chip(ft.icons.TASK_ALT, f"Сдали: {done}", COLORS["stat_blue_text"]),
+                _counter_chip(ft.icons.PENDING_ACTIONS, f"Осталось: {pending}",
+                              COLORS["in_progress_text"]),
+            ],
+            spacing=8,
+            wrap=True,
+            run_spacing=6,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+    counters_box = ft.Container(content=_build_counters_row())
+    counters_ref["control"] = counters_box
 
     # Плашки через фиксированные ряды вместо GridView/Row(wrap=True).
     # В Flet 0.23.2 Wrap/GridView внутри прокручиваемой вкладки получают
@@ -676,36 +900,29 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # Первичное наполнение плашек рядами
     tiles_column.controls = _build_tile_rows(collection.criminalists)
 
-    summary_col = create_summary_panel(collection, summary_ref, _refresh_summary)
+    # ── Сводки ──────────────────────────────────────────────────
+    summary_col = create_summary_panel(collection, summary_ref, _refresh_general_summary)
     summary_ref["panel"] = summary_col
 
-    export_btn = ft.ElevatedButton(
-        text="Экспорт в Excel",
-        icon=ft.icons.DOWNLOAD,
-        bgcolor=COLORS["btn_export"],
-        color=COLORS["text_light"],
-        height=44,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(horizontal=20),
-        ),
-        on_click=lambda e: on_export_excel(),
+    crim_summary_col = create_criminalists_summary_panel(
+        collection, crim_summary_ref, _refresh_crim_summary
     )
+    crim_summary_ref["panel"] = crim_summary_col
 
     tab_content = ft.Column(
         controls=[
             template_builder_wrapper,
-            ft.Container(height=16),
-            summary_col,
             ft.Container(height=12),
+            summary_col,
+            ft.Container(height=10),
+            crim_summary_col,
+            ft.Container(height=14),
             toolbar,
-            ft.Container(height=6),
-            visible_count_text,
+            ft.Container(height=12),
+            counters_box,
             ft.Container(height=10),
             tiles_wrapper,
-            ft.Container(height=16),
-            ft.Row(controls=[export_btn], alignment=ft.MainAxisAlignment.END),
-            ft.Container(height=20),
+            ft.Container(height=24),
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,
