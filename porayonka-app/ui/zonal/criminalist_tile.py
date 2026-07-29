@@ -422,7 +422,6 @@ def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
             if not criminalist.is_active:
                 accent_h = COLORS.get("border", "#334155")
             hovered_val = (e.data == "true")
-            tile.bgcolor = COLORS.get("card_hover", "#1e293b") if hovered_val else COLORS.get("card", "#15202e")
             side_color = accent_h if hovered_val else COLORS.get("border", "#334155")
             tile.border = ft.border.only(
                 left=ft.BorderSide(_BORDER_LEFT, accent_h),
