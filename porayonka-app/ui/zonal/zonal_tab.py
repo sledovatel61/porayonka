@@ -20,7 +20,12 @@ from core.zonal_data import (
 )
 from core.constants import COLORS, INITIAL_DEPARTMENTS
 from .template_builder import create_template_builder
-from .criminalist_tile import create_criminalist_tile, rebuild_tile_content
+from .criminalist_tile import (
+    create_criminalist_tile,
+    create_criminalist_drag_feedback,
+    create_criminalist_drag_placeholder,
+    rebuild_tile_content,
+)
 from .form_input_modal import create_form_input_modal
 from .add_criminalist_modal import create_add_criminalist_modal
 from .summary_panel import create_summary_panel
@@ -55,6 +60,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # _calc_tiles_per_row(). Значение по умолчанию 4 — «средний экран».
     _TILE_SPACING = 16
     _TILE_WIDTH = 280        # см. criminalist_tile._TILE_WIDTH
+    _TILE_HEIGHT = 260       # см. criminalist_tile._TILE_HEIGHT
     _TAB_HORIZONTAL_PADDING = 40  # main.py: padding=20 слева и справа
 
     tiles_per_row_ref: Dict = {"value": 4}
@@ -132,6 +138,177 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _refresh_summary()
         _apply_filter()
 
+    # ── Drag-and-drop плашек ────────────────────────────────────
+    # В Flet 0.23.2 DragTarget сообщает source только через src_id. Храним
+    # текущий id ещё и локально: это даёт безопасный fallback при работе с
+    # тестовой page-заглушкой и при завершении drag вне target.
+    _DRAG_GROUP = "zonal-criminalist-tile"
+    drag_state: Dict = {
+        "source_id": None,
+        "indicator": None,
+        "indicator_target": None,
+    }
+
+    def _reset_drag_tile(source_id=None):
+        """Вернуть исходной плашке обычные border/opacity после drag."""
+        source_id = source_id if source_id is not None else drag_state["source_id"]
+        if source_id is None:
+            return
+        source = next((c for c in collection.criminalists if c.id == source_id), None)
+        tile = tiles.get(source_id)
+        if source is not None and tile is not None:
+            rebuild_tile_content(tile, source, collection, dept_map, callbacks)
+
+    def _hide_insertion_indicator():
+        indicator = drag_state["indicator"]
+        target = drag_state["indicator_target"]
+        drag_state["indicator"] = None
+        drag_state["indicator_target"] = None
+        if indicator is None:
+            return
+        indicator.visible = False
+        if target is not None:
+            try:
+                target.update()
+            except Exception:
+                pass
+
+    def _set_insertion_indicator(indicator, target, insert_after: bool):
+        """Показать 3 px линию перед/после плашки назначения."""
+        if drag_state["indicator"] is not indicator:
+            _hide_insertion_indicator()
+            drag_state["indicator"] = indicator
+            drag_state["indicator_target"] = target
+        indicator.left = None if insert_after else 0
+        indicator.right = 0 if insert_after else None
+        indicator.visible = True
+        try:
+            target.update()
+        except Exception:
+            pass
+
+    def _is_after_target(e) -> bool:
+        """Правая половина target означает вставку после него."""
+        try:
+            return float(e.x) >= (_TILE_WIDTH / 2)
+        except (AttributeError, TypeError, ValueError):
+            return False
+
+    def _drag_source_id(e=None):
+        """Получить Criminalist.id из Draggable.data или локального состояния."""
+        try:
+            source_control = page.get_control(e.src_id)
+            return int(source_control.data)
+        except Exception:
+            return drag_state["source_id"]
+
+    def _on_drag_start(criminalist: Criminalist):
+        def handler(e=None):
+            _hide_insertion_indicator()
+            previous_source_id = drag_state["source_id"]
+            if previous_source_id is not None and previous_source_id != criminalist.id:
+                _reset_drag_tile(previous_source_id)
+            drag_state["source_id"] = criminalist.id
+            # Визуальная обратная связь задаётся отдельными
+            # content_when_dragging/content_feedback. Исходную tile здесь
+            # не меняем: при отмене drop она сразу возвращается без залипания
+            # opacity или border.
+        return handler
+
+    def _on_drag_complete(criminalist: Criminalist):
+        def handler(e=None):
+            _hide_insertion_indicator()
+            _reset_drag_tile(criminalist.id)
+            if drag_state["source_id"] == criminalist.id:
+                drag_state["source_id"] = None
+        return handler
+
+    def _move_criminalist(source_id: int, target_id: int, insert_after: bool):
+        """Переместить элемент в глобальном порядке collection.criminalists."""
+        if source_id is None or source_id == target_id:
+            return False
+        source = next((c for c in collection.criminalists if c.id == source_id), None)
+        target = next((c for c in collection.criminalists if c.id == target_id), None)
+        if source is None or target is None:
+            return False
+
+        # Индекс назначения ищем после извлечения source: так не возникает
+        # off-by-one при переносе вправо в том же ряду.
+        collection.criminalists.remove(source)
+        target_index = collection.criminalists.index(target)
+        collection.criminalists.insert(target_index + (1 if insert_after else 0), source)
+        return True
+
+    def _on_drop(target_criminalist: Criminalist):
+        def handler(e):
+            source_id = _drag_source_id(e)
+            insert_after = _is_after_target(e)
+            _hide_insertion_indicator()
+            _reset_drag_tile(source_id)
+            drag_state["source_id"] = None
+
+            if not _move_criminalist(source_id, target_criminalist.id, insert_after):
+                return
+
+            # Список сериализуется в текущей последовательности, поэтому это
+            # сохраняет единый порядок и при активном фильтре.
+            save_criminalists(collection.criminalists)
+            autosave()
+            _apply_filter()
+            print(f"[ZONAL_TAB] Criminalist moved: {source_id} -> "
+                  f"{'after' if insert_after else 'before'} {target_criminalist.id}")
+        return handler
+
+    def _build_draggable_target(criminalist: Criminalist, tile: ft.Container):
+        """Обернуть плашку в Draggable + DragTarget без изменения её размера."""
+        indicator = ft.Container(
+            width=3,
+            height=_TILE_HEIGHT,
+            bgcolor=COLORS.get("btn_save", "#3b82f6"),
+            border_radius=2,
+            visible=False,
+            top=0,
+        )
+        draggable = ft.Draggable(
+            group=_DRAG_GROUP,
+            data=str(criminalist.id),
+            content=tile,
+            content_when_dragging=create_criminalist_drag_placeholder(criminalist),
+            content_feedback=create_criminalist_drag_feedback(criminalist),
+            on_drag_start=_on_drag_start(criminalist),
+            on_drag_complete=_on_drag_complete(criminalist),
+        )
+        stack = ft.Stack(
+            controls=[draggable, indicator],
+            width=_TILE_WIDTH,
+            height=_TILE_HEIGHT,
+        )
+        target_ref: Dict = {"control": None}
+
+        def on_will_accept(e):
+            if str(getattr(e, "data", "")).lower() == "true":
+                _set_insertion_indicator(indicator, target_ref["control"], False)
+
+        def on_move(e):
+            _set_insertion_indicator(
+                indicator, target_ref["control"], _is_after_target(e)
+            )
+
+        def on_leave(e):
+            if drag_state["indicator"] is indicator:
+                _hide_insertion_indicator()
+
+        target = ft.DragTarget(
+            group=_DRAG_GROUP,
+            content=stack,
+            on_will_accept=on_will_accept,
+            on_move=on_move,
+            on_leave=on_leave,
+        )
+        target_ref["control"] = target
+        target.on_accept = _on_drop(criminalist)
+        return target
+
     # ── Раскладка плашек фиксированными рядами ─────────────────
     def _build_tile_rows(visible_criminalists: List[Criminalist]):
         """Разбить видимых криминалистов на ряды по tiles_per_row_ref."""
@@ -170,7 +347,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 if tile is None:
                     tile = create_criminalist_tile(c, collection, dept_map, callbacks)
                     tiles[c.id] = tile
-                row_controls.append(tile)
+                row_controls.append(_build_draggable_target(c, tile))
             rows.append(
                 ft.Row(
                     controls=row_controls,

@@ -5,6 +5,9 @@
 # ВАЖНО (см. AGENTS.md 15.12 / 22.8): внутри плашки НЕТ expand=True,
 # wrap=True, animate, gradient, elevation-словаря, shadow — только
 # статичные Container/Text/Row с жёсткими width/height.
+#
+# Drag-and-drop-оболочка создаётся в zonal_tab.py. Здесь остаются сама
+# плашка и безопасные статичные представления для feedback/placeholder.
 import flet as ft
 from core.zonal_data import get_criminalist_fill, is_item_filled
 from core.constants import COLORS
@@ -324,6 +327,77 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
         ],
         spacing=0,
         horizontal_alignment=ft.CrossAxisAlignment.START,
+    )
+
+
+def create_criminalist_drag_placeholder(criminalist):
+    """Статичный полупрозрачный placeholder на месте плашки во время drag.
+
+    Нельзя использовать саму плашку одновременно как ``content`` и
+    ``content_when_dragging`` у ``ft.Draggable``. Отдельный Container сохраняет
+    размер ячейки сетки и не добавляет запрещённые анимации или shadow.
+    """
+    return ft.Container(
+        width=_TILE_WIDTH,
+        height=_TILE_HEIGHT,
+        bgcolor=COLORS.get("card", "#15202e"),
+        opacity=0.5,
+        border=ft.border.all(2, COLORS.get("btn_save", "#3b82f6")),
+        border_radius=14,
+        alignment=ft.alignment.center,
+        content=ft.Column(
+            controls=[
+                ft.Icon(ft.icons.DRAG_INDICATOR, size=28,
+                        color=COLORS.get("btn_save", "#3b82f6")),
+                ft.Text("Перемещение", size=12,
+                        color=COLORS.get("text_secondary", "#94a3b8")),
+            ],
+            spacing=6,
+            tight=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        tooltip=f"Перемещение: {criminalist.full_name}",
+    )
+
+
+def create_criminalist_drag_feedback(criminalist):
+    """Компактное визуальное представление плашки, следующее за курсором."""
+    return ft.Container(
+        width=_TILE_WIDTH,
+        height=_TILE_HEIGHT,
+        bgcolor=COLORS.get("card_hover", "#1e293b"),
+        opacity=0.92,
+        border=ft.border.all(2, COLORS.get("btn_save", "#3b82f6")),
+        border_radius=14,
+        padding=ft.padding.all(14),
+        content=ft.Column(
+            controls=[
+                ft.Icon(ft.icons.DRAG_INDICATOR, size=28,
+                        color=COLORS.get("btn_save", "#3b82f6")),
+                ft.Text(
+                    criminalist.full_name,
+                    size=16,
+                    weight=ft.FontWeight.BOLD,
+                    color=COLORS["text"],
+                    text_align=ft.TextAlign.CENTER,
+                    max_lines=2,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                    width=_INNER_WIDTH,
+                ),
+                ft.Text(
+                    "Переместить плашку",
+                    size=11,
+                    color=COLORS.get("text_secondary", "#94a3b8"),
+                    text_align=ft.TextAlign.CENTER,
+                    width=_INNER_WIDTH,
+                ),
+            ],
+            spacing=8,
+            tight=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
     )
 
 
