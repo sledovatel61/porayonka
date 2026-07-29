@@ -69,14 +69,8 @@ def _build_progress_bar(pct: int, bar_color: str) -> ft.Container:
     fill = ft.Container(
         width=fill_width,
         height=_BAR_HEIGHT,
+        bgcolor=bar_color,
         border_radius=_BAR_HEIGHT / 2,
-        gradient=ft.LinearGradient(
-            begin=ft.alignment.center_left,
-            end=ft.alignment.center_right,
-            colors=[bar_color, COLORS.get("btn_save", "#3b82f6")] if pct >= 100
-            else [bar_color, bar_color],
-        ),
-        animate=ft.Animation(420, ft.AnimationCurve.EASE_OUT_CUBIC),
     )
     return ft.Container(
         width=_BAR_WIDTH,
@@ -136,7 +130,6 @@ def _build_tile_content(criminalist, collection, dept_map, callbacks):
         border=ft.border.all(1, chip_border),
         border_radius=9,
         alignment=ft.alignment.center,
-        animate=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
         on_click=lambda e: (_safe_stop(e), callbacks["on_toggle_active"](criminalist)),
         tooltip=chip_tooltip,
     )
@@ -240,29 +233,14 @@ def _build_tile_content(criminalist, collection, dept_map, callbacks):
 
 
 def _apply_tile_skin(tile, criminalist, collection, hovered: bool = False):
-    """Единое место, где задаются цвет/тень/бордер/масштаб плашки."""
+    """Единое место, где задаются цвет/бордер/opacity плашки."""
     pct = get_criminalist_fill(collection, criminalist)["percent"]
     accent, _ = _progress_palette(pct)
     if not criminalist.is_active:
         accent = COLORS.get("border", "#334155")
 
-    tile.bgcolor = COLORS.get("card_hover", "#1e293b") if hovered else COLORS.get("card", "#15202e")
-    tile.border = ft.border.only(
-        left=ft.BorderSide(_BORDER_LEFT, accent),
-        top=ft.BorderSide(_BORDER_OTHER, COLORS.get("btn_save", "#3b82f6") if hovered
-                          else COLORS.get("border", "#334155")),
-        right=ft.BorderSide(_BORDER_OTHER, COLORS.get("btn_save", "#3b82f6") if hovered
-                            else COLORS.get("border", "#334155")),
-        bottom=ft.BorderSide(_BORDER_OTHER, COLORS.get("btn_save", "#3b82f6") if hovered
-                             else COLORS.get("border", "#334155")),
-    )
-    tile.shadow = ft.BoxShadow(
-        spread_radius=0,
-        blur_radius=16 if hovered else 6,
-        color="#000000aa" if hovered else "#00000055",
-        offset=ft.Offset(0, 6 if hovered else 2),
-    )
-    tile.scale = 1.02 if hovered else 1.0
+    tile.bgcolor = COLORS.get("card", "#15202e")
+    tile.border = ft.border.all(1, COLORS.get("border", "#334155"))
     tile.opacity = 1.0 if criminalist.is_active else 0.55
 
 
@@ -278,19 +256,8 @@ def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
         ink=True,
         on_click=lambda e: callbacks["on_open_form"](criminalist),
         tooltip="Нажмите, чтобы заполнить форму",
-        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
-        animate_opacity=ft.Animation(250, ft.AnimationCurve.EASE_OUT),
-        animate_scale=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
     )
 
-    def _on_hover(e):
-        _apply_tile_skin(tile, criminalist, collection, hovered=(e.data == "true"))
-        try:
-            tile.update()
-        except Exception:
-            pass
-
-    tile.on_hover = _on_hover
     _apply_tile_skin(tile, criminalist, collection, hovered=False)
     return tile
 

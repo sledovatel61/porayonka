@@ -823,8 +823,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 export_btn,
             ],
             spacing=10,
-            wrap=True,
-            run_spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         bgcolor=COLORS["card"],
@@ -875,8 +873,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                               COLORS["in_progress_text"]),
             ],
             spacing=8,
-            wrap=True,
-            run_spacing=6,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 

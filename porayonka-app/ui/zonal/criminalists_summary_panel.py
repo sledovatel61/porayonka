@@ -90,7 +90,6 @@ def _mini_bar(pct: int, color: str) -> ft.Container:
                     height=_BAR_HEIGHT,
                     bgcolor=color,
                     border_radius=_BAR_HEIGHT / 2,
-                    animate=ft.Animation(420, ft.AnimationCurve.EASE_OUT_CUBIC),
                 )
             ],
             spacing=0,
@@ -126,7 +125,6 @@ def _item_chip(collection, criminalist, item) -> ft.Container:
         border_radius=8,
         padding=ft.padding.symmetric(horizontal=8, vertical=4),
         tooltip=f"{item.name}: {value_text}",
-        animate=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
         content=ft.Column(
             controls=[
                 ft.Row(
@@ -273,7 +271,6 @@ def _criminalist_row(collection, criminalist) -> ft.Container:
         border=ft.border.all(1, COLORS.get("border", "#334155")),
         border_radius=10,
         padding=ft.padding.symmetric(horizontal=12, vertical=8),
-        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
     )
 
 
@@ -360,7 +357,7 @@ def create_criminalists_summary_panel(
                 header_left,
                 ft.Container(width=10),
                 header_stats,
-                ft.Container(expand=True),
+                ft.Container(width=10),
                 _mini_bar(overall, bar_color),
                 ft.Icon(
                     ft.icons.KEYBOARD_ARROW_UP if is_expanded else ft.icons.KEYBOARD_ARROW_DOWN,
@@ -382,15 +379,14 @@ def create_criminalists_summary_panel(
         on_click=_toggle,
         tooltip="Нажмите, чтобы свернуть детализацию" if is_expanded
         else "Нажмите, чтобы развернуть детализацию по криминалистам",
-        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
     )
 
     if not is_expanded:
         card = ft.Container(
             content=header,
+            height=56,
             border=ft.border.all(1, COLORS.get("border", "#334155")),
             border_radius=12,
-            clip_behavior=ft.ClipBehavior.HARD_EDGE,
             shadow=ft.BoxShadow(spread_radius=0, blur_radius=8,
                                 color="#00000055", offset=ft.Offset(0, 2)),
         )
@@ -439,7 +435,6 @@ def create_criminalists_summary_panel(
                     size=10, color=COLORS.get("text_muted", "#64748b")),
         ],
         spacing=16,
-        wrap=True,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
@@ -452,14 +447,12 @@ def create_criminalists_summary_panel(
         padding=ft.padding.all(12),
         bgcolor=COLORS.get("card", "#15202e"),
         border_radius=ft.border_radius.only(bottom_left=12, bottom_right=12),
-        animate=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
     )
 
     card = ft.Container(
         content=ft.Column(controls=[header, body], spacing=0),
         border=ft.border.all(1, COLORS.get("border", "#334155")),
         border_radius=12,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
         shadow=ft.BoxShadow(spread_radius=0, blur_radius=10,
                             color="#00000066", offset=ft.Offset(0, 3)),
     )
