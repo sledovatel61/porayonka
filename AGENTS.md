@@ -1320,3 +1320,56 @@ python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"
   - `elevation`-словарь (`{"": N, "hovered": M}`) в `ButtonStyle`.
   - `shadow` / `BoxShadow`.
 - Разрешённый способ визуального акцента: смена `bgcolor` / `border` / `opacity` в `on_hover` с `update()`.
+
+---
+
+## 25. Drag-and-drop плашек криминалистов (Flet 0.23.2)
+
+**Дата:** 2026-07-29
+**Ветка:** `arena/019fad7e-porayonka`
+
+### 25.1 Реализация
+
+В `ui/zonal/zonal_tab.py` каждая сохранённая плашка `Container` остаётся результатом
+`create_criminalist_tile()` и помещается в `ft.Draggable` с группой
+`criminalist-tile`. Весь фиксированный слот 280×260 обёрнут в `ft.DragTarget`.
+Это сохраняет контракты `create_criminalist_tile`, `rebuild_tile_content` и
+стабильные фиксированные `Row`, не добавляя `wrap=True`/`GridView` в прокручиваемую
+колонку.
+
+- `content_when_dragging` — полупрозрачный placeholder того же размера: место
+  плашки не схлопывается, а стандартная Flet feedback-плашка следует за курсором
+  с opacity 0.5.
+- `on_will_accept` рисует слева у слота тонкую (3 px) синюю линию вставки;
+  `on_leave` её очищает. Левая половина цели означает вставку перед плашкой,
+  правая — после неё, поэтому последнюю плашку можно переместить в конец ряда
+  или списка без отдельного нестабильного узкого target.
+- `on_accept` получает источник через `page.get_control(event.src_id)`, читает
+  `Draggable.data`, меняет **глобальный** порядок `collection.criminalists`, затем
+  вызывает `save_criminalists(collection.criminalists)`, `autosave()` и строит
+  видимые фиксированные ряды заново.
+
+### 25.2 Фильтры и ограничения
+
+Перестановка производится по ID в полном `collection.criminalists`, а не по
+индексам отфильтрованного списка. Поэтому «Все», «Не заполнившие» и «Неактивные»
+только определяют видимые цели; порядок сохраняется глобально и восстанавливается
+из уже существующего списка JSON при запуске.
+
+Не добавлять `animate`, `scale`, `shadow`, `expand=True` или `wrap=True` в саму
+плашку либо её строку. Визуальная обратная связь сделана штатными
+`content_when_dragging`/`DragTarget`, что не меняет размеры layout. Обычный tap
+остаётся `on_click` исходной плашки; drag распознаётся `Draggable` только при
+начале перетаскивания.
+
+### 25.3 Проверка
+
+После изменений проверять как минимум:
+
+```bash
+python -m py_compile porayonka-app/main.py porayonka-app/ui/zonal/zonal_tab.py
+python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"
+```
+
+В текущем sandbox второй вызов требует установленный `flet==0.23.2`; если пакет
+не установлен, он завершается `ModuleNotFoundError` до импорта кода приложения.

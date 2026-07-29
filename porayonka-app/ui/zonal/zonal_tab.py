@@ -70,6 +70,9 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     # ── Состояние UI ────────────────────────────────────────────
     tiles: Dict[int, ft.Container] = {}          # id -> плашка
+    # Draggable controls are created per visible slot; the tile itself remains
+    # cached so rebuild_tile_content() keeps its existing contract.
+    _DRAG_GROUP = "criminalist-tile"
     summary_ref: Dict = {"panel": None, "is_expanded": False}
     crim_summary_ref: Dict = {"panel": None, "is_expanded": False}
     template_builder_ref: Dict = {"control": None, "is_expanded": False}
@@ -132,9 +135,86 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _refresh_summary()
         _apply_filter()
 
-    # ── Раскладка плашек фиксированными рядами ─────────────────
+    # ── Drag-and-drop and fixed tile rows ────────────────────────
+    def _get_dragged_criminalist(event) -> Optional[Criminalist]:
+        """Resolve a Draggable source id supplied by Flet into our model."""
+        try:
+            source = page.get_control(event.src_id)
+            criminalist_id = int(source.data)
+        except (AttributeError, TypeError, ValueError):
+            return None
+        return next((c for c in collection.criminalists if c.id == criminalist_id), None)
+
+    def _on_drop(event, target_id: int):
+        """Insert the dragged item before/after target in the *global* order."""
+        dragged = _get_dragged_criminalist(event)
+        target = next((c for c in collection.criminalists if c.id == target_id), None)
+        if dragged is None or target is None or dragged.id == target.id:
+            return
+
+        # A tile is a full-size target.  Its left half is the "before" slot,
+        # and its right half is the "after" slot, including the end of a row.
+        try:
+            insert_after = float(event.x) >= (_TILE_WIDTH / 2)
+        except (AttributeError, TypeError, ValueError):
+            insert_after = False
+
+        collection.criminalists.remove(dragged)
+        target_index = next(i for i, c in enumerate(collection.criminalists)
+                            if c.id == target.id)
+        collection.criminalists.insert(target_index + (1 if insert_after else 0), dragged)
+        save_criminalists(collection.criminalists)
+        autosave()
+        _apply_filter()
+        from ui.toast import show_toast
+        show_toast(page, f"Порядок изменён: {dragged.full_name}", icon=ft.icons.DRAG_INDICATOR)
+
+    def _make_drag_slot(criminalist: Criminalist, tile: ft.Container) -> ft.DragTarget:
+        """A full tile drop target with a thin insertion line on drag-over."""
+        insertion_slot = ft.Container(
+            content=ft.Draggable(
+                group=_DRAG_GROUP,
+                data=str(criminalist.id),
+                content=tile,
+                # The hole preserves the fixed grid geometry while the feedback
+                # card follows the pointer with Flet's default 50% opacity.
+                content_when_dragging=ft.Container(
+                    width=_TILE_WIDTH,
+                    height=_TILE_HEIGHT,
+                    border=ft.border.all(1, COLORS.get("btn_save", "#3b82f6")),
+                    border_radius=14,
+                    bgcolor=COLORS.get("primary_light", "#1e293b"),
+                    opacity=0.5,
+                ),
+            ),
+            width=_TILE_WIDTH,
+            height=_TILE_HEIGHT,
+            border_radius=14,
+        )
+
+        def _show_insertion(e):
+            # DragWillAcceptEvent.data is "true" for this matching group.
+            accepted = getattr(e, "data", "true") == "true"
+            insertion_slot.border = ft.border.only(
+                left=ft.BorderSide(3, COLORS.get("btn_save", "#3b82f6"))
+                if accepted else ft.BorderSide(3, "#ef4444")
+            )
+            insertion_slot.update()
+
+        def _hide_insertion(e):
+            insertion_slot.border = None
+            insertion_slot.update()
+
+        return ft.DragTarget(
+            group=_DRAG_GROUP,
+            content=insertion_slot,
+            on_will_accept=_show_insertion,
+            on_leave=_hide_insertion,
+            on_accept=lambda e, target_id=criminalist.id: _on_drop(e, target_id),
+        )
+
     def _build_tile_rows(visible_criminalists: List[Criminalist]):
-        """Разбить видимых криминалистов на ряды по tiles_per_row_ref."""
+        """Split visible items into stable fixed rows with drag targets."""
         n_per_row = max(1, tiles_per_row_ref["value"])
         rows = []
         if not visible_criminalists:
@@ -144,42 +224,28 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                         controls=[
                             ft.Icon(ft.icons.INBOX, size=18,
                                     color=COLORS.get("text_muted", "#64748b")),
-                            ft.Text(
-                                "Нет криминалистов по выбранному фильтру",
-                                size=12,
-                                color=COLORS.get("text_secondary", "#94a3b8"),
-                            ),
-                        ],
-                        spacing=8,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        tight=True,
-                    ),
-                    height=44,
-                    padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                            ft.Text("Нет криминалистов по выбранному фильтру", size=12,
+                                    color=COLORS.get("text_secondary", "#94a3b8")),
+                        ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER, tight=True,
+                    ), height=44, padding=ft.padding.symmetric(horizontal=12, vertical=8),
                     bgcolor=COLORS.get("card", "#15202e"),
-                    border=ft.border.all(1, COLORS.get("border", "#334155")),
-                    border_radius=10,
+                    border=ft.border.all(1, COLORS.get("border", "#334155")), border_radius=10,
                 )
             )
             return rows
         for i in range(0, len(visible_criminalists), n_per_row):
-            chunk = visible_criminalists[i:i + n_per_row]
             row_controls = []
-            for c in chunk:
+            for c in visible_criminalists[i:i + n_per_row]:
                 tile = tiles.get(c.id)
                 if tile is None:
                     tile = create_criminalist_tile(c, collection, dept_map, callbacks)
                     tiles[c.id] = tile
-                row_controls.append(tile)
-            rows.append(
-                ft.Row(
-                    controls=row_controls,
-                    spacing=_TILE_SPACING,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    tight=True,
-                )
-            )
+                row_controls.append(_make_drag_slot(c, tile))
+            rows.append(ft.Row(
+                controls=row_controls, spacing=_TILE_SPACING,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                alignment=ft.MainAxisAlignment.CENTER, tight=True,
+            ))
         return rows
 
     # ── Фильтрация ─────────────────────────────────────────────
