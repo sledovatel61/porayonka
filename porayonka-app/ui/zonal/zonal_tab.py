@@ -176,7 +176,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                     controls=row_controls,
                     spacing=_TILE_SPACING,
                     vertical_alignment=ft.CrossAxisAlignment.START,
-                    alignment=ft.MainAxisAlignment.START,
+                    alignment=ft.MainAxisAlignment.CENTER,
                     tight=True,
                 )
             )
@@ -888,11 +888,11 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # дают конечные constraints и стабильный рендеринг.
     tiles_column = ft.Column(
         spacing=_TILE_SPACING,
-        horizontal_alignment=ft.CrossAxisAlignment.START,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
     tiles_wrapper = ft.Container(
         content=tiles_column,
-        alignment=ft.alignment.top_left,
+        alignment=ft.alignment.top_center,
     )
     tiles_column_ref["control"] = tiles_column
 
