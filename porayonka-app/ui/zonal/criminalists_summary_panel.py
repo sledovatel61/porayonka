@@ -207,23 +207,43 @@ def _criminalist_row(collection, criminalist) -> ft.Container:
     )
 
     if pct >= 100:
-        status_icon, status_color, status_label = (
-            ft.icons.TASK_ALT, COLORS.get("received_text", "#4ade80"), "Сдал")
+        status_icon = ft.icons.TASK_ALT
+        status_color = COLORS.get("received_text", "#4ade80")
+        status_bg = COLORS.get("received_bg", "#052e16")
+        status_border = COLORS.get("received", "#22c55e")
+        status_label = "Сдал"
     elif pct > 0:
-        status_icon, status_color, status_label = (
-            ft.icons.HOURGLASS_BOTTOM, COLORS.get("in_progress_text", "#fbbf24"), "Частично")
+        status_icon = ft.icons.HOURGLASS_BOTTOM
+        status_color = COLORS.get("in_progress_text", "#fbbf24")
+        status_bg = COLORS.get("in_progress_bg", "#451a03")
+        status_border = COLORS.get("in_progress", "#f59e0b")
+        status_label = "Частично"
     else:
-        status_icon, status_color, status_label = (
-            ft.icons.REPORT_GMAILERRORRED, COLORS.get("text_muted", "#64748b"), "Не сдал")
+        status_icon = ft.icons.REPORT_GMAILERRORRED
+        status_color = COLORS.get("text_muted", "#64748b")
+        status_bg = COLORS.get("empty_bg", "#1e293b")
+        status_border = COLORS.get("border", "#334155")
+        status_label = "Не сдал"
 
-    status_block = ft.Row(
-        controls=[
-            ft.Icon(status_icon, size=14, color=status_color),
-            ft.Text(status_label, size=10, color=status_color, weight=ft.FontWeight.W_600),
-        ],
-        spacing=4,
+    # Статус — цветной бейдж (цвет текста, фона и рамки по статусу).
+    status_block = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(status_icon, size=13, color=status_color),
+                ft.Text(status_label, size=10, color=status_color,
+                        weight=ft.FontWeight.W_600, no_wrap=True),
+            ],
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
         width=_PCT_WIDTH,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        height=22,
+        bgcolor=status_bg,
+        border=ft.border.all(1, status_border),
+        border_radius=11,
+        alignment=ft.alignment.center,
+        tooltip=f"Статус сдачи: {status_label} ({pct}%)",
     )
 
     # Детализация по пунктам шаблона.
@@ -268,7 +288,12 @@ def _criminalist_row(collection, criminalist) -> ft.Container:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         bgcolor=COLORS.get("primary_light", "#1e293b"),
-        border=ft.border.all(1, COLORS.get("border", "#334155")),
+        border=ft.border.only(
+            left=ft.BorderSide(3, status_border),
+            top=ft.BorderSide(1, COLORS.get("border", "#334155")),
+            right=ft.BorderSide(1, COLORS.get("border", "#334155")),
+            bottom=ft.BorderSide(1, COLORS.get("border", "#334155")),
+        ),
         border_radius=10,
         padding=ft.padding.symmetric(horizontal=12, vertical=8),
     )

@@ -728,16 +728,18 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         """Перекрасить сегменты фильтра под текущее значение."""
         for v, btn in filter_buttons.items():
             selected = (v == filter_ref["value"])
+            fg = COLORS["text_light"] if selected else COLORS["text_secondary"]
             btn.bgcolor = COLORS["btn_save"] if selected else "transparent"
-            btn.shadow = ft.BoxShadow(
-                spread_radius=0, blur_radius=8,
-                color="#3b82f655", offset=ft.Offset(0, 2),
-            ) if selected else None
+            btn.border = ft.border.all(
+                1, COLORS["btn_save_hover"] if selected else "transparent")
             row = btn.content
             try:
-                row.controls[0].color = COLORS["text_light"] if selected else COLORS["text_secondary"]
-                row.controls[1].color = COLORS["text_light"] if selected else COLORS["text_secondary"]
-                row.controls[1].value = str(_filter_count(v))
+                row.controls[0].color = fg                      # иконка
+                row.controls[1].color = fg                      # подпись
+                badge = row.controls[2]                         # счётчик
+                badge.bgcolor = ("#ffffff22" if selected else COLORS["card"])
+                badge.content.color = fg
+                badge.content.value = str(_filter_count(v))
             except Exception:
                 pass
             try:
@@ -750,11 +752,21 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         # у Container внутри Row (см. AGENTS.md 15.12 / 22).
         selected = (value == filter_ref["value"])
         fg = COLORS["text_light"] if selected else COLORS["text_secondary"]
+        badge = ft.Container(
+            content=ft.Text(str(_filter_count(value)), size=10,
+                            color=fg, weight=ft.FontWeight.W_600, no_wrap=True),
+            height=18,
+            padding=ft.padding.symmetric(horizontal=6),
+            border_radius=9,
+            alignment=ft.alignment.center,
+            bgcolor="#ffffff22" if selected else COLORS["card"],
+        )
         btn = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Text(label, size=12, weight=ft.FontWeight.W_600, color=fg),
-                    ft.Text(str(_filter_count(value)), size=11, color=fg),
+                    ft.Icon(icon, size=14, color=fg),
+                    ft.Text(label, size=12, weight=ft.FontWeight.W_600, color=fg, no_wrap=True),
+                    badge,
                 ],
                 spacing=6,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -764,6 +776,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             height=32,
             padding=ft.padding.symmetric(horizontal=12),
             border_radius=8,
+            border=ft.border.all(1, COLORS["btn_save_hover"] if selected else "transparent"),
             alignment=ft.alignment.center,
             bgcolor=COLORS["btn_save"] if selected else "transparent",
             ink=True,
@@ -860,7 +873,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 ft.Icon(ft.icons.FILTER_ALT_OUTLINED, size=16,
                         color=COLORS["text_secondary"]),
                 filter_row,
-                ft.Container(width=6),
+                ft.Container(
+                    width=1,
+                    height=26,
+                    bgcolor=COLORS["border"],
+                    margin=ft.margin.symmetric(horizontal=6),
+                ),
                 add_btn,
                 copy_btn,
                 clear_all_btn,
@@ -1011,7 +1029,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             counters_box,
             ft.Container(height=10),
             tiles_wrapper,
-            ft.Container(height=24),
+            ft.Container(height=40),
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,

@@ -35,7 +35,7 @@ _CHIP_WIDTH = 60                                                           # 152
 _ZONE_TEXT_WIDTH = _LEFT_WIDTH - 15 - _SAFE                                # 203
 _BAR_WIDTH = 144
 _BAR_LABEL_WIDTH = _LEFT_WIDTH - _BAR_WIDTH - 8 - _SAFE                    # 66
-_BAR_HEIGHT = 6
+_BAR_HEIGHT = 8
 
 
 def _truncate(text: str, limit: int = 40) -> str:
@@ -63,22 +63,28 @@ def _progress_palette(pct: int):
 def _build_progress_bar(pct: int, bar_color: str) -> ft.Container:
     """
     Кастомный прогресс-бар на фиксированной ширине.
-    Ширина заливки анимируется (animate) — плавно «наливается» при перерисовке.
+    Без animate — только статичные контейнеры (безопасно для Flet 0.23.2).
     """
     fill_width = max(0, min(_BAR_WIDTH, round(_BAR_WIDTH * pct / 100.0)))
-    fill = ft.Container(
-        width=fill_width,
-        height=_BAR_HEIGHT,
-        bgcolor=bar_color,
-        border_radius=_BAR_HEIGHT / 2,
-    )
+    controls = []
+    if fill_width > 0:
+        controls.append(
+            ft.Container(
+                width=fill_width,
+                height=_BAR_HEIGHT,
+                bgcolor=bar_color,
+                border_radius=_BAR_HEIGHT / 2,
+            )
+        )
     return ft.Container(
         width=_BAR_WIDTH,
         height=_BAR_HEIGHT,
-        bgcolor=COLORS.get("border", "#334155"),
+        bgcolor=COLORS.get("primary_light", "#1e293b"),
+        border=ft.border.all(1, COLORS.get("border", "#334155")),
         border_radius=_BAR_HEIGHT / 2,
+        tooltip=f"Заполнено: {pct}%",
         content=ft.Row(
-            controls=[fill],
+            controls=controls,
             spacing=0,
             alignment=ft.MainAxisAlignment.START,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -233,15 +239,31 @@ def _build_tile_content(criminalist, collection, dept_map, callbacks):
 
 
 def _apply_tile_skin(tile, criminalist, collection, hovered: bool = False):
-    """Единое место, где задаются цвет/бордер/opacity плашки."""
+    """
+    Единое место, где задаются цвет/бордер/акцентная полоса плашки.
+    Безопасно для Flet 0.23.2: только bgcolor / border / opacity.
+    Никаких animate, scale, shadow, gradient.
+    """
     pct = get_criminalist_fill(collection, criminalist)["percent"]
     accent, _ = _progress_palette(pct)
     if not criminalist.is_active:
         accent = COLORS.get("border", "#334155")
 
-    tile.bgcolor = COLORS.get("card", "#15202e")
-    tile.border = ft.border.all(1, COLORS.get("border", "#334155"))
-    tile.opacity = 1.0 if criminalist.is_active else 0.55
+    side_color = COLORS.get("border", "#334155")
+    if hovered:
+        tile.bgcolor = COLORS.get("card_hover", "#1e293b")
+        side_color = accent
+    else:
+        tile.bgcolor = COLORS.get("card", "#15202e")
+
+    # Акцентная полоса слева (3px) + тонкая рамка с остальных сторон.
+    tile.border = ft.border.only(
+        left=ft.BorderSide(_BORDER_LEFT, accent),
+        top=ft.BorderSide(_BORDER_OTHER, side_color),
+        right=ft.BorderSide(_BORDER_OTHER, side_color),
+        bottom=ft.BorderSide(_BORDER_OTHER, side_color),
+    )
+    tile.opacity = 1.0 if criminalist.is_active else 0.6
 
 
 def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
@@ -255,9 +277,17 @@ def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
         border_radius=12,
         ink=True,
         on_click=lambda e: callbacks["on_open_form"](criminalist),
-        tooltip="Нажмите, чтобы заполнить форму",
+        tooltip=f"{criminalist.full_name} — нажмите, чтобы заполнить форму",
     )
 
+    def _on_hover(e):
+        try:
+            _apply_tile_skin(tile, criminalist, collection, hovered=(e.data == "true"))
+            tile.update()
+        except Exception:
+            pass
+
+    tile.on_hover = _on_hover
     _apply_tile_skin(tile, criminalist, collection, hovered=False)
     return tile
 
