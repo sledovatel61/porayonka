@@ -1,5 +1,5 @@
 # ui/zonal/criminalist_tile.py
-# Большая квадратная карточка криминалиста (240x240) — кардинальный редизайн.
+# Большая квадратная карточка криминалиста (280x260) — кардинальный редизайн.
 # [DARK THEME] + ft.icons.* + фиксированные пиксельные размеры (Flet 0.23.2)
 #
 # ВАЖНО (см. AGENTS.md 15.12 / 22.8): внутри плашки НЕТ expand=True,
@@ -9,13 +9,13 @@ import flet as ft
 from core.zonal_data import get_criminalist_fill, is_item_filled
 from core.constants import COLORS
 
-_TILE_WIDTH = 240
-_TILE_HEIGHT = 240
+_TILE_WIDTH = 280
+_TILE_HEIGHT = 260
 _BORDER_LEFT = 4
 _BORDER_OTHER = 1
 _PAD_H = 14
 _PAD_V = 14
-_INNER_WIDTH = _TILE_WIDTH - (_PAD_H * 2) - (_BORDER_LEFT + _BORDER_OTHER)  # 207
+_INNER_WIDTH = _TILE_WIDTH - (_PAD_H * 2) - (_BORDER_LEFT + _BORDER_OTHER)  # 247
 
 
 def _truncate(text: str, limit: int = 30) -> str:
@@ -45,18 +45,18 @@ def _build_mini_chip(icon_name, label: str, color: str, filled: bool = True) -> 
     icon_color = COLORS.get("received_text", "#4ade80") if filled else COLORS.get("text_muted", "#64748b")
     label_color = COLORS.get("received_text", "#4ade80") if filled else COLORS.get("text_secondary", "#94a3b8")
     return ft.Container(
-        width=46,
-        height=28,
+        width=54,
+        height=32,
         bgcolor=bg,
         border=ft.border.all(1, border),
         border_radius=7,
         padding=ft.padding.symmetric(horizontal=4, vertical=2),
         content=ft.Row(
             controls=[
-                ft.Icon(icon_name, size=10, color=icon_color),
+                ft.Icon(icon_name, size=12, color=icon_color),
                 ft.Text(
                     label,
-                    size=7,
+                    size=9,
                     color=label_color,
                     weight=ft.FontWeight.W_600,
                     no_wrap=True,
@@ -80,12 +80,12 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
     # Заголовок: ФИО + чип активности
     name_text = ft.Text(
         criminalist.full_name,
-        size=15,
+        size=16,
         weight=ft.FontWeight.BOLD,
         color=COLORS["text"] if criminalist.is_active else COLORS.get("text_secondary", "#94a3b8"),
         max_lines=2,
         overflow=ft.TextOverflow.ELLIPSIS,
-        width=_INNER_WIDTH - 72,
+        width=_INNER_WIDTH - 76,
         tooltip=criminalist.full_name,
     )
 
@@ -107,8 +107,8 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
     chip = ft.Container(
         content=ft.Row(
             controls=[
-                ft.Icon(chip_icon, size=11, color=chip_color),
-                ft.Text(chip_text, size=9, color=chip_color, weight=ft.FontWeight.W_600, no_wrap=True),
+                ft.Icon(chip_icon, size=12, color=chip_color),
+                ft.Text(chip_text, size=10, color=chip_color, weight=ft.FontWeight.W_600, no_wrap=True),
             ],
             spacing=3,
             alignment=ft.MainAxisAlignment.CENTER,
@@ -116,10 +116,10 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
             tight=True,
         ),
         width=68,
-        height=20,
+        height=22,
         bgcolor=chip_bg,
         border=ft.border.all(1, chip_border),
-        border_radius=10,
+        border_radius=11,
         alignment=ft.alignment.center,
         on_click=lambda e: (_safe_stop(e), callbacks["on_toggle_active"](criminalist)),
         tooltip=chip_tooltip,
@@ -139,10 +139,10 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
 
     zone_row = ft.Row(
         controls=[
-            ft.Icon(ft.icons.PLACE_OUTLINED, size=12, color=COLORS.get("text_muted", "#64748b")),
+            ft.Icon(ft.icons.PLACE_OUTLINED, size=13, color=COLORS.get("text_muted", "#64748b")),
             ft.Text(
                 zone_text,
-                size=10,
+                size=11,
                 color=COLORS.get("text_secondary", "#94a3b8"),
                 max_lines=2,
                 overflow=ft.TextOverflow.ELLIPSIS,
@@ -157,34 +157,34 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
     # Прогресс
     progress_pct_text = ft.Text(
         f"{pct}%",
-        size=24,
+        size=28,
         weight=ft.FontWeight.BOLD,
         color=pct_color,
         text_align=ft.TextAlign.LEFT,
     )
     progress_sub_text = ft.Text(
         f"сдано {fill['filled_items']} из {fill['total_items']}",
-        size=9,
+        size=10,
         color=COLORS.get("text_secondary", "#94a3b8"),
     )
     progress_numbers_col = ft.Column(
         controls=[progress_pct_text, progress_sub_text],
         spacing=1,
-        width=70,
+        width=80,
         alignment=ft.MainAxisAlignment.START,
         horizontal_alignment=ft.CrossAxisAlignment.START,
     )
 
-    bar_fill_px = max(0, min(110, round(110 * pct / 100.0)))
+    bar_fill_px = max(0, min(140, round(140 * pct / 100.0)))
     progress_bar = ft.Container(
-        width=110,
-        height=7,
+        width=140,
+        height=8,
         bgcolor=COLORS.get("primary_light", "#1e293b"),
         border=ft.border.all(1, COLORS.get("border", "#334155")),
         border_radius=4,
         content=ft.Container(
             width=bar_fill_px,
-            height=7,
+            height=8,
             bgcolor=bar_color,
             border_radius=4,
         ),
@@ -194,7 +194,7 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
     progress_right_col = ft.Column(
         controls=[progress_bar],
         spacing=3,
-        width=110,
+        width=140,
         alignment=ft.MainAxisAlignment.START,
         horizontal_alignment=ft.CrossAxisAlignment.START,
     )
@@ -280,21 +280,21 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
     # Кнопки действий
     edit_btn = ft.IconButton(
         icon=ft.icons.EDIT_OUTLINED,
-        icon_size=16,
+        icon_size=18,
         icon_color=COLORS.get("btn_save", "#3b82f6"),
         tooltip="Редактировать криминалиста",
-        width=28,
-        height=28,
+        width=32,
+        height=32,
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
         on_click=lambda e: (_safe_stop(e), callbacks["on_edit"](criminalist)),
     )
     delete_btn = ft.IconButton(
         icon=ft.icons.DELETE_OUTLINE,
-        icon_size=16,
+        icon_size=18,
         icon_color="#ef4444",
         tooltip="Удалить криминалиста",
-        width=28,
-        height=28,
+        width=32,
+        height=32,
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
         on_click=lambda e: (_safe_stop(e), callbacks["on_delete"](criminalist)),
     )
@@ -313,7 +313,7 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
     return ft.Column(
         controls=[
             header_row,
-            ft.Container(height=4),
+            ft.Container(height=6),
             zone_row,
             ft.Container(height=6),
             progress_row,
