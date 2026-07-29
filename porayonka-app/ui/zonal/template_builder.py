@@ -253,19 +253,11 @@ def create_template_builder(
         on_click=lambda e: on_clear(),
     )
 
-    btn_reset_data = ft.OutlinedButton(
-        text="Сброс данных",
-        icon=ft.icons.CLEANING_SERVICES,
-        height=38,
-        tooltip="Очистить все введённые значения, сохранив структуру формы",
-        style=ft.ButtonStyle(
-            color="#f59e0b",  # Оранжевый
-            side=ft.BorderSide(1, "#f59e0b"),
-            shape=ft.RoundedRectangleBorder(radius=8),
-            padding=ft.padding.symmetric(horizontal=14),
-        ),
-        on_click=lambda e: on_reset_data(),
-    )
+    # Кнопка «Сброс данных» удалена из конструктора шаблона:
+    # осталась единственная точка сброса — «Очистить все данные»
+    # в тулбаре вкладки «Зональные» (см. AGENTS.md 22).
+    # Колбэк on_reset_data всё ещё принимается сигнатурой на случай
+    # программного вызова, но UI-кнопки больше нет.
 
     # Инициальное построение списка
     rebuild_items_list()
@@ -346,7 +338,7 @@ def create_template_builder(
                 ft.Container(height=12),
                 # Кнопки
                 ft.Row(
-                    controls=[btn_save, btn_load, btn_clear, btn_reset_data],
+                    controls=[btn_save, btn_load, btn_clear],
                     spacing=10,
                     wrap=True,
                 ),

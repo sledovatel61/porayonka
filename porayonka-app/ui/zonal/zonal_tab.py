@@ -51,8 +51,22 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     dept_map = {d["id"]: d["name"] for d in INITIAL_DEPARTMENTS}
 
     # ── Константы раскладки плашек ─────────────────────────────
-    _TILES_PER_ROW = 4
+    # _TILES_PER_ROW пересчитывается динамически из page.width в
+    # _calc_tiles_per_row(). Значение по умолчанию 4 — «средний экран».
     _TILE_SPACING = 12
+    _TILE_WIDTH = 280        # см. criminalist_tile._TILE_WIDTH
+    _TAB_HORIZONTAL_PADDING = 40  # main.py: padding=20 слева и справа
+
+    tiles_per_row_ref: Dict = {"value": 4}
+
+    def _calc_tiles_per_row(width: Optional[float]) -> int:
+        if width is None or width <= 0:
+            return 4
+        available = max(0.0, width - _TAB_HORIZONTAL_PADDING)
+        # (n * TILE_WIDTH) + ((n - 1) * SPACING) <= available
+        # n <= (available + SPACING) / (TILE_WIDTH + SPACING)
+        n = int((available + _TILE_SPACING) // (_TILE_WIDTH + _TILE_SPACING))
+        return max(2, min(5, n or 2))
 
     # ── Состояние UI ────────────────────────────────────────────
     tiles: Dict[int, ft.Container] = {}          # id -> плашка
@@ -133,10 +147,36 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     # ── Раскладка плашек фиксированными рядами ─────────────────
     def _build_tile_rows(visible_criminalists: List[Criminalist]):
-        """Разбить видимых криминалистов на ряды по _TILES_PER_ROW."""
+        """Разбить видимых криминалистов на ряды по tiles_per_row_ref."""
+        n_per_row = max(1, tiles_per_row_ref["value"])
         rows = []
-        for i in range(0, len(visible_criminalists), _TILES_PER_ROW):
-            chunk = visible_criminalists[i:i + _TILES_PER_ROW]
+        if not visible_criminalists:
+            rows.append(
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.icons.INBOX, size=18,
+                                    color=COLORS.get("text_muted", "#64748b")),
+                            ft.Text(
+                                "Нет криминалистов по выбранному фильтру",
+                                size=12,
+                                color=COLORS.get("text_secondary", "#94a3b8"),
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        tight=True,
+                    ),
+                    height=44,
+                    padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                    bgcolor=COLORS.get("card", "#15202e"),
+                    border=ft.border.all(1, COLORS.get("border", "#334155")),
+                    border_radius=10,
+                )
+            )
+            return rows
+        for i in range(0, len(visible_criminalists), n_per_row):
+            chunk = visible_criminalists[i:i + n_per_row]
             row_controls = []
             for c in chunk:
                 tile = tiles.get(c.id)
@@ -149,6 +189,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                     controls=row_controls,
                     spacing=_TILE_SPACING,
                     vertical_alignment=ft.CrossAxisAlignment.START,
+                    alignment=ft.MainAxisAlignment.START,
+                    tight=True,
                 )
             )
         return rows
@@ -704,6 +746,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 pass
 
     def _mk_filter_btn(value: str, label: str, icon) -> ft.Container:
+        # ВАЖНО (Flet 0.23.2): без `animate` — оно раздувает layout
+        # у Container внутри Row (см. AGENTS.md 15.12 / 22).
         selected = (value == filter_ref["value"])
         fg = COLORS["text_light"] if selected else COLORS["text_secondary"]
         btn = ft.Container(
@@ -714,14 +758,15 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 ],
                 spacing=6,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
             ),
-            height=34,
-            padding=ft.padding.symmetric(horizontal=14),
+            width=None,
+            height=32,
+            padding=ft.padding.symmetric(horizontal=12),
             border_radius=8,
             alignment=ft.alignment.center,
             bgcolor=COLORS["btn_save"] if selected else "transparent",
             ink=True,
-            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
             on_click=lambda e, v=value: _set_filter(v),
             tooltip=f"Фильтр: {label}",
         )
@@ -737,24 +782,28 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ],
             spacing=4,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
         ),
+        height=40,
         bgcolor=COLORS["primary_light"],
         border=ft.border.all(1, COLORS["border"]),
         border_radius=10,
-        padding=ft.padding.all(3),
+        padding=ft.padding.symmetric(horizontal=3, vertical=3),
     )
 
     # ── Кнопки тулбара ──────────────────────────────────────────
+    # ВАЖНО (Flet 0.23.2): elevation-словарь и overlay_color внутри
+    # ButtonStyle иногда вызывают неопределённое поведение layout — оставляем
+    # только простые стили с фиксированной высотой (см. AGENTS.md 22).
     add_btn = ft.ElevatedButton(
         text="Добавить",
         icon=ft.icons.PERSON_ADD_ALT_1,
         bgcolor=COLORS["btn_save"],
         color=COLORS["text_light"],
-        height=40,
+        height=38,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=10),
             padding=ft.padding.symmetric(horizontal=16),
-            elevation={"": 2, "hovered": 6},
         ),
         tooltip="Добавить нового криминалиста",
         on_click=lambda e: _on_add_criminalist(),
@@ -763,13 +812,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     copy_btn = ft.OutlinedButton(
         text="Копировать не сдавших",
         icon=ft.icons.CONTENT_COPY,
-        height=40,
+        height=38,
         style=ft.ButtonStyle(
             color=COLORS["btn_save"],
             side=ft.BorderSide(1, COLORS["btn_save"]),
             shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(horizontal=16),
-            overlay_color="#3b82f622",
+            padding=ft.padding.symmetric(horizontal=14),
         ),
         on_click=_on_copy_non_submitters,
         tooltip="Скопировать в буфер список ФИО + отделы тех, кто не сдал форму",
@@ -778,13 +826,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     clear_all_btn = ft.OutlinedButton(
         text="Очистить все данные",
         icon=ft.icons.CLEANING_SERVICES,
-        height=40,
+        height=38,
         style=ft.ButtonStyle(
             color="#f59e0b",
             side=ft.BorderSide(1, "#f59e0b"),
             shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(horizontal=16),
-            overlay_color="#f59e0b22",
+            padding=ft.padding.symmetric(horizontal=14),
         ),
         on_click=lambda e: _on_clear_all_data(),
         tooltip="Сбросить все введённые значения. Шаблон, список криминалистов и их активность сохранятся",
@@ -795,40 +842,41 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         icon=ft.icons.FILE_DOWNLOAD_OUTLINED,
         bgcolor=COLORS["btn_export"],
         color=COLORS["text_light"],
-        height=40,
+        height=38,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(horizontal=18),
-            elevation={"": 2, "hovered": 6},
+            padding=ft.padding.symmetric(horizontal=16),
         ),
         on_click=lambda e: on_export_excel(),
         tooltip="Выгрузить сводную таблицу в файл Excel",
     )
 
+    # Тулбар: фиксированная высота, чтобы Container внутри Column(scroll=AUTO)
+    # не пытался расти на всю доступную высоту. Внутренние Row —
+    # с tight=True и alignment=START, чтобы не растягиваться по горизонтали.
     toolbar = ft.Container(
         content=ft.Row(
             controls=[
-                ft.Row(
-                    controls=[
-                        ft.Icon(ft.icons.FILTER_ALT_OUTLINED, size=16,
-                                color=COLORS["text_secondary"]),
-                        filter_row,
-                    ],
-                    spacing=8,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
+                ft.Icon(ft.icons.FILTER_ALT_OUTLINED, size=16,
+                        color=COLORS["text_secondary"]),
+                filter_row,
+                ft.Container(width=6),
                 add_btn,
                 copy_btn,
                 clear_all_btn,
                 export_btn,
             ],
-            spacing=10,
+            spacing=8,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.START,
+            tight=True,
+            scroll=ft.ScrollMode.HIDDEN,
         ),
+        height=60,
         bgcolor=COLORS["card"],
         border=ft.border.all(1, COLORS["border"]),
         border_radius=12,
-        padding=ft.padding.symmetric(horizontal=12, vertical=10),
+        padding=ft.padding.symmetric(horizontal=12, vertical=8),
     )
 
     # ── Строка счётчиков над сеткой плашек ──────────────────────
@@ -864,6 +912,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                     ],
                     spacing=6,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    tight=True,
                 ),
                 _counter_chip(ft.icons.GROUPS, f"Всего: {total}", COLORS["text_secondary"]),
                 _counter_chip(ft.icons.PERSON_OUTLINE, f"Активных: {active}",
@@ -874,9 +923,19 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ],
             spacing=8,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.START,
+            tight=True,
         )
 
-    counters_box = ft.Container(content=_build_counters_row())
+    # counters_box: фиксированная высота — иначе Container внутри
+    # прокручиваемой Column в Flet 0.23.2 занимает всё оставшееся
+    # пространство, отталкивая плашки за экран.
+    counters_box = ft.Container(
+        content=_build_counters_row(),
+        height=40,
+        padding=ft.padding.symmetric(horizontal=4, vertical=2),
+        alignment=ft.alignment.center_left,
+    )
     counters_ref["control"] = counters_box
 
     # Плашки через фиксированные ряды вместо GridView/Row(wrap=True).
@@ -893,8 +952,42 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     )
     tiles_column_ref["control"] = tiles_column
 
-    # Первичное наполнение плашек рядами
+    # Первичный расчёт количества плашек в ряду и наполнение
+    try:
+        tiles_per_row_ref["value"] = _calc_tiles_per_row(page.width)
+    except Exception:
+        tiles_per_row_ref["value"] = 4
+    print(f"[ZONAL_TAB] Initial tiles per row: {tiles_per_row_ref['value']} "
+          f"(page width={getattr(page, 'width', None)})")
     tiles_column.controls = _build_tile_rows(collection.criminalists)
+
+    def _on_page_resize(e=None):
+        """Пересчитать сетку плашек при изменении ширины окна."""
+        try:
+            new_val = _calc_tiles_per_row(page.width)
+        except Exception:
+            return
+        if new_val == tiles_per_row_ref["value"]:
+            return
+        tiles_per_row_ref["value"] = new_val
+        print(f"[ZONAL_TAB] Resize: tiles_per_row -> {new_val} (w={page.width})")
+        _apply_filter()
+
+    # Не затираем чужие обработчики: сохраняем предыдущий и вызываем оба.
+    _prev_resize = getattr(page, "on_resize", None)
+
+    def _combined_resize(e=None):
+        _on_page_resize(e)
+        if _prev_resize is not None and _prev_resize is not _combined_resize:
+            try:
+                _prev_resize(e)
+            except Exception:
+                pass
+
+    try:
+        page.on_resize = _combined_resize
+    except Exception:
+        pass
 
     # ── Сводки ──────────────────────────────────────────────────
     summary_col = create_summary_panel(collection, summary_ref, _refresh_general_summary)
