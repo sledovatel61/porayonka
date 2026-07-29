@@ -19,7 +19,7 @@ from core.models import Department, Status
 from core.constants import COLORS
 
 # ── UI-компоненты (первая вкладка) ──────────────────────────────
-from ui.header import create_header, update_header_save_date
+from ui.header import create_compact_header, update_header_save_date
 from ui.stats_bar import create_stats_bar, update_stats_bar
 from ui.toolbar import create_toolbar
 from ui.legend import create_legend
@@ -103,7 +103,6 @@ def main(page: ft.Page) -> None:
         filter_table(page, query)
 
     # ── Создать компоненты первой вкладки ───────────────────────
-    header = create_header(page, get_last_save_date())
     stats_bar = create_stats_bar(page, departments)
     toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset)
     legend = create_legend()
@@ -132,7 +131,7 @@ def main(page: ft.Page) -> None:
             spacing=0,
             scroll=ft.ScrollMode.AUTO,
         ),
-        padding=ft.padding.all(20),
+        padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
         expand=True,
     )
 
@@ -144,7 +143,7 @@ def main(page: ft.Page) -> None:
 
         tab2_content = ft.Container(
             content=zonal_content_raw,
-            padding=ft.padding.all(20),
+            padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
             expand=True,
         )
         print("[MAIN] [OK] Vkladka Zonalnye sozdana")
@@ -179,56 +178,83 @@ def main(page: ft.Page) -> None:
         expand=True,
     )
 
+    def _restyle_tabs():
+        for idx, (btn, ico) in enumerate(((btn_tab1, icon_tab1), (btn_tab2, icon_tab2))):
+            selected = (idx == active_tab["value"])
+            btn.bgcolor = COLORS["btn_save"] if selected else "transparent"
+            for ctl in btn.content.controls:
+                if isinstance(ctl, ft.Text):
+                    ctl.color = COLORS["text_light"] if selected else COLORS["text_secondary"]
+            ico.color = COLORS["text_light"] if selected else COLORS["text_secondary"]
+            try:
+                btn.update()
+            except Exception:
+                pass
+
     def _switch_tab(index: int):
+        active_tab["value"] = index
         tab1_container.visible = (index == 0)
         tab2_container.visible = (index == 1)
-        btn_tab1.style.bgcolor = COLORS["btn_save"] if index == 0 else COLORS["primary_light"]
-        btn_tab2.style.bgcolor = COLORS["btn_save"] if index == 1 else COLORS["primary_light"]
+        _restyle_tabs()
         try:
             content_area.update()
-            btn_tab1.update()
-            btn_tab2.update()
         except Exception:
             pass
 
-    btn_tab1 = ft.ElevatedButton(
-        text="Следственные отделы",
-        color=COLORS["text"],
-        bgcolor=COLORS["btn_save"],
-        height=40,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            padding=ft.padding.symmetric(horizontal=16),
-        ),
-        on_click=lambda e: _switch_tab(0),
-    )
-    btn_tab2 = ft.ElevatedButton(
-        text="Зональные",
-        color=COLORS["text"],
-        bgcolor=COLORS["primary_light"],
-        height=40,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            padding=ft.padding.symmetric(horizontal=16),
-        ),
-        on_click=lambda e: _switch_tab(1),
-    )
+    def _mk_tab_btn(index: int, label: str, icon) -> tuple:
+        ico = ft.Icon(icon, size=15, color=COLORS["text_light"] if index == 0 else COLORS["text_secondary"])
+        btn = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ico,
+                    ft.Text(
+                        label,
+                        size=12,
+                        weight=ft.FontWeight.W_600,
+                        color=COLORS["text_light"] if index == 0 else COLORS["text_secondary"],
+                        no_wrap=True,
+                    ),
+                ],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
+            ),
+            height=32,
+            padding=ft.padding.symmetric(horizontal=14),
+            border_radius=8,
+            alignment=ft.alignment.center,
+            bgcolor=COLORS["btn_save"] if index == 0 else "transparent",
+            ink=True,
+            on_click=lambda e, i=index: _switch_tab(i),
+            tooltip=f"Вкладка: {label}",
+        )
+        return btn, ico
+
+    active_tab = {"value": 0}
+    btn_tab1, icon_tab1 = _mk_tab_btn(0, "Следственные отделы", ft.icons.ACCOUNT_BALANCE_OUTLINED)
+    btn_tab2, icon_tab2 = _mk_tab_btn(1, "Зональные", ft.icons.MAP_OUTLINED)
+
     tab_bar = ft.Container(
         content=ft.Row(
             controls=[btn_tab1, btn_tab2],
-            spacing=12,
+            spacing=4,
             alignment=ft.MainAxisAlignment.START,
+            tight=True,
         ),
-        padding=ft.padding.symmetric(horizontal=20, vertical=8),
-        bgcolor=COLORS["primary"],
+        height=40,
+        padding=ft.padding.all(4),
+        bgcolor=COLORS["primary_light"],
+        border=ft.border.all(1, COLORS["border"]),
+        border_radius=10,
     )
+
+    header = create_compact_header(page, get_last_save_date(), tab_bar)
 
     # ── Сборка страницы ──────────────────────────────────────────
     page.add(
         ft.Column(
             controls=[
                 header,
-                tab_bar,
                 content_area,
             ],
             spacing=0,

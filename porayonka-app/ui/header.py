@@ -104,3 +104,57 @@ def update_header_save_date(page: ft.Page, dt: Optional[datetime] = None) -> Non
     now = dt or datetime.now()
     page.save_date_text.value = now.strftime("%d.%m.%Y, %H:%M:%S")
     page.save_date_text.update()
+
+# ────────────────────────────────────────────────────────────────
+# КОМПАКТНАЯ ШАПКА (редизайн v4)
+# Без иконки и названия приложения (они дублируют заголовок окна).
+# Слева — переключатель вкладок, справа — дата последнего сохранения.
+# ────────────────────────────────────────────────────────────────
+
+def create_compact_header(
+    page: ft.Page,
+    last_save: Optional[datetime],
+    tabs_control: ft.Control,
+) -> ft.Container:
+    """
+    Компактная шапка приложения (высота ~48 px вместо ~130 px).
+    :param page: страница Flet
+    :param last_save: дата последнего сохранения
+    :param tabs_control: готовый переключатель вкладок
+    """
+    save_text = ft.Text(
+        value=(last_save.strftime("%d.%m.%Y, %H:%M:%S")
+               if last_save is not None else "Ещё не сохранено"),
+        size=11,
+        color=COLORS["text_secondary"],
+        weight=ft.FontWeight.W_500,
+        no_wrap=True,
+    )
+    page.save_date_text = save_text
+
+    right_block = ft.Row(
+        controls=[
+            ft.Icon(ft.icons.SCHEDULE, size=13, color=COLORS["text_muted"]),
+            ft.Text("Сохранено:", size=11, color=COLORS["text_muted"], no_wrap=True),
+            save_text,
+        ],
+        spacing=5,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        tight=True,
+    )
+
+    return ft.Container(
+        content=ft.Row(
+            controls=[tabs_control, right_block],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        height=52,
+        padding=ft.padding.symmetric(horizontal=16, vertical=6),
+        gradient=ft.LinearGradient(
+            begin=ft.alignment.center_left,
+            end=ft.alignment.center_right,
+            colors=[COLORS["primary"], COLORS["primary_dark"]],
+        ),
+        border=ft.border.only(bottom=ft.BorderSide(1, COLORS["border"])),
+    )
