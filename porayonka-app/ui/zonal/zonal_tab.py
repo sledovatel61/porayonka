@@ -61,6 +61,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     _TILE_SPACING = 16
     _TILE_WIDTH = 280        # см. criminalist_tile._TILE_WIDTH
     _TILE_HEIGHT = 260       # см. criminalist_tile._TILE_HEIGHT
+    _TILE_RADIUS = 14        # см. criminalist_tile._TILE_RADIUS
     _TAB_HORIZONTAL_PADDING = 40  # main.py: padding=20 слева и справа
 
     tiles_per_row_ref: Dict = {"value": 4}
@@ -282,6 +283,17 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             controls=[draggable, indicator],
             width=_TILE_WIDTH,
             height=_TILE_HEIGHT,
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        )
+        # DragTarget сам не имеет border_radius. Контейнер фиксированного
+        # размера задаёт единый clip для обычной плашки, placeholder и линии
+        # вставки, не меняя constraints Row/сетки.
+        drag_surface = ft.Container(
+            content=stack,
+            width=_TILE_WIDTH,
+            height=_TILE_HEIGHT,
+            border_radius=_TILE_RADIUS,
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
         )
         target_ref: Dict = {"control": None}
 
@@ -300,7 +312,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         target = ft.DragTarget(
             group=_DRAG_GROUP,
-            content=stack,
+            content=drag_surface,
             on_will_accept=on_will_accept,
             on_move=on_move,
             on_leave=on_leave,

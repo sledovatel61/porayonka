@@ -14,11 +14,18 @@ from core.constants import COLORS
 
 _TILE_WIDTH = 280
 _TILE_HEIGHT = 260
+_TILE_RADIUS = 14
 _BORDER_LEFT = 4
 _BORDER_OTHER = 1
 _PAD_H = 14
 _PAD_V = 14
-_INNER_WIDTH = _TILE_WIDTH - (_PAD_H * 2) - (_BORDER_LEFT + _BORDER_OTHER)  # 247
+# Рамка теперь uniform 1 px. Остаток прежней акцентной полосы рисуется
+# отдельным слоем уже внутри этой рамки: 1 + 3 = прежние 4 px.
+_ACCENT_STRIPE_WIDTH = _BORDER_LEFT - _BORDER_OTHER  # 3
+_LAYER_WIDTH = _TILE_WIDTH - (_BORDER_OTHER * 2)     # 278
+_LAYER_HEIGHT = _TILE_HEIGHT - (_BORDER_OTHER * 2)   # 258
+# Внутренний контент сохраняет прежнюю ширину 247 px.
+_INNER_WIDTH = _LAYER_WIDTH - (_PAD_H * 2) - _ACCENT_STRIPE_WIDTH  # 247
 
 
 def _truncate(text: str, limit: int = 30) -> str:
@@ -40,6 +47,49 @@ def _progress_palette(pct: int):
     if pct > 0:
         return COLORS.get("in_progress", "#f59e0b"), COLORS.get("in_progress_text", "#fbbf24")
     return COLORS.get("empty", "#64748b"), COLORS.get("text_muted", "#64748b")
+
+
+def _tile_content_layer(content_col: ft.Column, accent_color: str) -> ft.Stack:
+    """Собрать содержимое плашки с отдельной скруглённой акцентной полосой.
+
+    Flutter не рисует ``border_radius`` стабильно для ``Border`` с разной
+    толщиной сторон (раньше: 4 px слева и 1 px с остальных сторон). Внешняя
+    плашка теперь имеет uniform border, а полоса стала отдельным слоем Stack.
+    Координаты внутреннего Container повторяют прежние отступы 4/1/1/1 px.
+    Внешняя рамка уже отнята от constraints Container, поэтому Stack имеет
+    внутренний размер 278×258, а не полный размер плашки.
+    """
+    return ft.Stack(
+        width=_LAYER_WIDTH,
+        height=_LAYER_HEIGHT,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        controls=[
+            ft.Container(
+                width=_ACCENT_STRIPE_WIDTH,
+                height=_LAYER_HEIGHT,
+                left=0,
+                top=0,
+                bgcolor=accent_color,
+                border_radius=ft.border_radius.only(
+                    top_left=_TILE_RADIUS - _BORDER_OTHER,
+                    bottom_left=_TILE_RADIUS - _BORDER_OTHER,
+                ),
+            ),
+            ft.Container(
+                content=content_col,
+                left=_ACCENT_STRIPE_WIDTH,
+                right=0,
+                top=0,
+                bottom=0,
+                padding=ft.padding.symmetric(horizontal=_PAD_H, vertical=_PAD_V),
+            ),
+        ],
+    )
+
+
+def _uniform_tile_border(color: str):
+    """Единая по толщине рамка совместима со скруглением Flutter/Flet."""
+    return ft.border.all(_BORDER_OTHER, color)
 
 
 def _build_mini_chip(icon_name, label: str, color: str, filled: bool = True) -> ft.Container:
@@ -343,7 +393,8 @@ def create_criminalist_drag_placeholder(criminalist):
         bgcolor=COLORS.get("card", "#15202e"),
         opacity=0.5,
         border=ft.border.all(2, COLORS.get("btn_save", "#3b82f6")),
-        border_radius=14,
+        border_radius=_TILE_RADIUS,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
         alignment=ft.alignment.center,
         content=ft.Column(
             controls=[
@@ -369,7 +420,8 @@ def create_criminalist_drag_feedback(criminalist):
         bgcolor=COLORS.get("card_hover", "#1e293b"),
         opacity=0.92,
         border=ft.border.all(2, COLORS.get("btn_save", "#3b82f6")),
-        border_radius=14,
+        border_radius=_TILE_RADIUS,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
         padding=ft.padding.all(14),
         content=ft.Column(
             controls=[
@@ -403,13 +455,22 @@ def create_criminalist_drag_feedback(criminalist):
 
 def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
     print(f"[TILE] Creating tile: {criminalist.id}")
-    content_col = _build_content(criminalist, collection, dept_map, callbacks)
+    pct_init = get_criminalist_fill(collection, criminalist)["percent"]
+    accent_init, _ = _progress_palette(pct_init)
+    if not criminalist.is_active:
+        accent_init = COLORS.get("border", "#334155")
+
     tile = ft.Container(
-        content=content_col,
+        content=_tile_content_layer(
+            _build_content(criminalist, collection, dept_map, callbacks),
+            accent_init,
+        ),
         width=_TILE_WIDTH,
         height=_TILE_HEIGHT,
-        padding=ft.padding.symmetric(horizontal=_PAD_H, vertical=_PAD_V),
-        border_radius=14,
+        bgcolor=COLORS.get("card", "#15202e"),
+        border=_uniform_tile_border(COLORS.get("border", "#334155")),
+        border_radius=_TILE_RADIUS,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
         ink=True,
         on_click=lambda e: callbacks["on_open_form"](criminalist),
         tooltip=f"{criminalist.full_name} — нажмите, чтобы заполнить форму",
@@ -422,52 +483,33 @@ def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
             if not criminalist.is_active:
                 accent_h = COLORS.get("border", "#334155")
             hovered_val = (e.data == "true")
-            side_color = accent_h if hovered_val else COLORS.get("border", "#334155")
-            tile.border = ft.border.only(
-                left=ft.BorderSide(_BORDER_LEFT, accent_h),
-                top=ft.BorderSide(_BORDER_OTHER, side_color),
-                right=ft.BorderSide(_BORDER_OTHER, side_color),
-                bottom=ft.BorderSide(_BORDER_OTHER, side_color),
-            )
+            border_color = accent_h if hovered_val else COLORS.get("border", "#334155")
+            tile.border = _uniform_tile_border(border_color)
             tile.opacity = 1.0 if criminalist.is_active else 0.6
             tile.update()
         except Exception:
             pass
 
     tile.on_hover = _on_hover
-
-    pct_init = get_criminalist_fill(collection, criminalist)["percent"]
-    accent_init, _ = _progress_palette(pct_init)
-    if not criminalist.is_active:
-        accent_init = COLORS.get("border", "#334155")
-    tile.bgcolor = COLORS.get("card", "#15202e")
-    tile.border = ft.border.only(
-        left=ft.BorderSide(_BORDER_LEFT, accent_init),
-        top=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
-        right=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
-        bottom=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
-    )
     tile.opacity = 1.0 if criminalist.is_active else 0.6
-
     return tile
 
 
 def rebuild_tile_content(tile, criminalist, collection, dept_map, callbacks):
-    new_col = _build_content(criminalist, collection, dept_map, callbacks)
-    tile.content = new_col
-    tile.width = _TILE_WIDTH
-    tile.height = _TILE_HEIGHT
     pct_r = get_criminalist_fill(collection, criminalist)["percent"]
     accent_r, _ = _progress_palette(pct_r)
     if not criminalist.is_active:
         accent_r = COLORS.get("border", "#334155")
-    tile.bgcolor = COLORS.get("card", "#15202e")
-    tile.border = ft.border.only(
-        left=ft.BorderSide(_BORDER_LEFT, accent_r),
-        top=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
-        right=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
-        bottom=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
+    tile.content = _tile_content_layer(
+        _build_content(criminalist, collection, dept_map, callbacks),
+        accent_r,
     )
+    tile.width = _TILE_WIDTH
+    tile.height = _TILE_HEIGHT
+    tile.bgcolor = COLORS.get("card", "#15202e")
+    tile.border = _uniform_tile_border(COLORS.get("border", "#334155"))
+    tile.border_radius = _TILE_RADIUS
+    tile.clip_behavior = ft.ClipBehavior.HARD_EDGE
     tile.opacity = 1.0 if criminalist.is_active else 0.6
     try:
         tile.update()
