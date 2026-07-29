@@ -1266,3 +1266,57 @@ python porayonka-app/main.py
 `create_criminalist_tile`, `rebuild_tile_content`, `create_criminalists_summary_panel`,
 `create_zonal_tab`, `create_summary_panel`, `create_template_builder`,
 `update_header_save_date` — сигнатуры не изменены.
+
+---
+
+## 24. Кардинальный редизайн плашек криминалистов (квадратные карточки 240×240)
+
+**Дата:** 2026-07-29  
+**Ветка:** `arena/019fad44-porayonka`
+**Коммит:** обновлён в рабочей ветке
+
+### 24.1 Что сделано
+
+**`porayonka-app/ui/zonal/criminalist_tile.py`** — полностью переписан под новый размер и содержимое:
+
+- **Размеры:** `240×240` px (квадрат), внутренний padding `14` px, скругление `14` px.
+- **Акцентная полоса:** слева `4` px цветом по статусу заполнения (`received` ≥100%, `in_progress` >0%, `empty` 0%; для неактивных — `border`).
+- **Hover:** только смена `bgcolor` (`card` → `card_hover`) и цвета рамки через `on_hover` + `tile.update()`. Никаких `animate`, `scale`, `shadow`, `gradient`.
+- **Неактивные плашки:** `opacity = 0.6`.
+- **Содержимое (сверху вниз):**
+  1. **Заголовок:** ФИО (`size=15`, `bold`, `max_lines=2`, `ellipsis`, `width=_INNER_WIDTH - 72`) + чип активности (`width=68`, `height=20`).
+  2. **Закреплённые отделы:** иконка `PLACE_OUTLINED` + текст (`max_lines=2`, `ellipsis`, `tooltip` с полным списком).
+  3. **Прогресс:** крупный процент (`size=24`, `bold`) + подпись «сдано X из Y» (`size=9`) слева; прогресс-бар (`width=110`, `height=7`, заливка пропорциональна `pct`) справа.
+  4. **Детализация по пунктам:**
+     - Если пунктов шаблона `≤ 4` — мини-чипы (`width=46`, `height=28`) с иконкой (`CHECK_CIRCLE` / `RADIO_BUTTON_UNCHECKED`) + краткое название (`max_lines=1`, `ellipsis`).
+     - Если `> 4` — сводка «Сдано: X/Y пунктов» в фиксированной карточке (`width=_INNER_WIDTH`).
+  5. **Кнопки действий:** «Редактировать» (`EDIT_OUTLINED`) и «Удалить» (`DELETE_OUTLINE`) в правом нижнем углу.
+- **Фиксированные размеры:** все блоки имеют жёсткие `width`/`height`; нет ни одного `expand=True` или `wrap=True` внутри плашки.
+- **Контракт сохранён:** `create_criminalist_tile`, `rebuild_tile_content` — сигнатуры не изменены.
+
+**`porayonka-app/ui/zonal/zonal_tab.py`** — адаптивная сетка:
+
+- `_TILE_WIDTH = 240`, `_TILE_SPACING = 16`.
+- `_calc_tiles_per_row(width)`: диапазон `3–6` (`max(3, min(6, n))`).
+- Удалена дублирующая строка счётчиков (`counters_box`, `_counter_chip`, `_build_counters_row`, `_refresh_counters`).
+- `_refresh_summary()` больше не вызывает `_refresh_counters()`.
+- `tab_content` больше не содержит `counters_box`.
+
+### 24.2 Проверка
+
+```bash
+python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"
+```
+
+Все синтаксические проверки пройдены. Импорт `main` не проходит только из-за отсутствия `flet` в среде выполнения, что не является проблемой кода.
+
+### 24.3 Ограничения (подтверждены)
+
+- Внутри `ft.Container(width=240, height=240, padding=14)` запрещено:
+  - `expand=True` на любом дочернем элементе (`Row`, `Column`, `Text`, `Container`).
+  - `wrap=True` в `Row`.
+  - `animate`, `animate_scale`, `animate_opacity`.
+  - `gradient` в маленьких контейнерах.
+  - `elevation`-словарь (`{"": N, "hovered": M}`) в `ButtonStyle`.
+  - `shadow` / `BoxShadow`.
+- Разрешённый способ визуального акцента: смена `bgcolor` / `border` / `opacity` в `on_hover` с `update()`.

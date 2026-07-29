@@ -53,8 +53,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # ── Константы раскладки плашек ─────────────────────────────
     # _TILES_PER_ROW пересчитывается динамически из page.width в
     # _calc_tiles_per_row(). Значение по умолчанию 4 — «средний экран».
-    _TILE_SPACING = 12
-    _TILE_WIDTH = 280        # см. criminalist_tile._TILE_WIDTH
+    _TILE_SPACING = 16
+    _TILE_WIDTH = 240        # см. criminalist_tile._TILE_WIDTH
     _TAB_HORIZONTAL_PADDING = 40  # main.py: padding=20 слева и справа
 
     tiles_per_row_ref: Dict = {"value": 4}
@@ -66,7 +66,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         # (n * TILE_WIDTH) + ((n - 1) * SPACING) <= available
         # n <= (available + SPACING) / (TILE_WIDTH + SPACING)
         n = int((available + _TILE_SPACING) // (_TILE_WIDTH + _TILE_SPACING))
-        return max(2, min(5, n or 2))
+        return max(3, min(6, n or 3))
 
     # ── Состояние UI ────────────────────────────────────────────
     tiles: Dict[int, ft.Container] = {}          # id -> плашка
@@ -75,7 +75,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     template_builder_ref: Dict = {"control": None, "is_expanded": False}
     filter_ref: Dict = {"value": "all"}          # all | pending | inactive
     tiles_column_ref: Dict = {"control": None}
-    counters_ref: Dict = {"control": None}
 
     # ── Колбэки для плашек ──────────────────────────────────────
     callbacks = {
@@ -111,22 +110,10 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 pass
 
-    def _refresh_counters():
-        """Обновить чипы-счётчики над сеткой плашек."""
-        box = counters_ref["control"]
-        if box is None:
-            return
-        try:
-            box.content = _build_counters_row()
-            box.update()
-        except Exception:
-            pass
-
     def _refresh_summary():
-        """Обновить обе сводки и счётчики."""
+        """Обновить обе сводки."""
         _refresh_general_summary()
         _refresh_crim_summary()
-        _refresh_counters()
 
     def _refresh_tile(crim: Criminalist):
         tile = tiles.get(crim.id)
@@ -214,8 +201,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 tiles_column.update()
             except Exception:
                 pass
-        # Обновим счётчики
-        _refresh_counters()
 
     def _set_filter(value: str):
         filter_ref["value"] = value
@@ -897,65 +882,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         padding=ft.padding.symmetric(horizontal=12, vertical=8),
     )
 
-    # ── Строка счётчиков над сеткой плашек ──────────────────────
-    def _counter_chip(icon, text: str, color: str) -> ft.Container:
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Icon(icon, size=13, color=color),
-                    ft.Text(text, size=11, color=COLORS["text_secondary"]),
-                ],
-                spacing=5,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            bgcolor=COLORS["primary_light"],
-            border=ft.border.all(1, COLORS["border"]),
-            border_radius=20,
-            padding=ft.padding.symmetric(horizontal=10, vertical=4),
-        )
-
-    def _build_counters_row() -> ft.Row:
-        total = len(collection.criminalists)
-        active = sum(1 for c in collection.criminalists if c.is_active)
-        done = sum(1 for c in collection.criminalists
-                   if c.is_active and get_criminalist_fill(collection, c)["percent"] >= 100)
-        pending = active - done
-        return ft.Row(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Icon(ft.icons.BADGE_OUTLINED, size=16, color=COLORS["btn_save"]),
-                        ft.Text("Криминалисты", size=13, weight=ft.FontWeight.BOLD,
-                                color=COLORS["text"]),
-                    ],
-                    spacing=6,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    tight=True,
-                ),
-                _counter_chip(ft.icons.GROUPS, f"Всего: {total}", COLORS["text_secondary"]),
-                _counter_chip(ft.icons.PERSON_OUTLINE, f"Активных: {active}",
-                              COLORS["received_text"]),
-                _counter_chip(ft.icons.TASK_ALT, f"Сдали: {done}", COLORS["stat_blue_text"]),
-                _counter_chip(ft.icons.PENDING_ACTIONS, f"Осталось: {pending}",
-                              COLORS["in_progress_text"]),
-            ],
-            spacing=8,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            alignment=ft.MainAxisAlignment.START,
-            tight=True,
-        )
-
-    # counters_box: фиксированная высота — иначе Container внутри
-    # прокручиваемой Column в Flet 0.23.2 занимает всё оставшееся
-    # пространство, отталкивая плашки за экран.
-    counters_box = ft.Container(
-        content=_build_counters_row(),
-        height=40,
-        padding=ft.padding.symmetric(horizontal=4, vertical=2),
-        alignment=ft.alignment.center_left,
-    )
-    counters_ref["control"] = counters_box
-
     # Плашки через фиксированные ряды вместо GridView/Row(wrap=True).
     # В Flet 0.23.2 Wrap/GridView внутри прокручиваемой вкладки получают
     # неограниченную ширину и растягивают плашки. Фиксированные ряды по 4 плашки
@@ -1026,7 +952,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             ft.Container(height=14),
             toolbar,
             ft.Container(height=12),
-            counters_box,
             ft.Container(height=10),
             tiles_wrapper,
             ft.Container(height=40),

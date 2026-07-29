@@ -1,44 +1,24 @@
 # ui/zonal/criminalist_tile.py
-# Компактная плашка криминалиста (280x96) для фиксированных рядов.
-# РЕДИЗАЙН: hover-анимация, мягкая тень, акцентная полоса слева,
-# анимированный прогресс-бар на фиксированных ширинах.
-# [DARK THEME] + ft.icons.* (Flet 0.23.2)
+# Большая квадратная карточка криминалиста (240x240) — кардинальный редизайн.
+# [DARK THEME] + ft.icons.* + фиксированные пиксельные размеры (Flet 0.23.2)
 #
-# ВАЖНО (см. AGENTS.md 15.12): габариты плашки и всех внутренних блоков
-# заданы ЖЁСТКО в пикселях. Внутри плашки нет ни одного expand=True —
-# это гарантирует конечные constraints и стабильный рендеринг.
+# ВАЖНО (см. AGENTS.md 15.12 / 22.8): внутри плашки НЕТ expand=True,
+# wrap=True, animate, gradient, elevation-словаря, shadow — только
+# статичные Container/Text/Row с жёсткими width/height.
 import flet as ft
-from core.zonal_data import get_criminalist_fill
+from core.zonal_data import get_criminalist_fill, is_item_filled
 from core.constants import COLORS
 
-
-# ── Геометрия плашки (не менять без пересчёта внутренних ширин) ──
-_TILE_WIDTH = 280
-_TILE_HEIGHT = 96
-
-_BORDER_LEFT = 3          # акцентная полоса
+_TILE_WIDTH = 240
+_TILE_HEIGHT = 240
+_BORDER_LEFT = 4
 _BORDER_OTHER = 1
-_PAD_H = 8
-_PAD_V = 6
-
-# 280 - (8 + 8) - (3 + 1) = 260 доступной ширины внутри
-_INNER_WIDTH = _TILE_WIDTH - (_PAD_H * 2) - (_BORDER_LEFT + _BORDER_OTHER)  # 260
-_ACTIONS_WIDTH = 30
-_CONTENT_SPACING = 8
-_LEFT_WIDTH = _INNER_WIDTH - _ACTIONS_WIDTH - _CONTENT_SPACING             # 222
-
-# Все внутренние ширины оставляют 4 px запаса от _LEFT_WIDTH,
-# чтобы округление шрифтов/иконок никогда не вызвало overflow.
-_SAFE = 4
-_NAME_WIDTH = 152
-_CHIP_WIDTH = 60                                                           # 152+6+60 = 218
-_ZONE_TEXT_WIDTH = _LEFT_WIDTH - 15 - _SAFE                                # 203
-_BAR_WIDTH = 144
-_BAR_LABEL_WIDTH = _LEFT_WIDTH - _BAR_WIDTH - 8 - _SAFE                    # 66
-_BAR_HEIGHT = 8
+_PAD_H = 14
+_PAD_V = 14
+_INNER_WIDTH = _TILE_WIDTH - (_PAD_H * 2) - (_BORDER_LEFT + _BORDER_OTHER)  # 207
 
 
-def _truncate(text: str, limit: int = 40) -> str:
+def _truncate(text: str, limit: int = 30) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "..."
@@ -52,7 +32,6 @@ def _safe_stop(e):
 
 
 def _progress_palette(pct: int):
-    """Цвета акцента по проценту заполнения."""
     if pct >= 100:
         return COLORS.get("received", "#22c55e"), COLORS.get("received_text", "#4ade80")
     if pct > 0:
@@ -60,48 +39,53 @@ def _progress_palette(pct: int):
     return COLORS.get("empty", "#64748b"), COLORS.get("text_muted", "#64748b")
 
 
-def _build_progress_bar(pct: int, bar_color: str) -> ft.Container:
-    """
-    Кастомный прогресс-бар на фиксированной ширине.
-    Без animate — только статичные контейнеры (безопасно для Flet 0.23.2).
-    """
-    fill_width = max(0, min(_BAR_WIDTH, round(_BAR_WIDTH * pct / 100.0)))
-    controls = []
-    if fill_width > 0:
-        controls.append(
-            ft.Container(
-                width=fill_width,
-                height=_BAR_HEIGHT,
-                bgcolor=bar_color,
-                border_radius=_BAR_HEIGHT / 2,
-            )
-        )
+def _build_mini_chip(icon_name, label: str, color: str, filled: bool = True) -> ft.Container:
+    bg = COLORS.get("received_bg", "#052e16") if filled else COLORS.get("empty_bg", "#1e293b")
+    border = COLORS.get("received", "#22c55e") if filled else COLORS.get("border", "#334155")
+    icon_color = COLORS.get("received_text", "#4ade80") if filled else COLORS.get("text_muted", "#64748b")
+    label_color = COLORS.get("received_text", "#4ade80") if filled else COLORS.get("text_secondary", "#94a3b8")
     return ft.Container(
-        width=_BAR_WIDTH,
-        height=_BAR_HEIGHT,
-        bgcolor=COLORS.get("primary_light", "#1e293b"),
-        border=ft.border.all(1, COLORS.get("border", "#334155")),
-        border_radius=_BAR_HEIGHT / 2,
-        tooltip=f"Заполнено: {pct}%",
+        width=46,
+        height=28,
+        bgcolor=bg,
+        border=ft.border.all(1, border),
+        border_radius=7,
+        padding=ft.padding.symmetric(horizontal=4, vertical=2),
         content=ft.Row(
-            controls=controls,
-            spacing=0,
-            alignment=ft.MainAxisAlignment.START,
+            controls=[
+                ft.Icon(icon_name, size=10, color=icon_color),
+                ft.Text(
+                    label,
+                    size=7,
+                    color=label_color,
+                    weight=ft.FontWeight.W_600,
+                    no_wrap=True,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                ),
+            ],
+            spacing=2,
+            alignment=ft.MainAxisAlignment.CENTER,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
         ),
+        tooltip=f"Пункт: {label}" + (" — сдан" if filled else " — не сдан"),
     )
 
 
-def _build_tile_content(criminalist, collection, dept_map, callbacks):
-    # ── Заголовок: ФИО + чип активности ──────────────────────────
+def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
+    fill = get_criminalist_fill(collection, criminalist)
+    pct = fill["percent"]
+    bar_color, pct_color = _progress_palette(pct)
+
+    # Заголовок: ФИО + чип активности
     name_text = ft.Text(
         criminalist.full_name,
-        size=12,
+        size=15,
         weight=ft.FontWeight.BOLD,
         color=COLORS["text"] if criminalist.is_active else COLORS.get("text_secondary", "#94a3b8"),
-        max_lines=1,
+        max_lines=2,
         overflow=ft.TextOverflow.ELLIPSIS,
-        width=_NAME_WIDTH,
+        width=_INNER_WIDTH - 72,
         tooltip=criminalist.full_name,
     )
 
@@ -123,18 +107,19 @@ def _build_tile_content(criminalist, collection, dept_map, callbacks):
     chip = ft.Container(
         content=ft.Row(
             controls=[
-                ft.Icon(chip_icon, size=10, color=chip_color),
-                ft.Text(chip_text, size=9, color=chip_color, weight=ft.FontWeight.W_600),
+                ft.Icon(chip_icon, size=11, color=chip_color),
+                ft.Text(chip_text, size=9, color=chip_color, weight=ft.FontWeight.W_600, no_wrap=True),
             ],
             spacing=3,
             alignment=ft.MainAxisAlignment.CENTER,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
         ),
-        width=_CHIP_WIDTH,
-        height=18,
+        width=68,
+        height=20,
         bgcolor=chip_bg,
         border=ft.border.all(1, chip_border),
-        border_radius=9,
+        border_radius=10,
         alignment=ft.alignment.center,
         on_click=lambda e: (_safe_stop(e), callbacks["on_toggle_active"](criminalist)),
         tooltip=chip_tooltip,
@@ -143,25 +128,25 @@ def _build_tile_content(criminalist, collection, dept_map, callbacks):
     header_row = ft.Row(
         controls=[name_text, chip],
         spacing=6,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.START,
         alignment=ft.MainAxisAlignment.START,
     )
 
-    # ── Зона обслуживания ────────────────────────────────────────
+    # Закреплённые отделы
     zone_names = [dept_map.get(did, f"Отдел {did}") for did in criminalist.zone.department_ids]
     full_zone_text = ", ".join(zone_names) if zone_names else "Отделы не закреплены"
-    zone_text = _truncate(full_zone_text, 38)
+    zone_text = _truncate(full_zone_text, 45)
 
     zone_row = ft.Row(
         controls=[
-            ft.Icon(ft.icons.PLACE_OUTLINED, size=11, color=COLORS.get("text_muted", "#64748b")),
+            ft.Icon(ft.icons.PLACE_OUTLINED, size=12, color=COLORS.get("text_muted", "#64748b")),
             ft.Text(
                 zone_text,
                 size=10,
                 color=COLORS.get("text_secondary", "#94a3b8"),
-                max_lines=1,
+                max_lines=2,
                 overflow=ft.TextOverflow.ELLIPSIS,
-                width=_ZONE_TEXT_WIDTH,
+                width=_INNER_WIDTH - 20,
                 tooltip=full_zone_text,
             ),
         ],
@@ -169,112 +154,188 @@ def _build_tile_content(criminalist, collection, dept_map, callbacks):
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # ── Прогресс ─────────────────────────────────────────────────
-    fill = get_criminalist_fill(collection, criminalist)
-    pct = fill["percent"]
-    bar_color, pct_color = _progress_palette(pct)
-
-    progress_label = ft.Text(
-        f"{fill['filled_items']}/{fill['total_items']} · {pct}%",
-        size=9,
+    # Прогресс
+    progress_pct_text = ft.Text(
+        f"{pct}%",
+        size=24,
+        weight=ft.FontWeight.BOLD,
         color=pct_color,
-        weight=ft.FontWeight.W_600,
-        max_lines=1,
-        overflow=ft.TextOverflow.ELLIPSIS,
-        width=_BAR_LABEL_WIDTH,
-        text_align=ft.TextAlign.RIGHT,
-        tooltip=f"Сдано пунктов: {fill['filled_items']} из {fill['total_items']}",
+        text_align=ft.TextAlign.LEFT,
     )
-
-    progress_row = ft.Row(
-        controls=[_build_progress_bar(pct, bar_color), progress_label],
-        spacing=8,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    progress_sub_text = ft.Text(
+        f"сдано {fill['filled_items']} из {fill['total_items']}",
+        size=9,
+        color=COLORS.get("text_secondary", "#94a3b8"),
     )
-
-    left_col = ft.Column(
-        controls=[header_row, zone_row, progress_row],
-        spacing=5,
-        width=_LEFT_WIDTH,
-        alignment=ft.MainAxisAlignment.CENTER,
+    progress_numbers_col = ft.Column(
+        controls=[progress_pct_text, progress_sub_text],
+        spacing=1,
+        width=70,
+        alignment=ft.MainAxisAlignment.START,
         horizontal_alignment=ft.CrossAxisAlignment.START,
     )
 
-    # ── Действия ─────────────────────────────────────────────────
+    bar_fill_px = max(0, min(110, round(110 * pct / 100.0)))
+    progress_bar = ft.Container(
+        width=110,
+        height=7,
+        bgcolor=COLORS.get("primary_light", "#1e293b"),
+        border=ft.border.all(1, COLORS.get("border", "#334155")),
+        border_radius=4,
+        content=ft.Container(
+            width=bar_fill_px,
+            height=7,
+            bgcolor=bar_color,
+            border_radius=4,
+        ),
+        tooltip=f"Заполнено: {pct}%",
+    )
+
+    progress_right_col = ft.Column(
+        controls=[progress_bar],
+        spacing=3,
+        width=110,
+        alignment=ft.MainAxisAlignment.START,
+        horizontal_alignment=ft.CrossAxisAlignment.START,
+    )
+
+    progress_row = ft.Row(
+        controls=[progress_numbers_col, progress_right_col],
+        spacing=8,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        alignment=ft.MainAxisAlignment.START,
+    )
+
+    # Детализация по пунктам
+    items = sorted(collection.template.items, key=lambda i: i.order)
+    details_row_controls = []
+    if items:
+        if len(items) <= 4:
+            for it in items:
+                filled_it = is_item_filled(collection, criminalist, it)
+                label_short = _truncate(it.name, 12)
+                details_row_controls.append(
+                    _build_mini_chip(
+                        ft.icons.CHECK_CIRCLE if filled_it else ft.icons.RADIO_BUTTON_UNCHECKED,
+                        label_short,
+                        COLORS.get("received", "#22c55e") if filled_it else COLORS.get("text_muted", "#64748b"),
+                        filled=filled_it,
+                    )
+                )
+        else:
+            filled_count = sum(1 for it in items if is_item_filled(collection, criminalist, it))
+            details_row_controls.append(
+                ft.Container(
+                    width=_INNER_WIDTH,
+                    height=28,
+                    bgcolor=COLORS.get("primary_light", "#1e293b"),
+                    border=ft.border.all(1, COLORS.get("border", "#334155")),
+                    border_radius=8,
+                    padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.icons.LIST_ALT, size=14, color=COLORS.get("text_secondary", "#94a3b8")),
+                            ft.Text(
+                                f"Сдано: {filled_count}/{len(items)} пунктов",
+                                size=11,
+                                color=COLORS.get("text_secondary", "#94a3b8"),
+                                weight=ft.FontWeight.W_600,
+                            ),
+                        ],
+                        spacing=6,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        tight=True,
+                    ),
+                    tooltip=f"Заполнено пунктов: {filled_count} из {len(items)}",
+                )
+            )
+    else:
+        details_row_controls.append(
+            ft.Container(
+                width=_INNER_WIDTH,
+                height=28,
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.icons.HELP_OUTLINE, size=14, color=COLORS.get("text_muted", "#64748b")),
+                        ft.Text(
+                            "Пункты шаблона не заданы",
+                            size=10,
+                            color=COLORS.get("text_muted", "#64748b"),
+                        ),
+                    ],
+                    spacing=6,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    tight=True,
+                ),
+            )
+        )
+
+    details_row = ft.Row(
+        controls=details_row_controls,
+        spacing=4,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        alignment=ft.MainAxisAlignment.START,
+    )
+
+    # Кнопки действий
     edit_btn = ft.IconButton(
         icon=ft.icons.EDIT_OUTLINED,
-        icon_size=14,
+        icon_size=16,
         icon_color=COLORS.get("btn_save", "#3b82f6"),
         tooltip="Редактировать криминалиста",
-        width=26,
-        height=26,
+        width=28,
+        height=28,
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
         on_click=lambda e: (_safe_stop(e), callbacks["on_edit"](criminalist)),
     )
     delete_btn = ft.IconButton(
         icon=ft.icons.DELETE_OUTLINE,
-        icon_size=14,
+        icon_size=16,
         icon_color="#ef4444",
         tooltip="Удалить криминалиста",
-        width=26,
-        height=26,
+        width=28,
+        height=28,
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
         on_click=lambda e: (_safe_stop(e), callbacks["on_delete"](criminalist)),
     )
-
-    actions_col = ft.Column(
-        controls=[edit_btn, delete_btn],
-        spacing=1,
-        width=_ACTIONS_WIDTH,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        alignment=ft.MainAxisAlignment.CENTER,
-    )
-
-    return ft.Row(
-        controls=[left_col, actions_col],
-        spacing=_CONTENT_SPACING,
+    actions_row = ft.Row(
+        controls=[
+            ft.Container(width=28),
+            edit_btn,
+            delete_btn,
+        ],
+        spacing=6,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        alignment=ft.MainAxisAlignment.START,
+        alignment=ft.MainAxisAlignment.END,
     )
 
-
-def _apply_tile_skin(tile, criminalist, collection, hovered: bool = False):
-    """
-    Единое место, где задаются цвет/бордер/акцентная полоса плашки.
-    Безопасно для Flet 0.23.2: только bgcolor / border / opacity.
-    Никаких animate, scale, shadow, gradient.
-    """
-    pct = get_criminalist_fill(collection, criminalist)["percent"]
-    accent, _ = _progress_palette(pct)
-    if not criminalist.is_active:
-        accent = COLORS.get("border", "#334155")
-
-    side_color = COLORS.get("border", "#334155")
-    if hovered:
-        tile.bgcolor = COLORS.get("card_hover", "#1e293b")
-        side_color = accent
-    else:
-        tile.bgcolor = COLORS.get("card", "#15202e")
-
-    # Акцентная полоса слева (3px) + тонкая рамка с остальных сторон.
-    tile.border = ft.border.only(
-        left=ft.BorderSide(_BORDER_LEFT, accent),
-        top=ft.BorderSide(_BORDER_OTHER, side_color),
-        right=ft.BorderSide(_BORDER_OTHER, side_color),
-        bottom=ft.BorderSide(_BORDER_OTHER, side_color),
+    # Сборка
+    return ft.Column(
+        controls=[
+            header_row,
+            ft.Container(height=4),
+            zone_row,
+            ft.Container(height=6),
+            progress_row,
+            ft.Container(height=6),
+            details_row,
+            ft.Container(height=6),
+            actions_row,
+        ],
+        spacing=0,
+        horizontal_alignment=ft.CrossAxisAlignment.START,
     )
-    tile.opacity = 1.0 if criminalist.is_active else 0.6
 
 
 def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
     print(f"[TILE] Creating tile: {criminalist.id}")
-
+    content_col = _build_content(criminalist, collection, dept_map, callbacks)
     tile = ft.Container(
-        content=_build_tile_content(criminalist, collection, dept_map, callbacks),
+        content=content_col,
         width=_TILE_WIDTH,
         height=_TILE_HEIGHT,
         padding=ft.padding.symmetric(horizontal=_PAD_H, vertical=_PAD_V),
-        border_radius=12,
+        border_radius=14,
         ink=True,
         on_click=lambda e: callbacks["on_open_form"](criminalist),
         tooltip=f"{criminalist.full_name} — нажмите, чтобы заполнить форму",
@@ -282,23 +343,60 @@ def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
 
     def _on_hover(e):
         try:
-            _apply_tile_skin(tile, criminalist, collection, hovered=(e.data == "true"))
+            pct_h = get_criminalist_fill(collection, criminalist)["percent"]
+            accent_h, _ = _progress_palette(pct_h)
+            if not criminalist.is_active:
+                accent_h = COLORS.get("border", "#334155")
+            hovered_val = (e.data == "true")
+            tile.bgcolor = COLORS.get("card_hover", "#1e293b") if hovered_val else COLORS.get("card", "#15202e")
+            side_color = accent_h if hovered_val else COLORS.get("border", "#334155")
+            tile.border = ft.border.only(
+                left=ft.BorderSide(_BORDER_LEFT, accent_h),
+                top=ft.BorderSide(_BORDER_OTHER, side_color),
+                right=ft.BorderSide(_BORDER_OTHER, side_color),
+                bottom=ft.BorderSide(_BORDER_OTHER, side_color),
+            )
+            tile.opacity = 1.0 if criminalist.is_active else 0.6
             tile.update()
         except Exception:
             pass
 
     tile.on_hover = _on_hover
-    _apply_tile_skin(tile, criminalist, collection, hovered=False)
+
+    pct_init = get_criminalist_fill(collection, criminalist)["percent"]
+    accent_init, _ = _progress_palette(pct_init)
+    if not criminalist.is_active:
+        accent_init = COLORS.get("border", "#334155")
+    tile.bgcolor = COLORS.get("card", "#15202e")
+    tile.border = ft.border.only(
+        left=ft.BorderSide(_BORDER_LEFT, accent_init),
+        top=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
+        right=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
+        bottom=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
+    )
+    tile.opacity = 1.0 if criminalist.is_active else 0.6
+
     return tile
 
 
 def rebuild_tile_content(tile, criminalist, collection, dept_map, callbacks):
-    tile.content = _build_tile_content(criminalist, collection, dept_map, callbacks)
+    new_col = _build_content(criminalist, collection, dept_map, callbacks)
+    tile.content = new_col
     tile.width = _TILE_WIDTH
     tile.height = _TILE_HEIGHT
-    _apply_tile_skin(tile, criminalist, collection, hovered=False)
+    pct_r = get_criminalist_fill(collection, criminalist)["percent"]
+    accent_r, _ = _progress_palette(pct_r)
+    if not criminalist.is_active:
+        accent_r = COLORS.get("border", "#334155")
+    tile.bgcolor = COLORS.get("card", "#15202e")
+    tile.border = ft.border.only(
+        left=ft.BorderSide(_BORDER_LEFT, accent_r),
+        top=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
+        right=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
+        bottom=ft.BorderSide(_BORDER_OTHER, COLORS.get("border", "#334155")),
+    )
+    tile.opacity = 1.0 if criminalist.is_active else 0.6
     try:
         tile.update()
     except Exception:
         pass
-# [DARK THEME] Обновлено только визуально, логика сохранена.
