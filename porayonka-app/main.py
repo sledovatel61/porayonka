@@ -13,7 +13,6 @@ from core.data import (
     load_departments,
     save_departments,
     get_last_save_date,
-    reset_departments,
 )
 from core.models import Department, Status
 from core.constants import COLORS
@@ -23,7 +22,8 @@ from ui.header import create_compact_header, update_header_save_date
 from ui.stats_bar import create_stats_bar, update_stats_bar
 from ui.toolbar import create_toolbar
 from ui.legend import create_legend
-from ui.department_table import create_department_table, filter_table
+from ui.department_table import create_department_table, filter_table, rebuild_department_table
+from ui.edit_departments_modal import create_edit_departments_modal
 from ui.export_modal import create_export_modal
 from ui.reset_modal import create_reset_modal
 from ui.toast import show_save_toast, show_reset_toast, show_error_toast
@@ -67,6 +67,21 @@ def main(page: ft.Page) -> None:
         except Exception as ex:
             show_error_toast(page, f"Ошибка сохранения: {ex}")
 
+    def _refresh_table_and_stats():
+        rebuild_department_table(page, departments, on_status_change)
+        update_stats_bar(page, departments)
+        update_header_save_date(page)
+
+    def on_edit_departments() -> None:
+        dialog = create_edit_departments_modal(
+            page=page,
+            departments=departments,
+            on_save=lambda _: (_refresh_table_and_stats(), save_departments(departments)),
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
     def on_save() -> None:
         try:
             save_departments(departments)
@@ -80,19 +95,11 @@ def main(page: ft.Page) -> None:
             page.open_export_modal()
 
     def on_reset_confirm() -> None:
-        nonlocal departments
-        reset_departments()
         for dept in departments:
             dept.status = Status.EMPTY
             dept.updated_at = None
-        if hasattr(page, "status_cells"):
-            from ui.status_cell import update_status_cell
-            for dept in departments:
-                cell = page.status_cells.get(dept.id)
-                if cell:
-                    update_status_cell(cell, dept)
-        update_stats_bar(page, departments)
-        update_header_save_date(page)
+        save_departments(departments)
+        _refresh_table_and_stats()
         show_reset_toast(page)
 
     def on_reset() -> None:
@@ -104,7 +111,7 @@ def main(page: ft.Page) -> None:
 
     # ── Создать компоненты первой вкладки ───────────────────────
     stats_bar = create_stats_bar(page, departments)
-    toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset)
+    toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset, on_edit_departments)
     legend = create_legend()
 
     print(f"[OK] Departments loaded: {len(departments)}")

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 from .zonal_models import ZonalCollection, ReportItemType, Criminalist
-from .zonal_data import get_report_data, get_summary
+from .zonal_data import get_report_data, get_summary, is_item_filled
 from .constants import INITIAL_DEPARTMENTS
 
 
@@ -174,54 +174,9 @@ class ZonalExcelExporter:
                     # Не увеличиваем row здесь, так как уже увеличили в цикле
                     continue  # Пропускаем стандартное увеличение row
 
-                elif use_dept_mode and crim.zone.department_ids and item.item_type == ReportItemType.DELIVERABLE:
-                    # Для deliverable показываем сколько отделов сдано
-                    if rd:
-                        submitted_count = sum(1 for v in rd.department_submitted.values() if v)
-                        total_depts = len(crim.zone.department_ids)
-                        c3 = ws.cell(row=row, column=3, value="—")
-                        c3.alignment = center
-                        c3.border = border
-                        c3.fill = fill
-
-                        c4 = ws.cell(row=row, column=4, value="")
-                        c4.alignment = center
-                        c4.border = border
-                        c4.fill = fill
-
-                        c5 = ws.cell(row=row, column=5, value=f"{submitted_count}/{total_depts}")
-                        c5.alignment = center
-                        c5.border = border
-                        c5.fill = green_fill if submitted_count == total_depts else fill
-                        if submitted_count == total_depts:
-                            c5.font = Font(bold=True, color="15803D")
-
-                        row += 1
-
-                        # Детализация по отделам
-                        for dept_id in crim.zone.department_ids:
-                            dept_name = dept_map.get(dept_id, f"Отдел {dept_id}")
-                            is_submitted = rd.department_submitted.get(dept_id, False) if rd else False
-
-                            ws.merge_cells(f"A{row}:B{row}")
-                            c_dept = ws.cell(row=row, column=1, value=f"    ↳ {dept_name}")
-                            c_dept.font = Font(italic=True, size=10, color="64748B")
-                            c_dept.alignment = left
-                            c_dept.border = border
-                            c_dept.fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-
-                            c_status = ws.cell(row=row, column=5, value="✓" if is_submitted else "✗")
-                            c_status.alignment = center
-                            c_status.border = border
-                            c_status.fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-                            if is_submitted:
-                                c_status.font = Font(bold=True, color="15803D")
-
-                            row += 1
-
-                        continue
-
-                # Стандартное отображение (не по отделам)
+                # «Да/нет» всегда экспортируется одной общей строкой.
+                # Детализация по отделам остаётся только для числовых пунктов.
+                # Стандартное отображение
                 if item.item_type == ReportItemType.NUMERICAL:
                     val = rd.value if rd else None
                     c3 = ws.cell(row=row, column=3, value=val if val is not None else "—")
@@ -240,7 +195,7 @@ class ZonalExcelExporter:
                 else:
                     ws.cell(row=row, column=3, value="").border = border
                     ws.cell(row=row, column=4, value="").border = border
-                    submitted = rd.is_submitted if rd else False
+                    submitted = is_item_filled(collection, crim, item)
                     c5 = ws.cell(row=row, column=5, value="Да ✓" if submitted else "Нет")
                     c5.alignment = center
                     c5.border = border

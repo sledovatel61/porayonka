@@ -37,6 +37,7 @@ class Department:
     status: Status = Status.EMPTY
     updated_at: Optional[datetime] = None
     is_ovd: bool = False
+    is_active: bool = True
 
     def toggle_status(self) -> Status:
         """

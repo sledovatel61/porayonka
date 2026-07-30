@@ -21,17 +21,38 @@ def build_item_block(
     Создать блок одного пункта шаблона для ввода данных.
     Возвращает ft.Container.
     """
+    # Детализация по отделам относится только к количественным показателям.
+    # «Да/нет» означает факт сдачи всей формы криминалистом, поэтому даже
+    # при включенном режиме по отделам для него всегда одна общая галочка.
     use_dept_mode = (
-        collection.template.use_departments_mode
+        item.item_type == ReportItemType.NUMERICAL
+        and collection.template.use_departments_mode
         and bool(criminalist.zone.department_ids)
     )
     if use_dept_mode:
         return _build_dept_mode_block(item, rd, criminalist, on_change, dept_map)
-    return _build_simple_mode_block(item, rd, on_change)
+
+    submitted_value = rd.is_submitted
+    # Совместимость с данными, введёнными до изменения: старые галочки по
+    # отделам считаются сданными только когда сданы все закреплённые отделы.
+    if (item.item_type == ReportItemType.DELIVERABLE
+            and collection.template.use_departments_mode
+            and rd.department_submitted
+            and criminalist.zone.department_ids):
+        submitted_value = all(
+            rd.department_submitted.get(department_id, False)
+            for department_id in criminalist.zone.department_ids
+        )
+    return _build_simple_mode_block(item, rd, on_change, submitted_value)
 
 
-def _build_simple_mode_block(item, rd: ReportData, on_change: callable) -> ft.Container:
-    """Блок пункта в обычном режиме (общие значения)."""
+def _build_simple_mode_block(
+    item,
+    rd: ReportData,
+    on_change: callable,
+    submitted_value: bool = False,
+) -> ft.Container:
+    """Блок пункта с общим значением или одной общей галочкой."""
     if item.item_type == ReportItemType.NUMERICAL:
         value_field = ft.TextField(
             value=str(rd.value) if rd.value is not None else "",
@@ -59,7 +80,7 @@ def _build_simple_mode_block(item, rd: ReportData, on_change: callable) -> ft.Co
     else:
         checkbox = ft.Checkbox(
             label="Сдано",
-            value=rd.is_submitted,
+            value=submitted_value,
             active_color=COLORS["received"],
             label_style=ft.TextStyle(size=13, color=COLORS["text"]),
             on_change=lambda e: _on_deliverable_change(e, rd, on_change),
@@ -87,7 +108,7 @@ def _build_simple_mode_block(item, rd: ReportData, on_change: callable) -> ft.Co
 def _build_dept_mode_block(
     item, rd: ReportData, criminalist, on_change: callable, dept_map: dict
 ) -> ft.Container:
-    """Блок пункта в режиме по отделам."""
+    """Блок числового пункта в режиме детализации по отделам."""
     dept_rows = []
     total_ref = {"value": 0}
 
@@ -236,7 +257,9 @@ def _on_numerical_change(e, rd: ReportData, on_change: callable):
 
 
 def _on_deliverable_change(e, rd: ReportData, on_change: callable):
+    # «Да/нет» больше не хранится отдельно по каждому отделу.
     rd.is_submitted = e.control.value
+    rd.department_submitted.clear()
     rd.updated_at = datetime.now()
     on_change()
 

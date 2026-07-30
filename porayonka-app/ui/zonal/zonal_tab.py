@@ -28,7 +28,6 @@ from .criminalist_tile import (
 )
 from .form_input_modal import create_form_input_modal
 from .add_criminalist_modal import create_add_criminalist_modal
-from .summary_panel import create_summary_panel
 from .criminalists_summary_panel import create_criminalists_summary_panel
 
 
@@ -59,8 +58,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # _TILES_PER_ROW пересчитывается динамически из page.width в
     # _calc_tiles_per_row(). Значение по умолчанию 4 — «средний экран».
     _TILE_SPACING = 16
-    _TILE_WIDTH = 280        # см. criminalist_tile._TILE_WIDTH
-    _TILE_HEIGHT = 260       # см. criminalist_tile._TILE_HEIGHT
+    _TILE_WIDTH = 300        # см. criminalist_tile._TILE_WIDTH
+    _TILE_HEIGHT = 340       # см. criminalist_tile._TILE_HEIGHT
     _TILE_RADIUS = 14        # см. criminalist_tile._TILE_RADIUS
     _TAB_HORIZONTAL_PADDING = 40  # main.py: padding=20 слева и справа
 
@@ -77,7 +76,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     # ── Состояние UI ────────────────────────────────────────────
     tiles: Dict[int, ft.Container] = {}          # id -> плашка
-    summary_ref: Dict = {"panel": None, "is_expanded": False}
     crim_summary_ref: Dict = {"panel": None, "is_expanded": False}
     template_builder_ref: Dict = {"control": None, "is_expanded": False}
     filter_ref: Dict = {"value": "all"}          # all | pending | inactive
@@ -97,15 +95,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         except Exception as e:
             print(f"[ZONAL_TAB] Autosave error: {e}")
 
-    def _refresh_general_summary():
-        if summary_ref["panel"] is not None:
-            new_summary = create_summary_panel(collection, summary_ref, _refresh_general_summary)
-            summary_ref["panel"].controls = new_summary.controls
-            try:
-                summary_ref["panel"].update()
-            except Exception:
-                pass
-
     def _refresh_crim_summary():
         if crim_summary_ref["panel"] is not None:
             new_panel = create_criminalists_summary_panel(
@@ -118,8 +107,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 pass
 
     def _refresh_summary():
-        """Обновить обе сводки."""
-        _refresh_general_summary()
+        """Обновить сводку по криминалистам."""
         _refresh_crim_summary()
 
     def _refresh_tile(crim: Criminalist):
@@ -1122,10 +1110,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     except Exception:
         pass
 
-    # ── Сводки ──────────────────────────────────────────────────
-    summary_col = create_summary_panel(collection, summary_ref, _refresh_general_summary)
-    summary_ref["panel"] = summary_col
-
+    # ── Сводка по криминалистам ─────────────────────────────────
     crim_summary_col = create_criminalists_summary_panel(
         collection, crim_summary_ref, _refresh_crim_summary
     )
@@ -1135,8 +1120,6 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         controls=[
             template_builder_wrapper,
             ft.Container(height=12),
-            summary_col,
-            ft.Container(height=10),
             crim_summary_col,
             ft.Container(height=14),
             toolbar,

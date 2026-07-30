@@ -7,12 +7,13 @@ from core.models import Department, Status
 from core.constants import COLORS
 
 
-def _count_stats(departments: List[Department]) -> dict:
-    """Посчитать статистику по списку отделов"""
-    received    = sum(1 for d in departments if d.status == Status.RECEIVED)
-    in_progress = sum(1 for d in departments if d.status == Status.IN_PROGRESS)
-    empty       = sum(1 for d in departments if d.status == Status.EMPTY)
-    total       = len(departments)
+def _count_stats(departments: List[Department], active_only: bool = True) -> dict:
+    """Посчитать статистику по активным отделам."""
+    active = [d for d in departments if d.is_active] if active_only else list(departments)
+    received    = sum(1 for d in active if d.status == Status.RECEIVED)
+    in_progress = sum(1 for d in active if d.status == Status.IN_PROGRESS)
+    empty       = sum(1 for d in active if d.status == Status.EMPTY)
+    total       = len(active)
     percent     = round(received / total * 100) if total > 0 else 0
     return dict(received=received, in_progress=in_progress,
                 empty=empty, total=total, percent=percent)
@@ -32,8 +33,7 @@ def _stat_card(
         content=ft.Row(
             controls=[
                 ft.Container(
-                    content=ft.Text(icon, size=18, color=COLORS["text_light"],
-                                    weight=ft.FontWeight.BOLD),
+                    content=ft.Icon(icon, size=18, color=COLORS["text_light"]),
                     width=40,
                     height=40,
                     bgcolor=icon_bg,

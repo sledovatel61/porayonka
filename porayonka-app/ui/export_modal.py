@@ -113,7 +113,7 @@ def create_export_modal(
         card = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Text(icon, size=28),
+                    ft.Icon(icon, size=28),
                     ft.Column(
                         controls=[
                             ft.Text(title, size=14, weight=ft.FontWeight.BOLD,

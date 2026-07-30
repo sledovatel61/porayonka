@@ -10,6 +10,7 @@ def create_toolbar(
     on_save: callable,
     on_export: callable,
     on_reset: callable,
+    on_edit_departments: callable = None,
 ) -> ft.Container:
     """
     Создать панель управления.
@@ -71,6 +72,22 @@ def create_toolbar(
         expand=True,
     )
 
+    # ── Кнопка «Редактировать отделы» ─────────────────────────
+    btn_edit_depts = ft.ElevatedButton(
+        text="Редактировать отделы",
+        icon=ft.icons.EDIT_NOTE,
+        bgcolor=COLORS["btn_save"],
+        color="white",
+        elevation=2,
+        height=44,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=18),
+        ),
+        on_click=lambda e: on_edit_departments() if on_edit_departments else None,
+        tooltip="Добавить, удалить или изменить активность отделов",
+    )
+
     # ── Кнопка «Сохранить» ───────────────────────────────────
     btn_save = ft.ElevatedButton(
         text="Сохранить",
@@ -123,6 +140,8 @@ def create_toolbar(
             controls=[
                 search_row,
                 ft.Container(width=12),
+                btn_edit_depts,
+                ft.Container(width=8),
                 btn_save,
                 ft.Container(width=8),
                 btn_export,

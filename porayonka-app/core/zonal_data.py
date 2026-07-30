@@ -513,12 +513,14 @@ def _get_report_data_for(collection: ZonalCollection, criminalist_id: int, item_
 def is_item_filled(collection: ZonalCollection, criminalist, item) -> bool:
     """
     Пункт считается заполненным (сданным) для криминалиста, если:
-    - режим по отделам и у криминалиста есть закреплённые отделы:
-        * числовой  -> по всем закреплённым отделам введено значение
-        * да/нет     -> по всем закреплённым отделам стоит "сдано"
-    - обычный режим:
-        * числовой  -> введено значение
-        * да/нет     -> стоит "сдано"
+    - числовой в режиме по отделам -> по всем закреплённым отделам введено
+      значение;
+    - числовой в обычном режиме -> введено общее значение;
+    - да/нет -> установлена одна общая галочка «Сдано» для криминалиста.
+
+    Для старых записей с department_submitted сохраняется прежняя семантика:
+    все закреплённые отделы должны быть отмечены, пока пользователь не
+    сохранит новое единое значение.
     """
     use_dept_mode = (
         collection.template.use_departments_mode
@@ -534,15 +536,19 @@ def is_item_filled(collection: ZonalCollection, criminalist, item) -> bool:
                 return False
             return all(rd.department_values.get(did) is not None for did in depts)
         return rd is not None and rd.value is not None
-    else:  # DELIVERABLE
-        if use_dept_mode:
-            depts = criminalist.zone.department_ids
-            if not depts:
-                return False
-            if rd is None:
-                return False
-            return all(rd.department_submitted.get(did, False) for did in depts)
-        return rd is not None and rd.is_submitted
+    # DELIVERABLE всегда хранится одним значением, независимо от режима
+    # детализации числовых показателей по отделам.
+    if rd is None:
+        return False
+    if (collection.template.use_departments_mode
+            and rd.department_submitted
+            and criminalist.zone.department_ids):
+        # Обратная совместимость с ранее сохранёнными галочками по отделам.
+        return all(
+            rd.department_submitted.get(department_id, False)
+            for department_id in criminalist.zone.department_ids
+        )
+    return rd.is_submitted
 
 
 def get_criminalist_fill(collection: ZonalCollection, criminalist) -> dict:

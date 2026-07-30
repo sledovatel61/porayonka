@@ -38,6 +38,7 @@ def _make_default_departments() -> List[Department]:
             status=Status.EMPTY,
             updated_at=None,
             is_ovd=d["is_ovd"],
+            is_active=True,
         )
         for d in INITIAL_DEPARTMENTS
     ]
@@ -74,6 +75,7 @@ def load_departments() -> List[Department]:
                         else None
                     ),
                     is_ovd=d.get("is_ovd", False),
+                    is_active=d.get("is_active", True),
                 )
                 departments.append(dept)
             except (KeyError, ValueError) as e:
@@ -90,11 +92,12 @@ def load_departments() -> List[Department]:
                         name=d["name"],
                         status=Status.EMPTY,
                         is_ovd=d["is_ovd"],
+                        is_active=True,
                     )
                 )
 
-        # Всегда сортируем по id
-        departments.sort(key=lambda x: x.id)
+        # Порядок отделов хранится в том порядке, в котором они идут в JSON.
+        # Перемещение отделов в редакторе меняет именно этот порядок.
         return departments
 
     except (json.JSONDecodeError, OSError) as e:
@@ -121,6 +124,7 @@ def save_departments(departments: List[Department]) -> str:
                 "status": d.status.value,
                 "updated_at": d.updated_at.isoformat() if d.updated_at else None,
                 "is_ovd": d.is_ovd,
+                "is_active": d.is_active,
             }
             for d in departments
         ],
@@ -166,15 +170,17 @@ def reset_departments() -> List[Department]:
     return departments
 
 
-def get_stats(departments: List[Department]) -> dict:
+def get_stats(departments: List[Department], active_only: bool = True) -> dict:
     """
     Подсчитать статистику по статусам.
+    По умолчанию считает только активные отделы.
     Возвращает словарь: received, in_progress, empty, total, percent.
     """
-    received = sum(1 for d in departments if d.status == Status.RECEIVED)
-    in_progress = sum(1 for d in departments if d.status == Status.IN_PROGRESS)
-    empty = sum(1 for d in departments if d.status == Status.EMPTY)
-    total = len(departments)
+    active = [d for d in departments if d.is_active] if active_only else list(departments)
+    received = sum(1 for d in active if d.status == Status.RECEIVED)
+    in_progress = sum(1 for d in active if d.status == Status.IN_PROGRESS)
+    empty = sum(1 for d in active if d.status == Status.EMPTY)
+    total = len(active)
     percent = round((received + in_progress) / total * 100) if total > 0 else 0
 
     return {

@@ -47,12 +47,10 @@ def create_status_cell(
     cfg = _STATUS_CONFIG[dept.status]
 
     icon_widget = ft.Container(
-        content=ft.Text(
+        content=ft.Icon(
             cfg["icon"],
-            size=12,
+            size=14,
             color=cfg["icon_color"],
-            weight=ft.FontWeight.BOLD,
-            text_align=ft.TextAlign.CENTER,
         ),
         width=22,
         height=22,
@@ -85,7 +83,6 @@ def create_status_cell(
         width=160,
         height=36,
         animate=ft.animation.Animation(150, ft.AnimationCurve.EASE_IN_OUT),
-        on_click=lambda e: _handle_click(e, dept, on_click_callback),
         on_hover=lambda e: _handle_hover(e, cell, cfg["bg"], cfg["hover_bg"]),
         tooltip="Кликните для смены статуса",
     )
@@ -123,7 +120,10 @@ def update_status_cell(cell: ft.Container, dept: Department) -> None:
     icon_container = inner_row.controls[0]
     if isinstance(icon_container, ft.Container):
         icon_container.bgcolor = cfg["icon_bg"]
-        if isinstance(icon_container.content, ft.Text):
+        if isinstance(icon_container.content, ft.Icon):
+            icon_container.content.name = cfg["icon"]
+            icon_container.content.color = cfg["icon_color"]
+        elif isinstance(icon_container.content, ft.Text):
             icon_container.content.value = cfg["icon"]
             icon_container.content.color = cfg["icon_color"]
 
