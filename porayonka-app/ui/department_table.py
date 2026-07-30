@@ -21,7 +21,7 @@ def _status_colors(dept: Department) -> tuple:
         return COLORS["received"], COLORS["received_bg"]
     if dept.status == Status.IN_PROGRESS:
         return COLORS["in_progress"], COLORS["in_progress_bg"]
-    return COLORS["empty"], COLORS["empty_bg"]
+    return "#3A3F47", "#202B3B"
 
 
 def _make_group_header(title: str, group: List[Department]) -> ft.Container:
@@ -37,7 +37,7 @@ def _make_group_header(title: str, group: List[Department]) -> ft.Container:
                 ft.Container(expand=True),
                 ft.Text(summary, size=11, color=COLORS["received_text"] if received else COLORS["text_muted"]),
             ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.ProgressBar(value=ratio, height=3, bgcolor=COLORS["primary_light"],
+            ft.ProgressBar(value=ratio, height=4, bgcolor="#3A3F47",
                            color=COLORS["received"], border_radius=2),
         ], spacing=7, tight=True),
         padding=ft.padding.only(left=12, right=12, top=12, bottom=8),
@@ -52,17 +52,23 @@ def _make_dept_row(dept: Department, row_index: int, on_status_click: Callable,
     status_cell.tooltip = "Клик по статусу — переключить" if dept.is_active else "Отдел отключен"
     status_cell.on_click = lambda e: on_status_click()
     status_cells[dept.id] = status_cell
+    row_content = ft.Row(controls=[
+        _make_number_badge(dept, row_index),
+        ft.Text(dept.name, size=14, color=COLORS["text_muted"] if dept.is_ovd else COLORS["text"],
+                italic=dept.is_ovd, overflow=ft.TextOverflow.ELLIPSIS, no_wrap=True),
+        status_cell,
+        ft.Container(expand=True),
+    ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
     row = ft.Container(
+        # Физическая статусная полоса надёжнее border в Flet 0.23.2.
         content=ft.Row(controls=[
-            _make_number_badge(dept, row_index),
-            ft.Text(dept.name, size=14, color=COLORS["text_muted"] if dept.is_ovd else COLORS["text"],
-                    italic=dept.is_ovd, overflow=ft.TextOverflow.ELLIPSIS, no_wrap=True, expand=True),
-            status_cell,
-        ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        # Полноширинная поверхность: не ограничивать Container шириной текста.
+            ft.Container(width=5, bgcolor=marker),
+            ft.Container(content=row_content, expand=True),
+        ], spacing=0, vertical_alignment=ft.CrossAxisAlignment.STRETCH),
+        # Полноширинная поверхность: тонируется вся строка, а не только текст.
         bgcolor=tint,
-        padding=ft.padding.symmetric(horizontal=12, vertical=8),
-        border=ft.border.only(left=ft.BorderSide(4, marker), bottom=ft.BorderSide(1, COLORS["border"])),
+        padding=ft.padding.only(right=12, top=8, bottom=8),
+        border=ft.border.only(bottom=ft.BorderSide(1, COLORS["border"])),
         opacity=1.0 if dept.is_active else 0.45,
     )
     normal_bg = tint
@@ -93,7 +99,8 @@ def create_department_table(page: ft.Page, departments: List[Department],
         row = dept_rows.get(dept.id)
         if row:
             row.bgcolor = tint
-            row.border = ft.border.only(left=ft.BorderSide(4, marker), bottom=ft.BorderSide(1, COLORS["border"]))
+            if isinstance(row.content, ft.Row) and row.content.controls:
+                row.content.controls[0].bgcolor = marker
             row.update()
         if on_status_change:
             on_status_change(dept)
