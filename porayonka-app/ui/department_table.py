@@ -62,12 +62,15 @@ def _make_dept_row(dept: Department, row_index: int, on_status_click: Callable,
     row = ft.Container(
         # Физическая статусная полоса надёжнее border в Flet 0.23.2.
         content=ft.Row(controls=[
-            ft.Container(width=5, bgcolor=marker),
+            ft.Container(width=5, expand=True, bgcolor=marker),
             ft.Container(content=row_content, expand=True),
-        ], spacing=0, vertical_alignment=ft.CrossAxisAlignment.STRETCH),
+        ], spacing=0, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        # Фиксируем естественную высоту строки: это предотвращает схлопывание
+        # вложенного Row в Flet 0.23.2 при отсутствии высоты у родителя.
+        height=52,
         # Полноширинная поверхность: тонируется вся строка, а не только текст.
         bgcolor=tint,
-        padding=ft.padding.only(right=12, top=8, bottom=8),
+        padding=ft.padding.only(right=12),
         border=ft.border.only(bottom=ft.BorderSide(1, COLORS["border"])),
         opacity=1.0 if dept.is_active else 0.45,
     )
@@ -119,6 +122,8 @@ def create_department_table(page: ft.Page, departments: List[Department],
             rows.append(row); all_rows.append(row)
 
     rows_column = ft.Column(controls=rows, spacing=0)
+    if not rows:
+        print("WARNING: department list rendered empty")
     scroll_area = ft.Container(content=rows_column, bgcolor=COLORS["card"],
                                border=ft.border.only(left=ft.BorderSide(1, COLORS["border"]), right=ft.BorderSide(1, COLORS["border"])))
     table_container = ft.Column(controls=[ft.Container(content=ft.Column(controls=[scroll_area], spacing=0),
