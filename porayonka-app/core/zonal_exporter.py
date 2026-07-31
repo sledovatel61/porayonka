@@ -30,9 +30,9 @@ class ZonalExcelExporter:
         header_font = Font(bold=True, color="FFFFFF", size=10)
         subheader_fill = PatternFill("solid", fgColor="334155")
         subheader_font = Font(bold=True, color="FFFFFF", size=9)
-        name_font = Font(bold=True, size=9, color="1E293B")
-        data_font = Font(size=9, color="334155")
-        bold_data = Font(size=9, bold=True, color="1E293B")
+        name_font = Font(bold=True, size=8, color="1E293B")
+        data_font = Font(size=8, color="334155")
+        bold_data = Font(size=8, bold=True, color="1E293B")
         green_fill = PatternFill("solid", fgColor="DCFCE7")
         green_font = Font(size=9, bold=True, color="15803D")
         yellow_fill = PatternFill("solid", fgColor="FEF9C3")
@@ -41,7 +41,7 @@ class ZonalExcelExporter:
         red_font = Font(size=9, color="991B1B")
         gray_fill = PatternFill("solid", fgColor="F1F5F9")
         summary_fill = PatternFill("solid", fgColor="DBEAFE")
-        summary_font = Font(bold=True, size=9, color="1E40AF")
+        summary_font = Font(bold=True, size=8, color="1E40AF")
         thin = Side(style="thin", color="D1D5DB")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         center = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -92,17 +92,18 @@ class ZonalExcelExporter:
         # ── Шапка таблицы ─────────────────────────────────────────
         headers = ["№", "ФИО криминалиста"]
         for item in items:
-            short_name = item.name[:20] + ".." if len(item.name) > 20 else item.name
+            # Обрезаем до 12 символов для компактности
+            short_name = item.name[:12] + "…" if len(item.name) > 12 else item.name
             headers.append(short_name)
-        headers.append("Итог")
+        headers.append("%")
 
         for col_i, h in enumerate(headers, 1):
             c = ws.cell(row=row, column=col_i, value=h)
             c.fill = header_fill
-            c.font = header_font
-            c.alignment = center
+            c.font = Font(bold=True, color="FFFFFF", size=8)
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             c.border = border
-        ws.row_dimensions[row].height = 30
+        ws.row_dimensions[row].height = 32
         row += 1
 
         # ── Данные по криминалистам ───────────────────────────────
@@ -193,10 +194,10 @@ class ZonalExcelExporter:
 
                 if item_filled:
                     cell.fill = green_fill
-                    cell.font = Font(size=9, bold=True, color="15803D")
+                    cell.font = Font(size=8, bold=True, color="15803D")
                 else:
                     cell.fill = PatternFill("solid", fgColor="FFFFFF")
-                    cell.font = Font(size=9, color="94A3B8")
+                    cell.font = Font(size=8, color="94A3B8")
 
             # Итоговый процент
             pct_col = total_cols
@@ -204,11 +205,11 @@ class ZonalExcelExporter:
             pct_cell.alignment = center
             pct_cell.border = border
             pct_cell.fill = row_fill
-            pct_cell.font = Font(size=9, bold=True,
+            pct_cell.font = Font(size=8, bold=True,
                                  color="15803D" if pct >= 100
                                  else "92400E" if pct > 0 else "991B1B")
 
-            ws.row_dimensions[row].height = 16
+            ws.row_dimensions[row].height = 18
             row += 1
 
         # ── Сводка по пунктам ─────────────────────────────────────
@@ -263,17 +264,29 @@ class ZonalExcelExporter:
         overall = round(done_count / max(total_active, 1) * 100)
         overall_cell = ws.cell(row=row, column=pct_col, value=f"{overall}%")
         overall_cell.fill = summary_fill
-        overall_cell.font = Font(size=9, bold=True, color="1E40AF")
+        overall_cell.font = Font(size=8, bold=True, color="1E40AF")
         overall_cell.alignment = center
         overall_cell.border = border
         ws.row_dimensions[row].height = 18
 
-        # ── Ширина столбцов ───────────────────────────────────────
-        ws.column_dimensions["A"].width = 4    # №
-        ws.column_dimensions["B"].width = 28   # ФИО
-        for col_offset in range(3, total_cols + 1):
+        # ── Ширина столбцов (динамическая) ────────────────────────
+        n_items = len(items)
+        # A4 portrait usable width ≈ 90 chars. Reserve 4 for №, 22 for ФИО, 6 for итог
+        remaining = max(40, 90 - 4 - 22 - 6)
+        item_width = max(8, remaining // max(n_items, 1))
+        # Если пунктов много — уменьшаем ФИО
+        if n_items > 4:
+            name_w = max(16, 28 - (n_items - 4) * 2)
+        else:
+            name_w = 28
+
+        ws.column_dimensions["A"].width = 4
+        ws.column_dimensions["B"].width = name_w
+        for col_offset in range(3, total_cols):
             col_letter = get_column_letter(col_offset)
-            ws.column_dimensions[col_letter].width = 14  # пункты и итог
+            ws.column_dimensions[col_letter].width = item_width
+        # Итог
+        ws.column_dimensions[get_column_letter(total_cols)].width = 7
 
         # ── Настройки печати (1 страница, книжная) ────────────────
         ws.page_setup.orientation = "portrait"

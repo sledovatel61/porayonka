@@ -262,54 +262,8 @@ def create_template_builder(
     # Инициальное построение списка
     rebuild_items_list()
 
-    # ── Механизм сворачивания ───────────────────────────────────
-    toggle_icon = ft.Icon(
-        name=ft.icons.KEYBOARD_ARROW_UP if is_expanded else ft.icons.KEYBOARD_ARROW_DOWN,
-        color="white",
-        size=20,
-        tooltip="Развернуть" if not is_expanded else "Свернуть",
-    )
-
-    def toggle_expanded(e):
-        nonlocal is_expanded
-        is_expanded = not is_expanded
-        if template_builder_ref is not None:
-            template_builder_ref["is_expanded"] = is_expanded
-        body_container.visible = is_expanded
-        toggle_icon.name = ft.icons.KEYBOARD_ARROW_UP if is_expanded else ft.icons.KEYBOARD_ARROW_DOWN
-        toggle_icon.tooltip = "Свернуть" if is_expanded else "Развернуть"
-        panel.update()
-
-    # Заголовок панели
-    header_container = ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Icon(ft.icons.SETTINGS_OUTLINED, size=18, color="white"),
-                ft.Text(
-                    "Настройка сбора данных",
-                    size=15,
-                    weight=ft.FontWeight.BOLD,
-                    color="white",
-                ),
-                ft.Container(expand=True),
-                toggle_icon,
-            ],
-            spacing=8,
-        ),
-        gradient=ft.LinearGradient(
-            begin=ft.alignment.center_left,
-            end=ft.alignment.center_right,
-            colors=[COLORS["primary"], COLORS["primary_light"]],
-        ),
-        padding=ft.padding.symmetric(horizontal=16, vertical=12),
-        border_radius=ft.border_radius.only(top_left=10, top_right=10),
-        on_click=toggle_expanded,
-        ink=True,
-        tooltip="Нажмите, чтобы развернуть/свернуть настройку сбора данных",
-    )
-
-    # Тело панели
-    body_container = ft.Container(
+    # ── Сборка панели (без сворачивания, сразу видно) ────────────
+    panel = ft.Container(
         content=ft.Column(
             controls=[
                 # Название формы
@@ -329,11 +283,13 @@ def create_template_builder(
                             add_btn,
                         ],
                         spacing=4,
+                        scroll=ft.ScrollMode.AUTO,
                     ),
-                    bgcolor=COLORS["primary_light"],  # ТЁМНЫЙ ФОН
+                    bgcolor=COLORS["primary_light"],
                     border=ft.border.all(1, COLORS["border"]),
                     border_radius=8,
                     padding=ft.padding.all(12),
+                    max_height=300,
                 ),
                 ft.Container(height=12),
                 # Кнопки
@@ -347,31 +303,12 @@ def create_template_builder(
                 dept_mode_checkbox,
             ],
             spacing=6,
+            scroll=ft.ScrollMode.AUTO,
         ),
         padding=ft.padding.all(16),
-        bgcolor=COLORS["card"],  # ТЁМНЫЙ ФОН
-        border_radius=ft.border_radius.only(bottom_left=10, bottom_right=10),
-        visible=is_expanded,
-    )
-
-    # ── Сборка всей панели ───────────────────────────────────────
-    panel = ft.Container(
-        content=ft.Column(
-            controls=[
-                header_container,
-                body_container,
-            ],
-            spacing=0,
-        ),
-        border=ft.border.all(1, COLORS["border"]),
+        bgcolor=COLORS["card"],
         border_radius=10,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
-        shadow=ft.BoxShadow(
-            spread_radius=0,
-            blur_radius=8,
-            color="#00000060",  # ТЁМНАЯ ТЕНЬ
-            offset=ft.Offset(0, 2),
-        ),
+        expand=True,
     )
 
     print("[TEMPLATE_BUILDER] Template builder created")

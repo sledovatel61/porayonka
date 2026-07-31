@@ -26,11 +26,10 @@ def show_toast(
         content=ft.Row(
             controls=[
                 ft.Container(
-                    content=ft.Text(
+                    content=ft.Icon(
                         icon,
                         size=16,
                         color=icon_color,
-                        weight=ft.FontWeight.BOLD,
                     ),
                     width=28,
                     height=28,
@@ -73,7 +72,7 @@ def show_reset_toast(page: ft.Page) -> None:
 
 def show_export_toast(page: ft.Page, format_name: str) -> None:
     """Уведомление об экспорте"""
-    show_toast(page, f"Файл {format_name} скачан", icon=ft.icons.FOLDER)
+    show_toast(page, f"Отчёт сохранён: {format_name}", icon=ft.icons.SAVE)
 
 
 def show_error_toast(page: ft.Page, message: str) -> None:
