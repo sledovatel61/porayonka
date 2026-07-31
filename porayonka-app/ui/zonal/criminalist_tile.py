@@ -1,5 +1,5 @@
 # ui/zonal/criminalist_tile.py
-# Компактная плашка криминалиста (300x320) с предсказуемым layout.
+# Компактная плашка криминалиста (300x380) с предсказуемым layout.
 # Flet 0.23.2: без animate/gradient/shadow/wrap/expand внутри плашки.
 import flet as ft
 
@@ -9,7 +9,7 @@ from core.zonal_models import ReportItemType
 
 
 _TILE_WIDTH = 300
-_TILE_HEIGHT = 320
+_TILE_HEIGHT = 380
 _TILE_RADIUS = 14
 _BORDER_LEFT = 4
 _BORDER_OTHER = 1
@@ -79,12 +79,12 @@ def _tile_content_layer(content_col: ft.Column, accent_color: str) -> ft.Stack:
 
 
 def _build_zone_block(criminalist, dept_map: dict) -> ft.Container:
-    """Список отделов в одну строку с "+N" для экономии места."""
+    """Все закреплённые отделы списком, каждый с новой строки."""
     zone_names = [
         dept_map.get(department_id, f"Отдел {department_id}")
         for department_id in criminalist.zone.department_ids
     ]
-    
+
     if not zone_names:
         return ft.Container(
             content=ft.Row(
@@ -104,46 +104,50 @@ def _build_zone_block(criminalist, dept_map: dict) -> ft.Container:
             ),
             width=_INNER_WIDTH,
         )
-    
-    # Показываем первый отдел + "+N" если их больше
-    first_name = zone_names[0]
-    remaining = len(zone_names) - 1
-    
-    controls = [
-        ft.Icon(ft.icons.PLACE_OUTLINED, size=13,
-                color=COLORS.get("text_muted", "#64748b")),
-        ft.Text(
-            first_name,
-            size=11,
-            color=COLORS.get("text_secondary", "#94a3b8"),
-            max_lines=1,
-            overflow=ft.TextOverflow.ELLIPSIS,
-            expand=True,
-        ),
-    ]
-    
-    if remaining > 0:
-        controls.append(
-            ft.Container(
-                content=ft.Text(
-                    f"+{remaining}",
-                    size=10,
-                    color=COLORS.get("text_muted", "#64748b"),
-                    weight=ft.FontWeight.W_600,
-                ),
-                bgcolor=COLORS.get("primary_light", "#1e293b"),
-                border_radius=8,
-                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+
+    # Предохранитель по высоте плашки: если отделов больше 4,
+    # показываем первые 4 строки + сводную строку "+N отделов"
+    max_rows = 4
+    shown = zone_names[:max_rows]
+    hidden = len(zone_names) - len(shown)
+
+    rows = []
+    for name in shown:
+        rows.append(
+            ft.Row(
+                controls=[
+                    ft.Icon(ft.icons.PLACE_OUTLINED, size=13,
+                            color=COLORS.get("text_muted", "#64748b")),
+                    ft.Text(
+                        name,
+                        size=11,
+                        color=COLORS.get("text_secondary", "#94a3b8"),
+                        max_lines=1,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                        expand=True,
+                    ),
+                ],
+                spacing=4,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
         )
-    
+    if hidden > 0:
+        rows.append(
+            ft.Text(
+                f"+{hidden} отделов",
+                size=10,
+                color=COLORS.get("text_muted", "#64748b"),
+                weight=ft.FontWeight.W_600,
+            )
+        )
+
     full_list = "\n".join(f"• {name}" for name in zone_names)
-    
+
     return ft.Container(
-        content=ft.Row(
-            controls=controls,
-            spacing=4,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        content=ft.Column(
+            controls=rows,
+            spacing=2,
+            tight=True,
         ),
         width=_INNER_WIDTH,
         tooltip=f"Закреплённые отделы:\n{full_list}",

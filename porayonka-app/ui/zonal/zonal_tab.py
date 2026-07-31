@@ -59,7 +59,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # _calc_tiles_per_row(). Значение по умолчанию 4 — «средний экран».
     _TILE_SPACING = 16
     _TILE_WIDTH = 300        # см. criminalist_tile._TILE_WIDTH
-    _TILE_HEIGHT = 320       # см. criminalist_tile._TILE_HEIGHT
+    _TILE_HEIGHT = 380       # см. criminalist_tile._TILE_HEIGHT
     _TILE_RADIUS = 14        # см. criminalist_tile._TILE_RADIUS
     _TAB_HORIZONTAL_PADDING = 40  # main.py: padding=20 слева и справа
 
