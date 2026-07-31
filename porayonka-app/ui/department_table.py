@@ -53,22 +53,22 @@ def _make_dept_row(dept: Department, row_index: int, on_status_click: Callable,
     status_cell.on_click = lambda e: on_status_click()
     status_cells[dept.id] = status_cell
     row_content = ft.Row(controls=[
-        _make_number_badge(dept, row_index),
-        ft.Text(dept.name, size=14, color=COLORS["text_muted"] if dept.is_ovd else COLORS["text"],
-                italic=dept.is_ovd, overflow=ft.TextOverflow.ELLIPSIS, no_wrap=True),
-        status_cell,
-        ft.Container(expand=True),
-    ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        ft.Row(controls=[
+            _make_number_badge(dept, row_index),
+            ft.Text(dept.name, size=14, color=COLORS["text_muted"] if dept.is_ovd else COLORS["text"],
+                    italic=dept.is_ovd, overflow=ft.TextOverflow.ELLIPSIS, no_wrap=True,
+                    expand=True),
+        ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER, expand=True),
+        ft.Container(content=status_cell, width=160, alignment=ft.alignment.center_right),
+    ], spacing=0, vertical_alignment=ft.CrossAxisAlignment.CENTER, expand=True)
     row = ft.Container(
         # Физическая статусная полоса надёжнее border в Flet 0.23.2.
         content=ft.Row(controls=[
-            ft.Container(width=5, height=52, bgcolor=marker),
+            ft.Container(width=5, height=42, bgcolor=marker),
             ft.Container(content=row_content, expand=True),
         ], spacing=0, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        # Фиксируем естественную высоту строки: это предотвращает схлопывание
-        # вложенного Row в Flet 0.23.2 при отсутствии высоты у родителя.
-        height=52,
         # Полноширинная поверхность: тонируется вся строка, а не только текст.
+        height=42,
         bgcolor=tint,
         padding=ft.padding.only(right=12),
         border=ft.border.only(bottom=ft.BorderSide(1, COLORS["border"])),
