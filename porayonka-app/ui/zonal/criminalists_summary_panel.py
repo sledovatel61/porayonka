@@ -452,7 +452,7 @@ def create_criminalists_summary_panel(
                     border_radius=8,
                     alignment=ft.alignment.center,
                 ),
-                ft.Text("Сводка по криминалистам", size=15,
+                ft.Text("Общая сводка", size=15,
                         weight=ft.FontWeight.BOLD, color="white"),
                 _pill(ft.icons.PERSON_OUTLINE, f"Активных: {active}",
                       COLORS.get("received_text", "#4ade80")),
