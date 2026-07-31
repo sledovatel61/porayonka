@@ -41,11 +41,11 @@ class Department:
 
     def toggle_status(self) -> Status:
         """
-        Циклическое переключение статуса:
-        EMPTY → RECEIVED → IN_PROGRESS → EMPTY → ...
+        Циклическое переключение статуса (слева направо по канбану):
+        EMPTY → IN_PROGRESS → RECEIVED → EMPTY → ...
         При переключении обновляет updated_at.
         """
-        cycle = [Status.EMPTY, Status.RECEIVED, Status.IN_PROGRESS]
+        cycle = [Status.EMPTY, Status.IN_PROGRESS, Status.RECEIVED]
         current_idx = cycle.index(self.status)
         self.status = cycle[(current_idx + 1) % len(cycle)]
         self.updated_at = datetime.now()
@@ -56,7 +56,7 @@ class Department:
         labels = {
             Status.EMPTY: "—",
             Status.RECEIVED: "Получено",
-            Status.IN_PROGRESS: "В работе",
+            Status.IN_PROGRESS: "Запрошено",
         }
         return labels[self.status]
 
