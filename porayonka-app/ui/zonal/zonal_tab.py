@@ -59,7 +59,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # _calc_tiles_per_row(). Значение по умолчанию 4 — «средний экран».
     _TILE_SPACING = 16
     _TILE_WIDTH = 300        # см. criminalist_tile._TILE_WIDTH
-    _TILE_HEIGHT = 340       # см. criminalist_tile._TILE_HEIGHT
+    _TILE_HEIGHT = 320       # см. criminalist_tile._TILE_HEIGHT
     _TILE_RADIUS = 14        # см. criminalist_tile._TILE_RADIUS
     _TAB_HORIZONTAL_PADDING = 40  # main.py: padding=20 слева и справа
 
@@ -841,9 +841,17 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             show_error_toast(page, f"Ошибка экспорта: {e}")
 
     def _rebuild_template_builder():
-        if template_builder_ref["control"] is None:
-            return
-        new_builder = create_template_builder(
+        # Template builder теперь в модалке — пересоздаётся при открытии
+        pass
+
+    # ── Построение UI ───────────────────────────────────────────
+    # Template builder открывается в модалке по кнопке-шестерёнке
+    template_builder_ref["control"] = None  # будет создан по требованию
+
+    # ── Модалка настройки сбора данных ───────────────────────────
+    def _open_template_settings(e=None):
+        """Открыть модалку с конструктором шаблонов."""
+        template_builder = create_template_builder(
             page=page,
             collection=collection,
             on_template_changed=on_template_changed,
@@ -854,28 +862,77 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             on_departments_mode_changed=on_departments_mode_changed,
             template_builder_ref=template_builder_ref,
         )
-        template_builder_ref["control"].controls = [new_builder]
-        try:
-            template_builder_ref["control"].update()
-        except Exception:
-            pass
 
-    # ── Построение UI ───────────────────────────────────────────
-    template_builder = create_template_builder(
-        page=page,
-        collection=collection,
-        on_template_changed=on_template_changed,
-        on_save=on_template_save,
-        on_load=on_template_load,
-        on_clear=on_template_clear,
-        on_reset_data=on_reset_data,
-        on_departments_mode_changed=on_departments_mode_changed,
-        template_builder_ref=template_builder_ref,
+        def _close_dialog(e=None):
+            dialog.open = False
+            page.update()
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            bgcolor=COLORS["primary_light"],
+            title=ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.icons.SETTINGS_OUTLINED, size=18, color="white"),
+                        ft.Text("Настройка сбора данных", size=16,
+                                weight=ft.FontWeight.BOLD, color="white"),
+                        ft.Container(expand=True),
+                        ft.IconButton(
+                            icon=ft.icons.CLOSE,
+                            icon_color="white",
+                            icon_size=18,
+                            on_click=_close_dialog,
+                        ),
+                    ],
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.symmetric(horizontal=16, vertical=12),
+                gradient=ft.LinearGradient(
+                    begin=ft.alignment.center_left,
+                    end=ft.alignment.center_right,
+                    colors=[COLORS["primary"], COLORS["primary_light"]],
+                ),
+                border_radius=ft.border_radius.only(top_left=12, top_right=12),
+            ),
+            content=ft.Container(
+                content=template_builder,
+                width=650,
+                bgcolor=COLORS["primary_light"],
+                padding=ft.padding.all(0),
+            ),
+            actions=[],
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
+    # Инфо-строка о текущем шаблоне
+    def _template_info_text():
+        name = collection.template.name or "Новая форма"
+        n_items = len(collection.template.items)
+        dept_mode = "да" if collection.template.use_departments_mode else "нет"
+        return f"{name} · {n_items} пунктов · по отделам: {dept_mode}"
+
+    template_info = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.icons.DESCRIPTION_OUTLINED, size=14,
+                        color=COLORS["text_muted"]),
+                ft.Text(
+                    _template_info_text(),
+                    size=11,
+                    color=COLORS["text_muted"],
+                    italic=True,
+                ),
+            ],
+            spacing=6,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        ),
+        padding=ft.padding.only(left=4, top=2, bottom=2),
     )
-    template_builder_wrapper = ft.Column(controls=[template_builder], spacing=0)
-    template_builder_ref["control"] = template_builder_wrapper
-
-    # ── Кнопки фильтра (сегментированный переключатель) ─────────
     filter_buttons: Dict[str, ft.Container] = {}
 
     def _filter_count(value: str) -> int:
@@ -1026,6 +1083,19 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         tooltip="Выгрузить сводную таблицу в файл Excel",
     )
 
+    settings_btn = ft.IconButton(
+        icon=ft.icons.SETTINGS_OUTLINED,
+        icon_size=20,
+        icon_color=COLORS["text_secondary"],
+        tooltip="Настройка сбора данных (шаблон, пункты, режим)",
+        style=ft.ButtonStyle(
+            bgcolor=COLORS["primary_light"],
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.all(8),
+        ),
+        on_click=_open_template_settings,
+    )
+
     # Тулбар: фиксированная высота, чтобы Container внутри Column(scroll=AUTO)
     # не пытался расти на всю доступную высоту. Внутренние Row —
     # с tight=True и alignment=START, чтобы не растягиваться по горизонтали.
@@ -1045,6 +1115,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 copy_btn,
                 clear_all_btn,
                 export_btn,
+                ft.Container(expand=True),
+                settings_btn,
             ],
             spacing=8,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1118,8 +1190,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     tab_content = ft.Column(
         controls=[
-            template_builder_wrapper,
-            ft.Container(height=12),
+            template_info,
+            ft.Container(height=8),
             crim_summary_col,
             ft.Container(height=14),
             toolbar,

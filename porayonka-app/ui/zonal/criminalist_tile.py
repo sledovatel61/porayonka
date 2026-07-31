@@ -1,5 +1,5 @@
 # ui/zonal/criminalist_tile.py
-# Увеличенная плашка криминалиста (300x340) с фиксированным безопасным layout.
+# Компактная плашка криминалиста (300x320) с предсказуемым layout.
 # Flet 0.23.2: без animate/gradient/shadow/wrap/expand внутри плашки.
 import flet as ft
 
@@ -9,7 +9,7 @@ from core.zonal_models import ReportItemType
 
 
 _TILE_WIDTH = 300
-_TILE_HEIGHT = 340
+_TILE_HEIGHT = 320
 _TILE_RADIUS = 14
 _BORDER_LEFT = 4
 _BORDER_OTHER = 1
@@ -78,16 +78,16 @@ def _tile_content_layer(content_col: ft.Column, accent_color: str) -> ft.Stack:
     )
 
 
-def _build_zone_block(criminalist, dept_map: dict) -> ft.Column:
-    """Показать каждый закреплённый отдел отдельной читаемой строкой."""
+def _build_zone_block(criminalist, dept_map: dict) -> ft.Container:
+    """Список отделов в одну строку с "+N" для экономии места."""
     zone_names = [
         dept_map.get(department_id, f"Отдел {department_id}")
         for department_id in criminalist.zone.department_ids
     ]
-    rows = []
+    
     if not zone_names:
-        rows.append(
-            ft.Row(
+        return ft.Container(
+            content=ft.Row(
                 controls=[
                     ft.Icon(ft.icons.PLACE_OUTLINED, size=13,
                             color=COLORS.get("text_muted", "#64748b")),
@@ -95,52 +95,63 @@ def _build_zone_block(criminalist, dept_map: dict) -> ft.Column:
                         "Отделы не закреплены",
                         size=11,
                         color=COLORS.get("text_muted", "#64748b"),
-                        width=_INNER_WIDTH - 20,
+                        max_lines=1,
+                        overflow=ft.TextOverflow.ELLIPSIS,
                     ),
                 ],
                 spacing=4,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            width=_INNER_WIDTH,
+        )
+    
+    # Показываем первый отдел + "+N" если их больше
+    first_name = zone_names[0]
+    remaining = len(zone_names) - 1
+    
+    controls = [
+        ft.Icon(ft.icons.PLACE_OUTLINED, size=13,
+                color=COLORS.get("text_muted", "#64748b")),
+        ft.Text(
+            first_name,
+            size=11,
+            color=COLORS.get("text_secondary", "#94a3b8"),
+            max_lines=1,
+            overflow=ft.TextOverflow.ELLIPSIS,
+            expand=True,
+        ),
+    ]
+    
+    if remaining > 0:
+        controls.append(
+            ft.Container(
+                content=ft.Text(
+                    f"+{remaining}",
+                    size=10,
+                    color=COLORS.get("text_muted", "#64748b"),
+                    weight=ft.FontWeight.W_600,
+                ),
+                bgcolor=COLORS.get("primary_light", "#1e293b"),
+                border_radius=8,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
             )
         )
-    else:
-        for index, department_name in enumerate(zone_names):
-            rows.append(
-                ft.Row(
-                    controls=[
-                        ft.Icon(
-                            ft.icons.PLACE_OUTLINED if index == 0 else ft.icons.CHEVRON_RIGHT,
-                            size=13,
-                            color=COLORS.get("text_muted", "#64748b"),
-                        ),
-                        ft.Text(
-                            department_name,
-                            size=11,
-                            color=COLORS.get("text_secondary", "#94a3b8"),
-                            width=_INNER_WIDTH - 20,
-                            max_lines=2,
-                            overflow=ft.TextOverflow.CLIP,
-                            tooltip=department_name,
-                        ),
-                    ],
-                    spacing=4,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                )
-            )
-    return ft.Column(
-        controls=rows,
-        spacing=2,
+    
+    full_list = "\n".join(f"• {name}" for name in zone_names)
+    
+    return ft.Container(
+        content=ft.Row(
+            controls=controls,
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
         width=_INNER_WIDTH,
-        horizontal_alignment=ft.CrossAxisAlignment.START,
+        tooltip=f"Закреплённые отделы:\n{full_list}",
     )
 
 
 def _item_value_text(collection, criminalist, item) -> str:
-    """Значение пункта для показа прямо на плашке.
-
-    Числовой в режиме по отделам: "8 шт. · 2/3 отд.".
-    Числовой обычный: "8 шт." или "нет данных".
-    Да/нет: "Сдано" / "Не сдано" (одна общая отметка, без разбивки).
-    """
+    """Значение пункта для показа прямо на плашке."""
     report_data = None
     for submission in collection.submissions:
         if (submission.criminalist_id == criminalist.id
@@ -177,10 +188,7 @@ def _item_value_text(collection, criminalist, item) -> str:
 
 
 def _fit_name_size(items, card_width: int, base_size: int, min_size: int = 8) -> int:
-    """Подобрать кегль названия: самое длинное должно уместиться в 2 строки.
-
-    Одинаковый для всех карточек плашки — масштабирование равнозначное.
-    """
+    """Подобрать кегль названия: самое длинное должно уместиться в 2 строки."""
     inner = card_width - 12  # padding 6 px с каждой стороны
     max_len = max((len(item.name) for item in items), default=0)
     size = base_size
@@ -193,28 +201,23 @@ def _fit_name_size(items, card_width: int, base_size: int, min_size: int = 8) ->
 
 
 def _detail_profile(items):
-    """Колонки, размер карточки и кегли по количеству пунктов шаблона.
-
-    1 пункт  — одна широкая карточка на всю ширину, крупный текст;
-    2 пункта — две карточки в ряд, средний текст;
-    3-4      — две карточки в ряд, компактный текст.
-    """
+    """Колонки, размер карточки и кегли по количеству пунктов шаблона."""
     count = len(items)
     if count <= 1:
-        columns, height, base_name, value_size = 1, 66, 15, 17
+        columns, base_name, value_size = 1, 15, 17
     elif count == 2:
-        columns, height, base_name, value_size = 2, 58, 13, 14
+        columns, base_name, value_size = 2, 13, 14
     else:
-        columns, height, base_name, value_size = 2, 50, 11, 12
+        columns, base_name, value_size = 2, 11, 12
     width = (_INNER_WIDTH - _DETAIL_SPACING * (columns - 1)) // columns
     name_size = _fit_name_size(items, width, base_name)
-    return columns, width, height, name_size, value_size
+    return columns, width, name_size, value_size
 
 
 def _build_detail_card(collection, criminalist, item, filled: bool,
-                       card_width: int, card_height: int,
+                       card_width: int,
                        name_size: int, value_size: int) -> ft.Container:
-    """Карточка пункта: название (до 2 строк) + значение вместо птички."""
+    """Карточка пункта: название (до 2 строк) + значение в одну строку с ELLIPSIS."""
     if filled:
         bg = COLORS.get("received_bg", "#052e16")
         border_color = COLORS.get("received", "#22c55e")
@@ -230,11 +233,10 @@ def _build_detail_card(collection, criminalist, item, filled: bool,
 
     return ft.Container(
         width=card_width,
-        height=card_height,
         bgcolor=bg,
         border=ft.border.all(1, border_color),
         border_radius=8,
-        padding=ft.padding.symmetric(horizontal=6, vertical=4),
+        padding=ft.padding.symmetric(horizontal=6, vertical=6),
         tooltip=f"{item.name}: {value_text}",
         content=ft.Column(
             controls=[
@@ -257,19 +259,15 @@ def _build_detail_card(collection, criminalist, item, filled: bool,
                     overflow=ft.TextOverflow.ELLIPSIS,
                 ),
             ],
-            spacing=2,
-            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=3,
+            tight=True,
             horizontal_alignment=ft.CrossAxisAlignment.START,
         ),
     )
 
 
 def _build_details_block(criminalist, collection) -> ft.Column:
-    """Карточки пунктов с адаптивным масштабированием (без wrap=True).
-
-    Количество колонок, размер карточек и кегли вычисляются в
-    _detail_profile() по числу пунктов и длине самого длинного названия.
-    """
+    """Карточки пунктов с адаптивным масштабированием."""
     items = sorted(collection.template.items, key=lambda item: item.order)
     if not items:
         return ft.Column(
@@ -317,7 +315,7 @@ def _build_details_block(criminalist, collection) -> ft.Column:
             spacing=0,
         )
 
-    columns, card_width, card_height, name_size, value_size = _detail_profile(items)
+    columns, card_width, name_size, value_size = _detail_profile(items)
     rows = []
     for index in range(0, len(items), columns):
         chunk = items[index:index + columns]
@@ -330,7 +328,6 @@ def _build_details_block(criminalist, collection) -> ft.Column:
                         item,
                         is_item_filled(collection, criminalist, item),
                         card_width,
-                        card_height,
                         name_size,
                         value_size,
                     )
@@ -338,7 +335,7 @@ def _build_details_block(criminalist, collection) -> ft.Column:
                 ],
                 spacing=_DETAIL_SPACING,
                 alignment=ft.MainAxisAlignment.START,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.START,
             )
         )
     return ft.Column(
@@ -366,12 +363,13 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
         tooltip=criminalist.full_name,
     )
 
+    # Бейдж "Активен/Откл" — outline для активного, серый для отключённого
     if criminalist.is_active:
         chip_text = "Активен"
-        chip_color = COLORS.get("received_text", "#4ade80")
-        chip_bg = COLORS.get("received_bg", "#052e16")
-        chip_border = COLORS.get("received", "#22c55e")
-        chip_icon = ft.icons.CHECK_CIRCLE
+        chip_color = COLORS.get("text_secondary", "#94a3b8")
+        chip_bg = "transparent"
+        chip_border = COLORS.get("border", "#334155")
+        chip_icon = ft.icons.CIRCLE
         chip_tooltip = "Участвует в сборе (нажмите, чтобы отключить)"
     else:
         chip_text = "Откл"
@@ -384,8 +382,8 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
     activity_chip = ft.Container(
         content=ft.Row(
             controls=[
-                ft.Icon(chip_icon, size=14, color=chip_color),
-                ft.Text(chip_text, size=12, color=chip_color,
+                ft.Icon(chip_icon, size=12, color=chip_color),
+                ft.Text(chip_text, size=11, color=chip_color,
                         weight=ft.FontWeight.W_600, no_wrap=True),
             ],
             spacing=3,
@@ -393,11 +391,11 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             tight=True,
         ),
-        width=72,
-        height=24,
+        width=68,
+        height=22,
         bgcolor=chip_bg,
         border=ft.border.all(1, chip_border),
-        border_radius=12,
+        border_radius=11,
         alignment=ft.alignment.center,
         on_click=lambda e: (_safe_stop(e), callbacks["on_toggle_active"](criminalist)),
         tooltip=chip_tooltip,
@@ -410,12 +408,23 @@ def _build_content(criminalist, collection, dept_map, callbacks) -> ft.Column:
         alignment=ft.MainAxisAlignment.START,
     )
 
+    # Адаптивный процент: при 0% тихий, с ростом крупнее
+    if pct == 0:
+        pct_size = 20
+        pct_weight = ft.FontWeight.W_500
+    elif pct < 50:
+        pct_size = 24
+        pct_weight = ft.FontWeight.W_600
+    else:
+        pct_size = 28
+        pct_weight = ft.FontWeight.BOLD
+
     progress_numbers = ft.Column(
         controls=[
             ft.Text(
                 f"{pct}%",
-                size=28,
-                weight=ft.FontWeight.BOLD,
+                size=pct_size,
+                weight=pct_weight,
                 color=pct_color,
             ),
             ft.Text(
@@ -572,12 +581,18 @@ def create_criminalist_drag_feedback(criminalist):
 
 
 def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
-    """Создать увеличенную плашку; публичный контракт не меняется."""
+    """Создать компактную плашку; публичный контракт не меняется."""
     print(f"[TILE] Creating tile: {criminalist.id}")
     pct_init = get_criminalist_fill(collection, criminalist)["percent"]
     accent_init, _ = _progress_palette(pct_init)
     if not criminalist.is_active:
         accent_init = COLORS.get("border", "#334155")
+
+    # Свечение для 100% — мягкая зелёная рамка
+    if pct_init >= 100 and criminalist.is_active:
+        border_init = ft.border.all(1.5, COLORS.get("received", "#22c55e"))
+    else:
+        border_init = _uniform_tile_border(COLORS.get("border", "#334155"))
 
     tile = ft.Container(
         content=_tile_content_layer(
@@ -587,7 +602,7 @@ def create_criminalist_tile(criminalist, collection, dept_map, callbacks):
         width=_TILE_WIDTH,
         height=_TILE_HEIGHT,
         bgcolor=COLORS.get("card", "#15202e"),
-        border=_uniform_tile_border(COLORS.get("border", "#334155")),
+        border=border_init,
         border_radius=_TILE_RADIUS,
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
         ink=True,
