@@ -16,7 +16,7 @@ _STATUS_WIDTH = 116
 _CHIP_WIDTH = 280
 _CHIP_HEIGHT = 85
 _CHIP_SPACING = 8
-_CHIPS_PER_ROW = 3
+_CHIPS_PER_ROW = 4
 _CHIPS_BLOCK_WIDTH = _CHIPS_PER_ROW * _CHIP_WIDTH + (_CHIPS_PER_ROW - 1) * _CHIP_SPACING
 
 
@@ -123,6 +123,13 @@ def _item_chip(collection, criminalist, item) -> ft.Container:
         bg = COLORS.get("received_bg", "#052e16")
         border_color = COLORS.get("received", "#22c55e")
         value_color = COLORS.get("received_text", "#4ade80")
+    elif item.item_type == ReportItemType.DELIVERABLE:
+        # Незаполненный "сдал/не сдал" — жёлтая подсветка, как "Частично"
+        icon = ft.icons.HOURGLASS_BOTTOM
+        icon_color = COLORS.get("in_progress_text", "#fbbf24")
+        bg = COLORS.get("in_progress_bg", "#451a03")
+        border_color = COLORS.get("in_progress", "#f59e0b")
+        value_color = COLORS.get("in_progress_text", "#fbbf24")
     else:
         icon = ft.icons.RADIO_BUTTON_UNCHECKED
         icon_color = COLORS.get("text_muted", "#64748b")
@@ -132,6 +139,7 @@ def _item_chip(collection, criminalist, item) -> ft.Container:
 
     return ft.Container(
         width=_CHIP_WIDTH,
+        height=_CHIP_HEIGHT,
         bgcolor=bg,
         border=ft.border.all(1, border_color),
         border_radius=10,
@@ -321,6 +329,7 @@ def _aggregate_item_card(collection, item, active_criminalists) -> ft.Container:
 
     return ft.Container(
         width=_CHIP_WIDTH,
+        height=_CHIP_HEIGHT,
         bgcolor=COLORS.get("stat_blue_bg", "#172554"),
         border=ft.border.all(1, COLORS.get("stat_blue_border", "#3b82f6")),
         border_radius=10,
