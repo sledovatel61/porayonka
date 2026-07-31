@@ -123,20 +123,21 @@ def main(page: ft.Page) -> None:
     page.overlay.extend([export_modal, reset_modal])
 
     # ── Содержимое первой вкладки ────────────────────────────────
+    # Канбан-доска должна заполнять оставшееся пространство по вертикали,
+    # поэтому внешняя Column БЕЗ scroll — прокрутка внутри колонок канбана.
     tab1_content = ft.Container(
         content=ft.Column(
             controls=[
                 stats_bar,
-                ft.Container(height=16),
+                ft.Container(height=12),
                 toolbar,
-                ft.Container(height=10),
+                ft.Container(height=8),
                 legend,
-                ft.Container(height=14),
+                ft.Container(height=10),
                 table,
-                ft.Container(height=20),
             ],
             spacing=0,
-            scroll=ft.ScrollMode.AUTO,
+            expand=True,
         ),
         padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
         expand=True,
