@@ -454,6 +454,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         dialog = ft.AlertDialog(
             modal=True,
+            bgcolor=COLORS["primary_light"],
             title=ft.Text("Удаление криминалиста", size=16,
                           weight=ft.FontWeight.BOLD, color=COLORS["text"]),
             content=ft.Text(
@@ -558,6 +559,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             inactive_note = f"\n\n({inactive_count} криминалистов отключено)" if inactive_count else ""
             dialog = ft.AlertDialog(
                 modal=True,
+                bgcolor=COLORS["primary_light"],
                 title=ft.Text("Загрузка шаблона", size=16,
                               weight=ft.FontWeight.BOLD, color=COLORS["text"]),
                 content=ft.Text(
@@ -703,6 +705,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         dialog = ft.AlertDialog(
             modal=True,
+            bgcolor=COLORS["primary_light"],
             title=ft.Text("Сброс данных", size=16,
                           weight=ft.FontWeight.BOLD, color=COLORS["text"]),
             content=ft.Text(
@@ -752,6 +755,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         dialog = ft.AlertDialog(
             modal=True,
+            bgcolor=COLORS["primary_light"],
             title=ft.Row(
                 controls=[
                     ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, size=20, color="#f59e0b"),
@@ -831,17 +835,23 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             try:
                 ZonalExcelExporter().export(collection, e.path)
                 show_export_toast(page, "Зональные Excel")
-                # Показать кнопку "Открыть отчёт"
-                _show_open_file_button(e.path)
+                page._last_export_path["value"] = e.path
+                # Показать кнопку "Открыть отчёт" в тулбаре
+                page._open_report_btn.visible = True
+                try:
+                    page._open_report_btn.update()
+                except Exception:
+                    page.update()
             except Exception as ex:
                 print(f"[ZONAL_TAB] Export error: {ex}")
                 show_error_toast(page, f"Ошибка экспорта: {ex}")
 
-        # Создаём FilePicker если ещё нет
+        # Создаём FilePicker один раз и добавляем в overlay
         if not hasattr(page, "_zonal_file_picker"):
             picker = ft.FilePicker(on_result=_on_file_picked)
             page.overlay.append(picker)
             page._zonal_file_picker = picker
+            page.update()  # ВАЖНО: обновить page после добавления в overlay
 
         from datetime import datetime as dt
         default_name = f"zonal_{dt.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -851,77 +861,38 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             allowed_extensions=["xlsx"],
         )
 
-    def _show_open_file_button(filepath: str):
-        """Показать кнопку 'Открыть отчёт' после успешного экспорта."""
+    # Кнопка "Открыть отчёт" — появляется после экспорта
+    open_report_btn = ft.ElevatedButton(
+        text="Открыть отчёт",
+        icon=ft.icons.OPEN_IN_NEW,
+        bgcolor=COLORS["received"],
+        color=COLORS["text_light"],
+        height=38,
+        visible=False,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=14),
+        ),
+        on_click=lambda e: _open_last_export(),
+        tooltip="Открыть последний сохранённый отчёт",
+    )
+    page._open_report_btn = open_report_btn
+    page._last_export_path = {"value": None}
+
+    def _open_last_export():
         import subprocess, sys, os
-
-        def _open_file(e=None):
-            try:
-                if sys.platform == "win32":
-                    os.startfile(filepath)
-                elif sys.platform == "darwin":
-                    subprocess.Popen(["open", filepath])
-                else:
-                    subprocess.Popen(["xdg-open", filepath])
-            except Exception as ex:
-                print(f"[ZONAL_TAB] Open file error: {ex}")
-
-        def _dismiss(e=None):
-            container.visible = False
-            try:
-                container.update()
-            except Exception:
-                pass
-
-        container = ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Icon(ft.icons.CHECK_CIRCLE, size=16, color=COLORS["received"]),
-                    ft.Text("Отчёт сохранён", size=12, color=COLORS["text"],
-                            weight=ft.FontWeight.W_500),
-                    ft.TextButton(
-                        "Открыть отчёт",
-                        icon=ft.icons.OPEN_IN_NEW,
-                        style=ft.ButtonStyle(color=COLORS["btn_save"]),
-                        on_click=_open_file,
-                    ),
-                    ft.IconButton(
-                        icon=ft.icons.CLOSE, icon_size=14,
-                        icon_color=COLORS["text_muted"],
-                        on_click=_dismiss,
-                    ),
-                ],
-                spacing=6,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                tight=True,
-            ),
-            bgcolor=COLORS["card"],
-            border=ft.border.all(1, COLORS["received"]),
-            border_radius=10,
-            padding=ft.padding.symmetric(horizontal=12, vertical=6),
-            visible=True,
-        )
-
-        # Добавляем в overlay как snack-bar
-        def _auto_dismiss():
-            import time
-            time.sleep(8)
-            try:
-                container.visible = False
-                container.update()
-            except Exception:
-                pass
-
-        # Показываем через page.overlay + bottom sheet
-        page.overlay.append(container)
+        path = page._last_export_path.get("value")
+        if not path or not os.path.exists(path):
+            return
         try:
-            container.update()
-        except Exception:
-            page.update()
-
-        # Авто-скрытие через 8 секунд
-        import threading
-        threading.Thread(target=_auto_dismiss, daemon=True).start()
+            if sys.platform == "win32":
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as ex:
+            print(f"[ZONAL_TAB] Open file error: {ex}")
 
     def _rebuild_template_builder():
         # Template builder теперь в модалке — пересоздаётся при открытии
@@ -952,36 +923,27 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
         dialog = ft.AlertDialog(
             modal=True,
-            bgcolor=COLORS["primary_light"],
-            title=ft.Container(
-                content=ft.Row(
-                    controls=[
-                        ft.Icon(ft.icons.SETTINGS_OUTLINED, size=18, color="white"),
-                        ft.Text("Настройка сбора данных", size=16,
-                                weight=ft.FontWeight.BOLD, color="white"),
-                        ft.Container(expand=True),
-                        ft.IconButton(
-                            icon=ft.icons.CLOSE,
-                            icon_color="white",
-                            icon_size=18,
-                            on_click=_close_dialog,
-                        ),
-                    ],
-                    spacing=8,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                padding=ft.padding.symmetric(horizontal=16, vertical=12),
-                gradient=ft.LinearGradient(
-                    begin=ft.alignment.center_left,
-                    end=ft.alignment.center_right,
-                    colors=[COLORS["primary"], COLORS["primary_light"]],
-                ),
-                border_radius=ft.border_radius.only(top_left=12, top_right=12),
+            bgcolor=COLORS["card"],
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.icons.SETTINGS_OUTLINED, size=20, color=COLORS["text"]),
+                    ft.Text("Настройка сбора данных", size=16,
+                            weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+                    ft.Container(expand=True),
+                    ft.IconButton(
+                        icon=ft.icons.CLOSE,
+                        icon_color=COLORS["text_secondary"],
+                        icon_size=18,
+                        on_click=_close_dialog,
+                    ),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             content=ft.Container(
                 content=template_builder,
                 width=650,
-                bgcolor=COLORS["primary_light"],
+                bgcolor=COLORS["card"],
                 padding=ft.padding.all(0),
             ),
             actions=[],
@@ -1201,6 +1163,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 copy_btn,
                 clear_all_btn,
                 export_btn,
+                open_report_btn,
                 ft.Container(expand=True),
                 settings_btn,
             ],
