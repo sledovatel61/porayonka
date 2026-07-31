@@ -118,9 +118,7 @@ def create_compact_header(
 ) -> ft.Container:
     """
     Компактная шапка приложения (высота ~48 px вместо ~130 px).
-    :param page: страница Flet
-    :param last_save: дата последнего сохранения
-    :param tabs_control: готовый переключатель вкладок
+    Слева — переключатель вкладок, справа — кнопки + дата последнего сохранения.
     """
     save_text = ft.Text(
         value=(last_save.strftime("%d.%m.%Y, %H:%M:%S")
@@ -132,13 +130,180 @@ def create_compact_header(
     )
     page.save_date_text = save_text
 
+    # ── Модалка «О программе» ──────────────────────────────────────
+    def _open_about(e=None):
+        def _close(e=None):
+            dialog.open = False
+            page.update()
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            bgcolor=COLORS["primary_light"],
+            title=ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.icons.INFO_OUTLINE, size=20, color="white"),
+                        ft.Text("О программе", size=16,
+                                weight=ft.FontWeight.BOLD, color="white"),
+                    ],
+                    spacing=8,
+                ),
+                padding=ft.padding.symmetric(horizontal=16, vertical=12),
+                gradient=ft.LinearGradient(
+                    begin=ft.alignment.center_left,
+                    end=ft.alignment.center_right,
+                    colors=[COLORS["primary"], COLORS["primary_light"]],
+                ),
+                border_radius=ft.border_radius.only(top_left=12, top_right=12),
+            ),
+            content=ft.Container(
+                width=500,
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Порайонка v. 3.0", size=20,
+                                weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+                        ft.Container(height=8),
+                        ft.Text(
+                            "Разработчик: Старший следователь-криминалист "
+                            "отдела криминалистики СУ СК России по Ростовской области "
+                            "Гайнутдинов Станислав Игоревич",
+                            size=13,
+                            color=COLORS["text_secondary"],
+                        ),
+                        ft.Container(height=12),
+                        ft.Text("Возможности приложения:", size=14,
+                                weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+                        ft.Container(height=6),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Трекер статусов следственных отделов СК РФ "
+                                    "(получено / запрошено / не получено)",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Kanban-доска с визуальным отображением прогресса",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Зональные криминалисты: сбор данных по форме "
+                                    "с привязкой к отделам",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Настраиваемый шаблон формы сбора (пункты, "
+                                    "типы, единицы измерения)",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Экспорт сводки в Excel для руководства",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Drag-and-drop сортировка криминалистов",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Автосохранение данных, KPI-дашборд, "
+                                    "фильтрация и поиск",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Container(height=12),
+                        ft.Text(
+                            "Приложение создано для автоматизации учёта "
+                            "и контроля работы следственных отделов и зональных "
+                            "криминалистов СК РФ по Ростовской области.",
+                            size=12,
+                            color=COLORS["text_muted"],
+                            italic=True,
+                        ),
+                    ],
+                    spacing=0,
+                    tight=True,
+                ),
+                padding=ft.padding.all(20),
+            ),
+            actions=[
+                ft.ElevatedButton(
+                    "Закрыть",
+                    bgcolor=COLORS["btn_save"],
+                    color="white",
+                    on_click=_close,
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
+    page._open_about = _open_about
+
+    # ── Кнопка «Настройка формы» (для вкладки Зональные) ──────────
+    btn_settings = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.icons.SETTINGS_OUTLINED, size=14,
+                        color=COLORS["text_secondary"]),
+                ft.Text("Настройка формы", size=11,
+                        color=COLORS["text_secondary"],
+                        weight=ft.FontWeight.W_500, no_wrap=True),
+            ],
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        ),
+        height=28,
+        padding=ft.padding.symmetric(horizontal=10),
+        border_radius=8,
+        border=ft.border.all(1, COLORS["border"]),
+        alignment=ft.alignment.center,
+        ink=True,
+        on_click=lambda e: (page._open_template_settings()
+                            if hasattr(page, "_open_template_settings") else None),
+        tooltip="Настройка шаблона сбора данных (вкладка «Зональные»)",
+    )
+
+    # ── Кнопка «О программе» ──────────────────────────────────────
+    btn_about = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.icons.INFO_OUTLINE, size=14,
+                        color=COLORS["text_secondary"]),
+                ft.Text("О программе", size=11,
+                        color=COLORS["text_secondary"],
+                        weight=ft.FontWeight.W_500, no_wrap=True),
+            ],
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        ),
+        height=28,
+        padding=ft.padding.symmetric(horizontal=10),
+        border_radius=8,
+        border=ft.border.all(1, COLORS["border"]),
+        alignment=ft.alignment.center,
+        ink=True,
+        on_click=_open_about,
+        tooltip="Информация о приложении и разработчике",
+    )
+
     right_block = ft.Row(
         controls=[
+            btn_settings,
+            btn_about,
+            ft.Container(width=1, height=20, bgcolor=COLORS["border"]),
             ft.Icon(ft.icons.SCHEDULE, size=13, color=COLORS["text_muted"]),
             ft.Text("Сохранено:", size=11, color=COLORS["text_muted"], no_wrap=True),
             save_text,
         ],
-        spacing=5,
+        spacing=8,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
         tight=True,
     )

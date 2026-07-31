@@ -821,24 +821,107 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         refresh_all_tiles()
 
     def on_export_excel():
-        import os
-        from pathlib import Path
-        from datetime import datetime
+        """Экспорт через FilePicker — пользователь выбирает место сохранения."""
         from core.zonal_exporter import ZonalExcelExporter
+        from ui.toast import show_export_toast, show_error_toast
+
+        def _on_file_picked(e: ft.FilePickerResultEvent):
+            if not e.path:
+                return
+            try:
+                ZonalExcelExporter().export(collection, e.path)
+                show_export_toast(page, "Зональные Excel")
+                # Показать кнопку "Открыть отчёт"
+                _show_open_file_button(e.path)
+            except Exception as ex:
+                print(f"[ZONAL_TAB] Export error: {ex}")
+                show_error_toast(page, f"Ошибка экспорта: {ex}")
+
+        # Создаём FilePicker если ещё нет
+        if not hasattr(page, "_zonal_file_picker"):
+            picker = ft.FilePicker(on_result=_on_file_picked)
+            page.overlay.append(picker)
+            page._zonal_file_picker = picker
+
+        from datetime import datetime as dt
+        default_name = f"zonal_{dt.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        page._zonal_file_picker.save_file(
+            dialog_title="Сохранить отчёт Excel",
+            file_name=default_name,
+            allowed_extensions=["xlsx"],
+        )
+
+    def _show_open_file_button(filepath: str):
+        """Показать кнопку 'Открыть отчёт' после успешного экспорта."""
+        import subprocess, sys, os
+
+        def _open_file(e=None):
+            try:
+                if sys.platform == "win32":
+                    os.startfile(filepath)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", filepath])
+                else:
+                    subprocess.Popen(["xdg-open", filepath])
+            except Exception as ex:
+                print(f"[ZONAL_TAB] Open file error: {ex}")
+
+        def _dismiss(e=None):
+            container.visible = False
+            try:
+                container.update()
+            except Exception:
+                pass
+
+        container = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.icons.CHECK_CIRCLE, size=16, color=COLORS["received"]),
+                    ft.Text("Отчёт сохранён", size=12, color=COLORS["text"],
+                            weight=ft.FontWeight.W_500),
+                    ft.TextButton(
+                        "Открыть отчёт",
+                        icon=ft.icons.OPEN_IN_NEW,
+                        style=ft.ButtonStyle(color=COLORS["btn_save"]),
+                        on_click=_open_file,
+                    ),
+                    ft.IconButton(
+                        icon=ft.icons.CLOSE, icon_size=14,
+                        icon_color=COLORS["text_muted"],
+                        on_click=_dismiss,
+                    ),
+                ],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
+            ),
+            bgcolor=COLORS["card"],
+            border=ft.border.all(1, COLORS["received"]),
+            border_radius=10,
+            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            visible=True,
+        )
+
+        # Добавляем в overlay как snack-bar
+        def _auto_dismiss():
+            import time
+            time.sleep(8)
+            try:
+                container.visible = False
+                container.update()
+            except Exception:
+                pass
+
+        # Показываем через page.overlay + bottom sheet
+        page.overlay.append(container)
         try:
-            home = Path.home()
-            downloads = home / "Downloads"
-            if not downloads.exists():
-                downloads = home
-            filename = f"zonal_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            filepath = str(downloads / filename)
-            ZonalExcelExporter().export(collection, filepath)
-            from ui.toast import show_export_toast
-            show_export_toast(page, "Зональные Excel")
-        except Exception as e:
-            print(f"[ZONAL_TAB] Export error: {e}")
-            from ui.toast import show_error_toast
-            show_error_toast(page, f"Ошибка экспорта: {e}")
+            container.update()
+        except Exception:
+            page.update()
+
+        # Авто-скрытие через 8 секунд
+        import threading
+        threading.Thread(target=_auto_dismiss, daemon=True).start()
 
     def _rebuild_template_builder():
         # Template builder теперь в модалке — пересоздаётся при открытии
@@ -907,6 +990,9 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         page.overlay.append(dialog)
         dialog.open = True
         page.update()
+
+    # Регистрируем в page для доступа из header
+    page._open_template_settings = _open_template_settings
 
     # Инфо-строка о текущем шаблоне
     def _template_info_text():

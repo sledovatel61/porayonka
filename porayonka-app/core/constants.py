@@ -100,4 +100,4 @@ TOTAL_DEPARTMENTS = len(INITIAL_DEPARTMENTS)  # 29
 
 APP_TITLE    = "Порайонка"
 APP_SUBTITLE = "Следственный комитет РФ · Ростовская область"
-APP_VERSION  = "1.0"
+APP_VERSION  = "3.0"
