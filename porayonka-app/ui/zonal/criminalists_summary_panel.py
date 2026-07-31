@@ -132,7 +132,6 @@ def _item_chip(collection, criminalist, item) -> ft.Container:
 
     return ft.Container(
         width=_CHIP_WIDTH,
-        height=_CHIP_HEIGHT,
         bgcolor=bg,
         border=ft.border.all(1, border_color),
         border_radius=10,
@@ -167,6 +166,7 @@ def _item_chip(collection, criminalist, item) -> ft.Container:
                 ),
             ],
             spacing=5,
+            tight=True,
             horizontal_alignment=ft.CrossAxisAlignment.START,
         ),
     )
@@ -321,7 +321,6 @@ def _aggregate_item_card(collection, item, active_criminalists) -> ft.Container:
 
     return ft.Container(
         width=_CHIP_WIDTH,
-        height=_CHIP_HEIGHT,
         bgcolor=COLORS.get("stat_blue_bg", "#172554"),
         border=ft.border.all(1, COLORS.get("stat_blue_border", "#3b82f6")),
         border_radius=10,
@@ -351,6 +350,8 @@ def _aggregate_item_card(collection, item, active_criminalists) -> ft.Container:
                     weight=ft.FontWeight.BOLD,
                     color=COLORS.get("stat_blue_text", "#60a5fa"),
                     width=_CHIP_WIDTH - 16,
+                    max_lines=1,
+                    overflow=ft.TextOverflow.ELLIPSIS,
                 ),
                 ft.Text(
                     detail,
@@ -362,6 +363,7 @@ def _aggregate_item_card(collection, item, active_criminalists) -> ft.Container:
                 ),
             ],
             spacing=3,
+            tight=True,
             horizontal_alignment=ft.CrossAxisAlignment.START,
         ),
     )
