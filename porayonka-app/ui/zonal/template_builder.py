@@ -289,7 +289,7 @@ def create_template_builder(
                     border=ft.border.all(1, COLORS["border"]),
                     border_radius=8,
                     padding=ft.padding.all(12),
-                    max_height=300,
+                    height=300,
                 ),
                 ft.Container(height=12),
                 # Кнопки
