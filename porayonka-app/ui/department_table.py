@@ -62,7 +62,7 @@ def _make_dept_row(dept: Department, row_index: int, on_status_click: Callable,
     row = ft.Container(
         # Физическая статусная полоса надёжнее border в Flet 0.23.2.
         content=ft.Row(controls=[
-            ft.Container(width=5, expand=True, bgcolor=marker),
+            ft.Container(width=5, height=52, bgcolor=marker),
             ft.Container(content=row_content, expand=True),
         ], spacing=0, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         # Фиксируем естественную высоту строки: это предотвращает схлопывание
