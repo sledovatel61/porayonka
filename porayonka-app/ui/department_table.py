@@ -1,5 +1,5 @@
 # ui/department_table.py
-# Kanban-доска: три колонки по статусам (Не получено / В работе / Получено)
+# Kanban-доска: три колонки по статусам (Не получено / Запрошено / Получено)
 import flet as ft
 from typing import List, Callable, Dict
 from core.models import Department, Status
@@ -19,7 +19,7 @@ _COLUMN_CONFIG: Dict[Status, dict] = {
         "count_color": COLORS["text_secondary"],
     },
     Status.IN_PROGRESS: {
-        "title": "В работе",
+        "title": "Запрошено",
         "header_color": COLORS["in_progress"],
         "header_bg": COLORS["in_progress_bg"],
         "col_bg": "#140f04",
@@ -42,8 +42,21 @@ _COLUMN_CONFIG: Dict[Status, dict] = {
     },
 }
 
-# Порядок колонок слева направо
+# Порядок колонок слева направо (жизненный цикл)
 _COLUMN_ORDER = [Status.EMPTY, Status.IN_PROGRESS, Status.RECEIVED]
+
+# Следующий статус при клике (справа по циклу)
+_NEXT_STATUS: Dict[Status, Status] = {
+    Status.EMPTY: Status.IN_PROGRESS,
+    Status.IN_PROGRESS: Status.RECEIVED,
+    Status.RECEIVED: Status.EMPTY,
+}
+
+
+def _next_status_label(dept: Department) -> str:
+    """Название статуса, в который перейдёт отдел при клике."""
+    next_s = _NEXT_STATUS.get(dept.status, Status.EMPTY)
+    return _COLUMN_CONFIG[next_s]["title"]
 
 
 def _make_card(dept: Department, on_click: Callable, col_cfg: dict) -> ft.Container:
@@ -54,6 +67,13 @@ def _make_card(dept: Department, on_click: Callable, col_cfg: dict) -> ft.Contai
     num_bg = COLORS["btn_reset"] if dept.is_ovd else COLORS["primary_light"]
 
     name_color = COLORS["text_muted"] if dept.is_ovd else COLORS["text"]
+
+    # Динамический tooltip: куда переедет при клике
+    if dept.is_active:
+        next_title = _next_status_label(dept)
+        tip = f"→ {next_title}"
+    else:
+        tip = "Отдел отключён"
 
     card = ft.Container(
         content=ft.Row(
@@ -101,7 +121,7 @@ def _make_card(dept: Department, on_click: Callable, col_cfg: dict) -> ft.Contai
         opacity=0.45 if not dept.is_active else 1.0,
         ink=True if dept.is_active else False,
         on_click=lambda e: on_click() if dept.is_active else None,
-        tooltip="Клик — переключить статус" if dept.is_active else "Отдел отключён",
+        tooltip=tip,
         animate_opacity=ft.animation.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
     )
 
@@ -119,17 +139,9 @@ def _make_card(dept: Department, on_click: Callable, col_cfg: dict) -> ft.Contai
     return card
 
 
-def _make_column(
-    status: Status,
-    departments: List[Department],
-    on_status_click: Callable[[Department], None],
-) -> ft.Container:
-    """Создать одну колонку канбана."""
-    cfg = _COLUMN_CONFIG[status]
-
-    # Счётчик
-    count = len(departments)
-    count_badge = ft.Container(
+def _make_count_badge(count: int, cfg: dict) -> ft.Container:
+    """Создать бейдж-счётчик для заголовка колонки."""
+    return ft.Container(
         content=ft.Text(
             str(count),
             size=12,
@@ -142,6 +154,19 @@ def _make_column(
         width=28,
         alignment=ft.alignment.center,
     )
+
+
+def _make_column(
+    status: Status,
+    departments: List[Department],
+    on_status_click: Callable[[Department], None],
+) -> ft.Container:
+    """Создать одну колонку канбана."""
+    cfg = _COLUMN_CONFIG[status]
+
+    # Счётчик — только активные отделы (совпадает с формулой KPI)
+    count = len(departments)
+    count_badge = _make_count_badge(count, cfg)
 
     # Заголовок колонки
     header = ft.Container(
@@ -263,10 +288,10 @@ def _build_kanban_row(
 
     columns = []
     for status in _COLUMN_ORDER:
-        # Фильтруем отделы данного статуса
+        # Фильтруем отделы данного статуса — только активные (совпадает с KPI)
         col_depts = [
             d for d in departments
-            if d.status == status and (not q or q in d.name.lower())
+            if d.status == status and d.is_active and (not q or q in d.name.lower())
         ]
         columns.append(_make_column(status, col_depts, on_status_click))
 
@@ -327,7 +352,7 @@ def filter_table(page: ft.Page, query: str) -> None:
 
     # Проверяем, есть ли хоть один результат
     if q:
-        matches = [d for d in departments if q in d.name.lower()]
+        matches = [d for d in departments if d.is_active and q in d.name.lower()]
         if not matches:
             # Показываем empty-state во всех колонках
             empty_columns = []
@@ -348,15 +373,7 @@ def filter_table(page: ft.Page, query: str) -> None:
                                 color=cfg["header_color"],
                             ),
                             ft.Container(expand=True),
-                            ft.Container(
-                                content=ft.Text("0", size=12, weight=ft.FontWeight.BOLD,
-                                                color=cfg["count_color"]),
-                                bgcolor=cfg["count_bg"],
-                                border_radius=10,
-                                padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                                min_width=24,
-                                alignment=ft.alignment.center,
-                            ),
+                            _make_count_badge(0, cfg),
                         ],
                         spacing=8,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,

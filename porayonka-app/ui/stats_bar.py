@@ -1,6 +1,6 @@
 # [DARK THEME] Обновлено только визуально, логика сохранена.
 # ui/stats_bar.py
-# Панель статистики: 4 карточки (Получено, В работе, Не получено, Прогресс)
+# Панель статистики: 4 карточки (Получено, Запрошено, Не получено, Прогресс)
 import flet as ft
 from typing import List
 from core.models import Department, Status
@@ -90,7 +90,7 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
         border_color=COLORS["stat_received_border"],
     )
 
-    # ── Карточка 2: В работе
+    # ── Карточка 2: Запрошено
     in_progress_text = ft.Text(
         str(stats["in_progress"]),
         size=28,
@@ -102,7 +102,7 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
         icon=ft.icons.REFRESH,
         icon_bg=COLORS["in_progress"],
         value_text=in_progress_text,
-        label="В работе",
+        label="Запрошено",
         card_bg=COLORS["stat_progress_bg"],
         border_color=COLORS["stat_progress_border"],
     )

@@ -16,7 +16,7 @@ _STATUS_CONFIG = {
         "icon_color": COLORS["text_light"],
     },
     Status.IN_PROGRESS: {
-        "label":      "В работе",
+        "label":      "Запрошено",
         "icon":       ft.icons.REFRESH,
         "icon_bg":    COLORS["in_progress"],
         "bg":         COLORS["in_progress_bg"],

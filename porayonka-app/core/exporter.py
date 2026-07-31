@@ -23,7 +23,7 @@ class ExcelExporter:
         Status.IN_PROGRESS: {
             "fill": "F39C12",
             "text": "FFFFFF",
-            "label": "В работе",
+            "label": "Запрошено",
         },
         Status.EMPTY: {
             "fill": "ECF0F1",
@@ -132,7 +132,7 @@ class ExcelExporter:
         ws.cell(row=summary_row, column=2,
                 value=f"Получено: {received}").font = Font(color="27AE60", bold=True)
         ws.cell(row=summary_row + 1, column=2,
-                value=f"В работе: {in_progress}").font = Font(color="F39C12", bold=True)
+                value=f"Запрошено: {in_progress}").font = Font(color="F39C12", bold=True)
         ws.cell(row=summary_row + 2, column=2,
                 value=f"Не получено: {empty}").font = Font(color="7F8C8D", bold=True)
         ws.cell(row=summary_row + 3, column=2,
@@ -168,7 +168,7 @@ class HTMLExporter:
     }
     STATUS_LABEL = {
         Status.RECEIVED: "✅ Получено",
-        Status.IN_PROGRESS: "🔄 В работе",
+        Status.IN_PROGRESS: "🔄 Запрошено",
         Status.EMPTY: "—",
     }
 
@@ -265,7 +265,7 @@ class HTMLExporter:
   <div class="summary">
     <strong>ИТОГО:</strong>
     <span style="color:#27AE60;">● Получено: <strong>{received}</strong></span>
-    <span style="color:#F39C12;">● В работе: <strong>{in_progress}</strong></span>
+    <span style="color:#F39C12;">● Запрошено: <strong>{in_progress}</strong></span>
     <span style="color:#94a3b8;">● Не получено: <strong>{empty}</strong></span>
     <span style="margin-left:auto;">Всего: <strong>{total}</strong></span>
   </div>

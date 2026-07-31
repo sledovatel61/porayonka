@@ -41,7 +41,7 @@ def create_legend() -> ft.Container:
             controls=[
                 legend_item(COLORS["received"],    "Получено",    "документы поступили"),
                 ft.Container(width=20),
-                legend_item(COLORS["in_progress"], "В работе",   "находится на рассмотрении"),
+                legend_item(COLORS["in_progress"], "Запрошено",  "запрос отправлен, ждём документы"),
                 ft.Container(width=20),
                 legend_item(COLORS["empty"],       "Не получено", ""),
                 ft.Container(expand=True),

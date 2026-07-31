@@ -88,6 +88,7 @@ def create_reset_modal(
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=0,
+                tight=True,
             ),
             width=380,
             padding=ft.padding.all(20),

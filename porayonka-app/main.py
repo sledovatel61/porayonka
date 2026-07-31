@@ -114,6 +114,25 @@ def main(page: ft.Page) -> None:
     toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset, on_edit_departments)
     legend = create_legend()
 
+    # Подсказка над канбаном
+    kanban_hint = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.icons.INFO_OUTLINE, size=14, color=COLORS["text_muted"]),
+                ft.Text(
+                    "Клик по карточке двигает её вправо по статусам →",
+                    size=11,
+                    color=COLORS["text_muted"],
+                    italic=True,
+                ),
+            ],
+            spacing=6,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        ),
+        padding=ft.padding.only(left=4, bottom=4),
+    )
+
     print(f"[OK] Departments loaded: {len(departments)}")
 
     table = create_department_table(page, departments, on_status_change)
@@ -133,7 +152,9 @@ def main(page: ft.Page) -> None:
                 toolbar,
                 ft.Container(height=8),
                 legend,
-                ft.Container(height=10),
+                ft.Container(height=6),
+                kanban_hint,
+                ft.Container(height=4),
                 table,
             ],
             spacing=0,

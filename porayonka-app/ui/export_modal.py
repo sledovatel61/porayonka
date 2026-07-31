@@ -87,7 +87,7 @@ def create_export_modal(
                     controls=[
                         _make_stat_col(stat_received_text,    "Получено",    COLORS["received_text"]),
                         ft.VerticalDivider(width=1, color=COLORS["border"]),
-                        _make_stat_col(stat_in_progress_text, "В работе",    COLORS["in_progress_text"]),
+                        _make_stat_col(stat_in_progress_text, "Запрошено",    COLORS["in_progress_text"]),
                         ft.VerticalDivider(width=1, color=COLORS["border"]),
                         _make_stat_col(stat_empty_text,       "Не получено", COLORS["text_secondary"]),
                     ],
