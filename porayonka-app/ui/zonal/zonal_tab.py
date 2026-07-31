@@ -676,6 +676,16 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         collection.template.items.clear()
         collection.template.name = "Новая форма"
         collection.template.use_departments_mode = False
+        # Один пустой пункт по умолчанию — дальше форма расширяется
+        # кнопкой "Добавить пункт"
+        collection.template.items.append(
+            ReportTemplateItem.create(
+                name="Новый пункт",
+                item_type=ReportItemType.NUMERICAL,
+                unit="шт.",
+                order=0,
+            )
+        )
         autosave()
         _rebuild_template_builder()
         refresh_all_tiles()
@@ -905,17 +915,43 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     # ── Модалка настройки сбора данных ───────────────────────────
     def _open_template_settings(e=None):
         """Открыть модалку с конструктором шаблонов."""
-        template_builder = create_template_builder(
-            page=page,
-            collection=collection,
-            on_template_changed=on_template_changed,
-            on_save=on_template_save,
-            on_load=on_template_load,
-            on_clear=on_template_clear,
-            on_reset_data=on_reset_data,
-            on_departments_mode_changed=on_departments_mode_changed,
-            template_builder_ref=template_builder_ref,
+        # Адаптивная ширина модалки — под ширину окна приложения
+        try:
+            _win_w = page.window.width or 1280
+        except Exception:
+            _win_w = 1280
+        dlg_width = max(650, min(900, int(_win_w * 0.45)))
+
+        content_holder = ft.Container(
+            width=dlg_width,
+            bgcolor=COLORS["card"],
+            padding=ft.padding.all(0),
         )
+
+        def _build_builder():
+            return create_template_builder(
+                page=page,
+                collection=collection,
+                on_template_changed=on_template_changed,
+                on_save=on_template_save,
+                on_load=on_template_load,
+                on_clear=_on_clear_inside,
+                on_reset_data=on_reset_data,
+                on_departments_mode_changed=on_departments_mode_changed,
+                template_builder_ref=template_builder_ref,
+            )
+
+        def _on_clear_inside():
+            # Очистить шаблон и сразу пересоздать содержимое
+            # открытой модалки (без закрытия/переоткрытия)
+            on_template_clear()
+            content_holder.content = _build_builder()
+            try:
+                content_holder.update()
+            except Exception:
+                page.update()
+
+        content_holder.content = _build_builder()
 
         def _close_dialog(e=None):
             dialog.open = False
@@ -940,12 +976,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            content=ft.Container(
-                content=template_builder,
-                width=650,
-                bgcolor=COLORS["card"],
-                padding=ft.padding.all(0),
-            ),
+            content=content_holder,
             actions=[],
             shape=ft.RoundedRectangleBorder(radius=12),
         )

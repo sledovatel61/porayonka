@@ -262,6 +262,14 @@ def create_template_builder(
     # Инициальное построение списка
     rebuild_items_list()
 
+    # Адаптивная высота списка пунктов — под высоту окна приложения:
+    # в полноэкранном режиме список выше, в оконном — компактнее
+    try:
+        _win_h = page.window.height or 800
+    except Exception:
+        _win_h = 800
+    items_list_height = max(180, min(560, int(_win_h * 0.42)))
+
     # ── Сборка панели (без сворачивания, сразу видно) ────────────
     panel = ft.Container(
         content=ft.Column(
@@ -289,7 +297,7 @@ def create_template_builder(
                     border=ft.border.all(1, COLORS["border"]),
                     border_radius=8,
                     padding=ft.padding.all(12),
-                    height=300,
+                    height=items_list_height,
                 ),
                 ft.Container(height=12),
                 # Кнопки
