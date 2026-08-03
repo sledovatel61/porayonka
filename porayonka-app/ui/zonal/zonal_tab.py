@@ -48,6 +48,10 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     else:
         if not collection.criminalists:
             collection.criminalists = get_initial_criminalists()
+
+    # Сохраняем ссылку для авто-сохранения при закрытии окна
+    page._zonal_collection = collection
+
     print(f"[ZONAL_TAB] Criminalists: {len(collection.criminalists)}")
     print(f"[ZONAL_TAB] Active: {sum(1 for c in collection.criminalists if c.is_active)}")
     print(f"[ZONAL_TAB] Template items: {len(collection.template.items)}")

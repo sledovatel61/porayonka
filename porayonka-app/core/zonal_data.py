@@ -336,27 +336,43 @@ def save_criminalists(criminalists: List[Criminalist]) -> None:
 def _migrate_old_collection() -> bool:
     """
     Миграция старого zonal_collection.json в новые файлы.
+    Выполняется только если новые файлы ещё не существуют,
+    чтобы не затирать изменения пользователя при каждом старте.
     Возвращает True, если миграция выполнена.
     """
     old_file = get_collection_file()
     if not old_file.exists():
         return False
-    
+
+    # Если уже есть новые файлы — старый формат больше не актуален,
+    # но бэкапим его с уникальным timestamp, чтобы не мигрировать снова.
+    if (get_criminalists_file().exists()
+            or get_template_file().exists()
+            or get_submissions_file().exists()):
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = old_file.with_suffix(f".json.{timestamp}.old")
+            old_file.rename(backup_path)
+            print(f"[ZONAL_DATA] Staryy fayl arhivirovan: {backup_path}")
+        except Exception as e:
+            print(f"[ZONAL_DATA] Oshibka arhivirovaniya starogo fayla: {e}")
+        return False
+
     print("[ZONAL_DATA] Obnaruzhen staryy format dannyh, vypolnyayu migraciyu...")
     try:
         with open(old_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        
+
         # Миграция шаблона
         template_data = data.get("template", {"name": "Новая форма"})
         template = _template_from_dict(template_data)
         save_zonal_template_to_file(template)
-        
+
         # Миграция submissions
         submissions_data = data.get("submissions", [])
         submissions = [_report_data_from_dict(s) for s in submissions_data]
         save_zonal_submissions(submissions)
-        
+
         # Миграция криминалистов
         criminalists_data = data.get("criminalists", [])
         if criminalists_data:
@@ -364,13 +380,14 @@ def _migrate_old_collection() -> bool:
         else:
             criminalists = get_initial_criminalists()
         save_criminalists(criminalists)
-        
-        # Backup старого файла
-        backup_path = old_file.with_suffix(".json.old")
+
+        # Бэкап старого файла с уникальным timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = old_file.with_suffix(f".json.{timestamp}.old")
         old_file.rename(backup_path)
         print(f"[ZONAL_DATA] Migraciya zavershena. Staryy fayl: {backup_path}")
         return True
-        
+
     except Exception as e:
         print(f"[ZONAL_DATA] Oshibka migracii: {e}")
         return False

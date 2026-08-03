@@ -293,6 +293,22 @@ def main(page: ft.Page) -> None:
 
     page.update()
 
+    # Сохранение при закрытии окна (страховка в дополнение к autosave)
+    def _on_window_event(e):
+        if e.data == "close":
+            try:
+                save_departments(departments)
+                if hasattr(page, "_zonal_collection"):
+                    save_zonal_collection(page._zonal_collection)
+                update_header_save_date(page)
+                print("[MAIN] Data saved on window close")
+            except Exception as ex:
+                print(f"[MAIN] Save on close error: {ex}")
+            page.window.close()
+
+    page.window.prevent_close = True
+    page.on_window_event = _on_window_event
+
 
 # ────────────────────────────────────────────────────────────────
 # ТОЧКА ВХОДА
