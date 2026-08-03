@@ -304,7 +304,10 @@ def main(page: ft.Page) -> None:
                 print("[MAIN] Data saved on window close")
             except Exception as ex:
                 print(f"[MAIN] Save on close error: {ex}")
-            page.window.close()
+            finally:
+                # Разрешаем закрытие и закрываем окно
+                page.window.prevent_close = False
+                page.window.close()
 
     page.window.prevent_close = True
     page.on_window_event = _on_window_event
