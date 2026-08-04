@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мокапы редизайна «Контроли» — Порайонка</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Segoe+UI:wght@400;500;600&amp;display=swap');
+        
+        :root {
+            --bg: #0b1120;
+            --card: #15202e;
+            --raised: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --secondary: #94a3b8;
+            --muted: #64748b;
+            --accent: #3b82f6;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 40px 30px;
+            line-height: 1.5;
+        }
+        
+        .container {
+            max-width: 1480px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: var(--secondary);
+            font-size: 16px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+            gap: 24px;
+        }
+        
+        .mockup-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .mockup-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3);
+        }
+        
+        .mockup-preview {
+            height: 220px;
+            background: var(--raised);
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .preview-label {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: #1e293b;
+            color: var(--secondary);
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+        
+        .mockup-content {
+            padding: 22px;
+        }
+        
+        .mockup-content h3 {
+            font-size: 19px;
+            margin-bottom: 6px;
+        }
+        
+        .mockup-content .tag {
+            font-size: 11px;
+            padding: 1px 8px;
+            border-radius: 9999px;
+            background: #1e293b;
+            color: var(--muted);
+            display: inline-block;
+            margin-bottom: 12px;
+        }
+        
+        .mockup-content p {
+            color: var(--secondary);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+        
+        .mockup-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+        }
+        
+        .btn {
+            padding: 9px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.1s;
+        }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            flex: 1;
+        }
+        
+        .btn-secondary {
+            background: var(--raised);
+            color: var(--text);
+            border: 1px solid var(--border);
+            flex: 1;
+        }
+        
+        .comparison {
+            margin-top: 60px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+        }
+        
+        .comparison h2 {
+            font-size: 22px;
+            margin-bottom: 22px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 13px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        th {
+            color: var(--secondary);
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        td {
+            font-size: 14px;
+        }
+        
+        .score {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        
+        .score-high { background: #1f2d23; color: #22c55e; }
+        .score-med { background: #1f252e; color: #64748b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Мокапы редизайна вкладки «Контроли»</h1>
+            <p>5 различных направлений дизайна • Десктоп 1600×900 • Тёмная тема Порайонки</p>
+            <div style="margin-top:14px; font-size:13px; color:#64748b;">
+                Коммит: <strong>89e368a</strong> • Ветка: <strong>arena/019fccb3-porayonka</strong>
+            </div>
+        </div>
+        
+        <div class="grid">
+            
+            <!-- 01 Excel-Pro -->
+            <div class="mockup-card">
+                <div class="mockup-preview" style="background: linear-gradient(#15202e, #0b1120); display:flex; align-items:center; justify-content:center;">
+                    <div style="width: 90%; height: 160px; background: #1e293b; border-radius: 8px; border: 1px solid #334155; overflow:hidden; position:relative;">
+                        <div style="height:28px; background:#1e293b; display:flex; align-items:center; padding:0 12px; font-size:10px; color:#64748b;">
+                            <div style="flex:1;">№ вх. • Дата • Иниц. • Содержание</div>
+                            <div style="background:#334155; padding:1px 8px; border-radius:4px; font-size:9px;">Фильтры</div>
+                        </div>
+                        <div style="padding:8px 12px; font-size:10px; line-height:1.3; color:#94a3b8;">
+                            Иссоп-216-2083-25 • 14.03.2025 • СУ • Распоряжение 24/216-р...<br>
+                            <span style="color:#ef4444;">Просрочено</span> • Иссоп-216-1017-26/дсп
+                        </div>
+                    </div>
+                </div>
+                <div class="mockup-content">
+                    <h3>01 • Excel-Pro</h3>
+                    <span class="tag">Таблица + фильтры в заголовке</span>
+                    <p>Плотная липкая таблица с зеброй, отдельный фильтр под каждой колонкой. Классический Excel-подход для опытных пользователей.</p>
+                    
+                    <div class="mockup-actions">
+                        <a href="01_excel_pro.html" class="btn btn-primary">Открыть мокап</a>
+                        <a href="#" onclick="alert('Сравнение: Плотность ★★★★★ • Читаемость ★★★★'); return false;" class="btn btn-secondary">Сравнить</a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 02 Master-Detail -->
+            <div class="mockup-card">
+                <div class="mockup-preview" style="background: linear-gradient(#15202e, #0b1120); display:flex; align-items:center; justify-content:center;">
+                    <div style="width: 92%; height: 160px; background: #1e293b; border-radius: 8px; border: 1px solid #334155; display:flex; overflow:hidden;">
+                        <div style="width:38%; background:#15202e; padding:8px; font-size:10px; border-right:1px solid #334155;">
+                            <div style="margin-bottom:4px; color:#64748b;">Список</div>
+                            <div style="background:#1e293b; padding:4px; border-radius:4px; margin-bottom:3px; font-size:9px;">Иссоп-216-2083-25</div>
+                            <div style="background:#1e293b; padding:4px; border-radius:4px; font-size:9px;">Вхсоп-9566-22</div>
+                        </div>
+                        <div style="flex:1; padding:10px; font-size:9.5px; color:#94a3b8;">
+                            <div style="font-weight:600; color:#f8fafc; margin-bottom:6px;">Детали</div>
+                            Содержание • Исполнители • Срок<br>
+                            <span style="color:#22c55e;">Инлайн-редактирование</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mockup-content">
+                    <h3>02 • Master-Detail</h3>
+                    <span class="tag">Список + детальная панель</span>
+                    <p>35% ширины — компактный список, 65% — детальная панель с инлайн-редактированием. Идеально для быстрого просмотра и правок.</p>
+                    
+                    <div class="mockup-actions">
+                        <a href="02_master_detail.html" class="btn btn-primary">Открыть мокап</a>
+                        <a href="#" onclick="alert('Сравнение: Скорость ★★★★ • Удобство ★★★★★'); return false;" class="btn btn-secondary">Сравнить</a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 03 Cards Grid -->
+            <div class="mockup-card">
+                <div class="mockup-preview" style="background: linear-gradient(#15202e, #0b1120); display:flex; align-items:center; justify-content:center; padding:12px;">
+                    <div style="width: 94%; height: 160px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">
+                        <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:8px; font-size:10px;">
+                            <div style="height:4px; background:#ef4444; margin-bottom:8px; border-radius:2px;"></div>
+                            <div style="font-weight:600;">Иссоп-216-2083-25</div>
+                            <div style="color:#94a3b8; font-size:9px; margin-top:4px;">Распоряжение...</div>
+                        </div>
+                        <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:8px; font-size:10px;">
+                            <div style="height:4px; background:#f59e0b; margin-bottom:8px; border-radius:2px;"></div>
+                            <div style="font-weight:600;">Вхсоп-9566-22</div>
+                            <div style="color:#94a3b8; font-size:9px; margin-top:4px;">УД № 120026...</div>
+                        </div>
+                        <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:8px; font-size:10px;">
+                            <div style="height:4px; background:#fb923c; margin-bottom:8px; border-radius:2px;"></div>
+                            <div style="font-weight:600;">4108-26</div>
+                            <div style="color:#94a3b8; font-size:9px; margin-top:4px;">Зерноград</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mockup-content">
+                    <h3>03 • Карточки-сетка</h3>
+                    <span class="tag">Плитки с цветной полосой</span>
+                    <p>6 карточек в ряд. Статусная полоса сверху, краткое содержание, исполнители. Отлично для визуального обзора большого количества записей.</p>
+                    
+                    <div class="mockup-actions">
+                        <a href="03_cards_grid.html" class="btn btn-primary">Открыть мокап</a>
+                        <a href="#" onclick="alert('Сравнение: Визуал ★★★★★ • Плотность ★★★'); return false;" class="btn btn-secondary">Сравнить</a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 04 Deadline Board -->
+            <div class="mockup-card">
+                <div class="mockup-preview" style="background: linear-gradient(#15202e, #0b1120); display:flex; align-items:center; justify-content:center; padding:12px;">
+                    <div style="width: 94%; height: 160px; display:flex; gap:8px;">
+                        <div style="flex:1; background:#1e293b; border:1px solid #334155; border-radius:8px; padding:8px; font-size:9px;">
+                            <div style="color:#ef4444; font-weight:600; margin-bottom:4px;">Просрочено (2)</div>
+                            <div style="background:#334155; padding:4px; border-radius:4px; margin-bottom:3px;">Иссоп-216-2083-25</div>
+                            <div style="background:#334155; padding:4px; border-radius:4px;">Иссоп-216-1017-26/дсп</div>
+                        </div>
+                        <div style="flex:1; background:#1e293b; border:1px solid #334155; border-radius:8px; padding:8px; font-size:9px;">
+                            <div style="color:#f59e0b; font-weight:600; margin-bottom:4px;">Сегодня (2)</div>
+                            <div style="background:#334155; padding:4px; border-radius:4px;">Вхсоп-9566-22</div>
+                        </div>
+                        <div style="flex:1; background:#1e293b; border:1px solid #334155; border-radius:8px; padding:8px; font-size:9px;">
+                            <div style="color:#fb923c; font-weight:600; margin-bottom:4px;">Скоро (5)</div>
+                            <div style="background:#334155; padding:4px; border-radius:4px;">4108-26</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mockup-content">
+                    <h3>04 • Дедлайн-доска</h3>
+                    <span class="tag">Kanban по срокам</span>
+                    <p>Колонки: Просрочено • Сегодня • Скоро • В работе • Исполнено. Цветовые статусы и счётчики в заголовках колонок.</p>
+                    
+                    <div class="mockup-actions">
+                        <a href="04_deadline_board.html" class="btn btn-primary">Открыть мокап</a>
+                        <a href="#" onclick="alert('Сравнение: Обзор ★★★★★ • Скорость ★★★★'); return false;" class="btn btn-secondary">Сравнить</a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 05 Command Center -->
+            <div class="mockup-card">
+                <div class="mockup-preview" style="background: linear-gradient(#15202e, #0b1120); display:flex; align-items:center; justify-content:center; padding:12px;">
+                    <div style="width: 92%; height: 160px; background: #1e293b; border-radius: 8px; border: 1px solid #334155; padding:10px; font-size:10px;">
+                        <div style="display:flex; gap:8px; margin-bottom:10px;">
+                            <div style="flex:1; background:#334155; padding:6px; border-radius:4px; text-align:center;">
+                                <div style="font-size:18px; font-weight:700; color:#ef4444;">2</div>
+                                <div style="font-size:8px;">Просрочено</div>
+                            </div>
+                            <div style="flex:1; background:#334155; padding:6px; border-radius:4px; text-align:center;">
+                                <div style="font-size:18px; font-weight:700; color:#f59e0b;">2</div>
+                                <div style="font-size:8px;">Сегодня</div>
+                            </div>
+                            <div style="flex:1; background:#334155; padding:6px; border-radius:4px; text-align:center;">
+                                <div style="font-size:18px; font-weight:700; color:#22c55e;">87%</div>
+                                <div style="font-size:8px;">Исполнение</div>
+                            </div>
+                        </div>
+                        
+                        <div style="font-size:9px; color:#94a3b8;">Таблица с инлайн-действиями + drawer слева</div>
+                    </div>
+                </div>
+                <div class="mockup-content">
+                    <h3>05 • Command Center</h3>
+                    <span class="tag">Дашборд + таблица</span>
+                    <p>Виджеты KPI сверху, компактная таблица с инлайн-действиями и drawer-фильтрами слева. Для руководителей и оперативного контроля.</p>
+                    
+                    <div class="mockup-actions">
+                        <a href="05_command_center.html" class="btn btn-primary">Открыть мокап</a>
+                        <a href="#" onclick="alert('Сравнение: Аналитика ★★★★★ • Простота ★★★'); return false;" class="btn btn-secondary">Сравнить</a>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Comparison Table -->
+        <div class="comparison">
+            <h2>Сравнительная таблица направлений</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Направление</th>
+                        <th>Читаемость</th>
+                        <th>Плотность</th>
+                        <th>Скорость добавления</th>
+                        <th>Сложность в Flet</th>
+                        <th>Рекомендация</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>01 • Excel-Pro</strong></td>
+                        <td><span class="score score-high">★★★★★</span></td>
+                        <td><span class="score score-high">★★★★★</span></td>
+                        <td><span class="score score-med">★★★</span></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td>Лучший для опытных пользователей</td>
+                    </tr>
+                    <tr>
+                        <td><strong>02 • Master-Detail</strong></td>
+                        <td><span class="score score-high">★★★★★</span></td>
+                        <td><span class="score score-med">★★★★</span></td>
+                        <td><span class="score score-high">★★★★★</span></td>
+                        <td><span class="score score-high">★★★★★</span></td>
+                        <td><strong>Рекомендую №1</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>03 • Карточки-сетка</strong></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td><span class="score score-med">★★★</span></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td><span class="score score-med">★★★</span></td>
+                        <td>Хорош для обзора</td>
+                    </tr>
+                    <tr>
+                        <td><strong>04 • Дедлайн-доска</strong></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td><span class="score score-med">★★★</span></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td><span class="score score-med">★★★</span></td>
+                        <td>Отличный визуальный контроль</td>
+                    </tr>
+                    <tr>
+                        <td><strong>05 • Command Center</strong></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td><span class="score score-high">★★★★</span></td>
+                        <td><span class="score score-med">★★★</span></td>
+                        <td>Для руководства</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div style="margin-top: 26px; padding-top: 22px; border-top: 1px solid #334155; display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+                <div>
+                    <strong>Рекомендация автора:</strong> <span style="color:#22c55e;">Master-Detail (02)</span> — лучший баланс удобства, скорости и плотности для криминалистов.
+                </div>
+                <div style="color:#64748b;">Все мокапы — полностью автономные HTML (CSS + vanilla JS)</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

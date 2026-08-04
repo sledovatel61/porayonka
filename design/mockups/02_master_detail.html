@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>02 • Master-Detail — Мокап Контроли</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Segoe+UI:wght@400;500;600&amp;display=swap');
+        
+        :root {
+            --bg: #0b1120;
+            --card: #15202e;
+            --raised: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --secondary: #94a3b8;
+            --muted: #64748b;
+            --accent: #3b82f6;
+            --export: #10b981;
+            --overdue: #ef4444;
+            --today: #f59e0b;
+            --soon: #fb923c;
+            --inwork: #22c55e;
+            --done: #64748b;
+            --completed: #3b82f6;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+        }
+        
+        .app-container {
+            width: 1600px;
+            margin: 0 auto;
+            min-height: 900px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: var(--raised);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .header h1 { font-size: 22px; font-weight: 600; }
+        
+        .header-actions { display: flex; gap: 8px; align-items: center; }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 13px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: none;
+            transition: all 0.1s;
+        }
+        
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-secondary { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
+        .btn-success { background: var(--export); color: white; }
+        .btn:hover { filter: brightness(1.1); }
+        
+        .status-indicator {
+            display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary);
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--inwork); }
+        
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Left panel - compact list */
+        .list-panel {
+            width: 35%;
+            min-width: 420px;
+            background: var(--card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .list-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--raised);
+        }
+        
+        .list-header h3 { font-size: 15px; font-weight: 600; }
+        
+        .search-box {
+            width: 100%;
+            padding: 8px 14px;
+            background: var(--raised);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 13px;
+            margin: 12px 20px 12px;
+        }
+        
+        .filter-pills {
+            display: flex;
+            gap: 6px;
+            padding: 0 20px 12px;
+            flex-wrap: wrap;
+        }
+        
+        .pill {
+            padding: 3px 10px;
+            font-size: 11px;
+            border-radius: 9999px;
+            background: var(--raised);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        
+        .pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+        
+        .list-items {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .list-item {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        
+        .list-item:hover { background: #1a2639; }
+        .list-item.active { background: #1e293b; border-left: 4px solid var(--accent); }
+        
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 5px;
+        }
+        
+        .item-number { font-weight: 600; font-size: 13px; }
+        .item-date { font-size: 11px; color: var(--muted); }
+        
+        .item-content {
+            font-size: 12.5px;
+            line-height: 1.4;
+            color: var(--secondary);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .item-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            font-size: 11px;
+        }
+        
+        .item-status {
+            padding: 1px 8px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        
+        /* Right panel - detail view */
+        .detail-panel {
+            flex: 1;
+            background: var(--card);
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .detail-header h2 { font-size: 19px; }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .detail-section {
+            background: var(--raised);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+        }
+        
+        .detail-section h4 {
+            font-size: 12px;
+            color: var(--secondary);
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .detail-value {
+            font-size: 14px;
+            line-height: 1.45;
+        }
+        
+        .detail-label {
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 3px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 13px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-overdue { background: #3b1f22; color: var(--overdue); }
+        .status-today { background: #3b2a1f; color: var(--today); }
+        .status-soon { background: #3b2e1f; color: var(--soon); }
+        .status-inwork { background: #1f2d23; color: var(--inwork); }
+        .status-completed { background: #1f2937; color: var(--completed); }
+        
+        .executors {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .executor-tag {
+            background: #1e293b;
+            padding: 3px 9px;
+            border-radius: 9999px;
+            font-size: 12px;
+        }
+        
+        .inline-edit {
+            background: var(--raised);
+            border: 1px solid var(--border);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            width: 100%;
+        }
+        
+        .action-bar {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+        
+        .counters {
+            display: flex;
+            gap: 8px;
+            padding: 12px 24px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .counter-chip {
+            padding: 4px 12px;
+            background: var(--raised);
+            border: 1px solid var(--border);
+            border-radius: 9999px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .counter-chip span { font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>Контроли</h1>
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Локально • 134 записи</span>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showNewControlModal()">+ Добавить контроль</button>
+                <button class="btn btn-secondary">📥 Импорт Excel</button>
+                <button class="btn btn-success">📤 Экспорт Excel</button>
+                <button class="btn btn-secondary">⚙ Настройки</button>
+            </div>
+        </div>
+        
+        <!-- Counters -->
+        <div class="counters">
+            <div class="counter-chip"><span>Все</span> <span style="color:#64748b">134</span></div>
+            <div class="counter-chip"><span style="color:#ef4444">Просрочено</span> <span>2</span></div>
+            <div class="counter-chip"><span style="color:#f59e0b">Сегодня</span> <span>2</span></div>
+            <div class="counter-chip"><span style="color:#fb923c">Скоро</span> <span>5</span></div>
+            <div class="counter-chip"><span style="color:#22c55e">В работе</span> <span>114</span></div>
+            <div class="counter-chip"><span style="color:#64748b">Исполнено</span> <span>9</span></div>
+            
+            <div style="margin-left: auto; display:flex; align-items:center; gap:8px; font-size:13px;">
+                <div style="background:#334155; padding:2px 4px; border-radius:9999px; display:flex;">
+                    <div style="padding:3px 12px; background:#1e293b; border-radius:9999px; font-size:12px;">Активные</div>
+                    <div style="padding:3px 12px; color:#64748b; font-size:12px;">Архив</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-layout">
+            
+            <!-- LIST PANEL -->
+            <div class="list-panel">
+                <div class="list-header">
+                    <h3>Список контролей</h3>
+                    <span style="font-size:11px; color:#64748b;">35% ширины</span>
+                </div>
+                
+                <input type="text" class="search-box" placeholder="Поиск по номеру или содержанию..." value="Иссоп">
+                
+                <div class="filter-pills">
+                    <div class="pill active">Все</div>
+                    <div class="pill">Просрочено</div>
+                    <div class="pill">Сегодня</div>
+                    <div class="pill">Скоро</div>
+                    <div class="pill">В работе</div>
+                </div>
+                
+                <div class="list-items">
+                    <!-- List items -->
+                    <div onclick="selectItem(this, 0)" class="list-item active">
+                        <div class="item-header">
+                            <div class="item-number">Иссоп-216-2083-25</div>
+                            <div class="item-date">20.07.2026</div>
+                        </div>
+                        <div class="item-content">Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3</div>
+                        <div class="item-meta">
+                            <span class="item-status status-overdue">Просрочено</span>
+                            <span style="color:#64748b;">Семисенко И.Ю.</span>
+                        </div>
+                    </div>
+                    
+                    <div onclick="selectItem(this, 1)" class="list-item">
+                        <div class="item-header">
+                            <div class="item-number">Иссоп-216-1017-26/дсп</div>
+                            <div class="item-date">25.07.2026</div>
+                        </div>
+                        <div class="item-content">Распоряжение 8/216-р/17дсп п. 2 — Миронович 01.05.2026...</div>
+                        <div class="item-meta">
+                            <span class="item-status status-overdue">Просрочено</span>
+                            <span style="color:#64748b;">Чашин Э.А.</span>
+                        </div>
+                    </div>
+                    
+                    <div onclick="selectItem(this, 2)" class="list-item">
+                        <div class="item-header">
+                            <div class="item-number">Вхсоп-9566-22</div>
+                            <div class="item-date">04.08.2026</div>
+                        </div>
+                        <div class="item-content">О ходе и результатах расследования УД № 12002600010000068</div>
+                        <div class="item-meta">
+                            <span class="item-status status-today">Сегодня</span>
+                            <span style="color:#64748b;">Семисенко И.Ю.</span>
+                        </div>
+                    </div>
+                    
+                    <div onclick="selectItem(this, 3)" class="list-item">
+                        <div class="item-header">
+                            <div class="item-number">214/1-37915-19</div>
+                            <div class="item-date">05.08.2026</div>
+                        </div>
+                        <div class="item-content">Сведения по ППЛ Павлюкову</div>
+                        <div class="item-meta">
+                            <span class="item-status status-soon">Скоро</span>
+                            <span style="color:#64748b;">Гайнутдинов С.И.</span>
+                        </div>
+                    </div>
+                    
+                    <div onclick="selectItem(this, 4)" class="list-item">
+                        <div class="item-header">
+                            <div class="item-number">4108-26</div>
+                            <div class="item-date">05.08.2026</div>
+                        </div>
+                        <div class="item-content">Информация по УД 9916755 и 0126336 (Зерноград)</div>
+                        <div class="item-meta">
+                            <span class="item-status status-soon">Скоро</span>
+                            <span style="color:#64748b;">Ливенский В.О.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- DETAIL PANEL -->
+            <div class="detail-panel" id="detail-panel">
+                <div class="detail-header">
+                    <div>
+                        <h2 id="detail-number">Иссоп-216-2083-25</h2>
+                        <div style="font-size:12px; color:#64748b;">Вх. № • 14.03.2025 • СУ</div>
+                    </div>
+                    
+                    <div>
+                        <span id="detail-status" class="status-badge status-overdue">Просрочено</span>
+                    </div>
+                </div>
+                
+                <div class="detail-grid">
+                    <div class="detail-section">
+                        <h4>Содержание</h4>
+                        <div class="detail-value" id="detail-content">
+                            Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Срок исполнения</h4>
+                        <div style="font-size:16px; font-weight:600;" id="detail-deadline">20.07.2026</div>
+                        <div style="margin-top:12px;">
+                            <div class="detail-label">За кем контроль</div>
+                            <div class="detail-value" id="detail-owner">Потемкин С.А.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Исполнители</h4>
+                        <div class="executors" id="detail-executors">
+                            <div class="executor-tag">Семисенко И.Ю.</div>
+                        </div>
+                        
+                        <div style="margin-top: 12px;">
+                            <div class="detail-label">Тип</div>
+                            <div class="detail-value">разовый</div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Пункты задания</h4>
+                        <div style="font-size:13px; line-height:1.4;" id="detail-points">п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3</div>
+                        
+                        <div style="margin-top: 16px;">
+                            <div class="detail-label">Комментарий</div>
+                            <div style="font-size:13px;">Продление срока до 20.07.2026</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 22px;">
+                    <h4 style="font-size:12px; color:#94a3b8; margin-bottom:8px;">Календарь исполнения (Август 2026)</h4>
+                    <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:12px; max-width:340px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:12px;">
+                            <span>←</span> <strong>Август 2026</strong> <span>→</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:1px; font-size:11px; text-align:center;">
+                            <div style="color:#64748b;">Пн</div><div style="color:#64748b;">Вт</div><div style="color:#64748b;">Ср</div><div style="color:#64748b;">Чт</div><div style="color:#64748b;">Пт</div><div style="color:#64748b;">Сб</div><div style="color:#64748b;">Вс</div>
+                            
+                            <div></div><div></div><div></div><div></div><div></div><div>1</div><div>2</div>
+                            <div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div>
+                            <div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div>
+                            <div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div>
+                            <div>24</div><div>25</div><div>26</div><div>27</div><div>28</div><div>29</div><div>30</div>
+                            <div>31</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="action-bar">
+                    <button onclick="editInline()" class="btn btn-secondary">✏ Инлайн-редактирование</button>
+                    <button onclick="showDetailModal()" class="btn btn-primary">Открыть полную форму</button>
+                    <button class="btn btn-success">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentItem = 0;
+        
+        const data = [
+            {
+                id: 0,
+                number: "Иссоп-216-2083-25",
+                date: "14.03.2025",
+                initiator: "СУ",
+                content: "Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3",
+                executors: ["Семисенко И.Ю."],
+                owner: "Потемкин С.А.",
+                type: "разовый",
+                deadline: "20.07.2026",
+                status: "Просрочено",
+                points: "п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3"
+            },
+            {
+                id: 1,
+                number: "Иссоп-216-1017-26/дсп",
+                date: "—",
+                initiator: "СУ",
+                content: "Распоряжение 8/216-р/17дсп п. 2 — Миронович 01.05.2026, п. 3 — Авакян 01.05.2026",
+                executors: ["Чашин Э.А.", "Миронович Д.В.", "Авакян А.А."],
+                owner: "Потемкин С.А.",
+                type: "разовый",
+                deadline: "25.07.2026",
+                status: "Просрочено",
+                points: "п. 2, 3, 56"
+            },
+            {
+                id: 2,
+                number: "Вхсоп-9566-22",
+                date: "15.11.2022",
+                initiator: "ГУК СК",
+                content: "О ходе и результатах расследования УД № 12002600010000068 (по факту убийства Иваха К.А.)",
+                executors: ["Семисенко И.Ю."],
+                owner: "Потемкин С.А.",
+                type: "постоянный",
+                deadline: "04.08.2026",
+                status: "Сегодня",
+                points: "—"
+            }
+        ];
+        
+        function selectItem(element, index) {
+            // Deselect all
+            document.querySelectorAll('.list-item').forEach(el => el.classList.remove('active'));
+            element.classList.add('active');
+            
+            currentItem = index;
+            updateDetailPanel(index);
+        }
+        
+        function updateDetailPanel(index) {
+            const item = data[index];
+            if (!item) return;
+            
+            document.getElementById('detail-number').innerHTML = item.number;
+            document.getElementById('detail-content').innerHTML = item.content;
+            document.getElementById('detail-deadline').innerHTML = item.deadline;
+            document.getElementById('detail-owner').innerHTML = item.owner;
+            document.getElementById('detail-points').innerHTML = item.points;
+            
+            // Status badge
+            const statusEl = document.getElementById('detail-status');
+            statusEl.className = 'status-badge';
+            if (item.status === 'Просрочено') statusEl.classList.add('status-overdue');
+            else if (item.status === 'Сегодня') statusEl.classList.add('status-today');
+            else if (item.status === 'Скоро') statusEl.classList.add('status-soon');
+            
+            statusEl.innerHTML = item.status;
+            
+            // Executors
+            const execContainer = document.getElementById('detail-executors');
+            execContainer.innerHTML = '';
+            item.executors.forEach(ex => {
+                const tag = document.createElement('div');
+                tag.className = 'executor-tag';
+                tag.innerHTML = ex;
+                execContainer.appendChild(tag);
+            });
+        }
+        
+        function editInline() {
+            const panel = document.getElementById('detail-panel');
+            alert('Инлайн-редактирование: в реальном приложении здесь будут редактируемые поля прямо в панели детали.');
+        }
+        
+        function showDetailModal() {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);z-index:200;display:flex;align-items:center;justify-content:center;';
+            modal.innerHTML = `
+                <div style="background:#15202e;border:1px solid #334155;border-radius:12px;width:760px;max-height:82vh;overflow:auto;">
+                    <div style="padding:18px 24px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <span style="font-size:18px;font-weight:600;">Полная форма контроля</span><br>
+                            <span style="font-size:12px;color:#64748b;">${data[currentItem].number}</span>
+                        </div>
+                        <span onclick="this.closest('.modal').remove()" style="font-size:24px;color:#64748b;cursor:pointer;">×</span>
+                    </div>
+                    
+                    <div style="padding:22px 24px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <div><label style="font-size:12px;color:#94a3b8;">Вх. №</label><input style="width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:8px 12px;border-radius:6px;" value="${data[currentItem].number}"></div>
+                            <div><label style="font-size:12px;color:#94a3b8;">Срок</label><input style="width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:8px 12px;border-radius:6px;" value="${data[currentItem].deadline}"></div>
+                            
+                            <div style="grid-column:1/-1;"><label style="font-size:12px;color:#94a3b8;">Содержание</label><textarea style="width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:9px;border-radius:6px;min-height:70px;">${data[currentItem].content}</textarea></div>
+                            
+                            <div><label style="font-size:12px;color:#94a3b8;">Исполнители</label><div style="margin-top:4px;background:#1e293b;border:1px solid #334155;padding:8px 10px;border-radius:6px;font-size:13px;">${data[currentItem].executors.join(', ')}</div></div>
+                            
+                            <div><label style="font-size:12px;color:#94a3b8;">За кем</label><input style="width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:8px 12px;border-radius:6px;" value="${data[currentItem].owner}"></div>
+                        </div>
+                        
+                        <div style="margin-top:22px;display:flex;justify-content:flex-end;gap:8px;">
+                            <button onclick="this.closest('.modal').remove()" style="padding:9px 18px;background:#1e293b;border:1px solid #334155;color:#f8fafc;border-radius:8px;">Отмена</button>
+                            <button onclick="this.closest('.modal').remove()" style="padding:9px 18px;background:#10b981;color:white;border:none;border-radius:8px;">Сохранить</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        function showNewControlModal() {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);z-index:200;display:flex;align-items:center;justify-content:center;';
+            modal.innerHTML = `
+                <div style="background:#15202e;border:1px solid #334155;border-radius:12px;width:700px;">
+                    <div style="padding:18px 24px;border-bottom:1px solid #334155;">
+                        <span style="font-size:18px;font-weight:600;">Новый контроль</span>
+                    </div>
+                    <div style="padding:22px 24px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <div><label style="font-size:12px;color:#94a3b8;">Вх. №</label><input style="width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:8px 12px;border-radius:6px;" placeholder="Иссоп-..."></div>
+                            <div><label style="font-size:12px;color:#94a3b8;">Дата поступления</label><input style="width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:8px 12px;border-radius:6px;" value="04.08.2026"></div>
+                            <div style="grid-column:1/-1;"><label style="font-size:12px;color:#94a3b8;">Содержание</label><textarea style="width:100%;margin-top:4px;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:9px;border-radius:6px;min-height:65px;"></textarea></div>
+                        </div>
+                        
+                        <div style="margin-top:22px;display:flex;justify-content:flex-end;gap:8px;">
+                            <button onclick="this.closest('.modal').remove()" style="padding:9px 18px;background:#1e293b;border:1px solid #334155;color:#f8fafc;border-radius:8px;">Отмена</button>
+                            <button onclick="this.closest('.modal').remove()" style="padding:9px 18px;background:#3b82f6;color:white;border:none;border-radius:8px;">Создать</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        // Initialize first item detail
+        window.onload = function() {
+            updateDetailPanel(0);
+            
+            // Demo hint
+            console.log('%c[Mockup] Master-Detail ready. Click any list item.', 'color:#64748b');
+        }
+    </script>
+</body>
+</html>

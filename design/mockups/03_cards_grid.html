@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>03 • Карточки-сетка — Мокап Контроли</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Segoe+UI:wght@400;500;600&amp;display=swap');
+        
+        :root {
+            --bg: #0b1120;
+            --card: #15202e;
+            --raised: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --secondary: #94a3b8;
+            --muted: #64748b;
+            --accent: #3b82f6;
+            --export: #10b981;
+            --overdue: #ef4444;
+            --today: #f59e0b;
+            --soon: #fb923c;
+            --inwork: #22c55e;
+            --done: #64748b;
+            --completed: #3b82f6;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+        }
+        
+        .app-container {
+            width: 1600px;
+            margin: 0 auto;
+            min-height: 900px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+        }
+        
+        .header {
+            background: var(--raised);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .header h1 { font-size: 22px; font-weight: 600; }
+        
+        .header-actions { display: flex; gap: 8px; align-items: center; }
+        
+        .btn {
+            padding: 8px 16px; border-radius: 8px; font-weight: 500; font-size: 13px;
+            cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border: none;
+        }
+        
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-secondary { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
+        .btn-success { background: var(--export); color: white; }
+        .btn:hover { filter: brightness(1.1); }
+        
+        .status-indicator {
+            display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary);
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--inwork); }
+        
+        .counters {
+            display: flex; gap: 8px; padding: 12px 24px; background: var(--card);
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .counter-chip {
+            padding: 4px 12px; background: var(--raised); border: 1px solid var(--border);
+            border-radius: 9999px; font-size: 12px; display: flex; align-items: center; gap: 6px;
+        }
+        .counter-chip span { font-weight: 600; }
+        
+        .main-content { padding: 18px 24px; }
+        
+        .filter-bar {
+            display: flex; gap: 8px; margin-bottom: 18px; align-items: center; flex-wrap: wrap;
+        }
+        
+        .pill-filter {
+            padding: 6px 14px; background: var(--raised); border: 1px solid var(--border);
+            border-radius: 9999px; font-size: 13px; cursor: pointer; transition: all .1s;
+        }
+        .pill-filter.active { background: var(--accent); color: white; border-color: var(--accent); }
+        
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+            gap: 14px;
+        }
+        
+        .control-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform .1s ease, box-shadow .1s;
+        }
+        
+        .control-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+        }
+        
+        .card-status-bar {
+            height: 5px;
+            width: 100%;
+        }
+        
+        .status-overdue { background: #ef4444; }
+        .status-today { background: #f59e0b; }
+        .status-soon { background: #fb923c; }
+        .status-inwork { background: #22c55e; }
+        .status-completed { background: #3b82f6; }
+        
+        .card-body { padding: 14px 16px; }
+        
+        .card-header {
+            display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 9px;
+        }
+        
+        .card-number {
+            font-weight: 700; font-size: 13.5px; line-height: 1.2;
+        }
+        
+        .card-deadline {
+            font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 5px; background: #1e293b;
+        }
+        
+        .card-content {
+            font-size: 13px; line-height: 1.4; color: var(--secondary); margin-bottom: 12px;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+            min-height: 52px;
+        }
+        
+        .card-meta {
+            display: flex; align-items: center; justify-content: space-between; font-size: 12px;
+        }
+        
+        .card-executors {
+            font-size: 11.5px; color: var(--muted);
+        }
+        
+        .card-badge {
+            font-size: 10px; font-weight: 700; padding: 1px 9px; border-radius: 9999px;
+        }
+        
+        .status-badge {
+            padding: 2px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600;
+        }
+        
+        .status-overdue-text { background: #3b1f22; color: #ef4444; }
+        .status-today-text { background: #3b2a1f; color: #f59e0b; }
+        .status-soon-text { background: #3b2e1f; color: #fb923c; }
+        .status-completed-text { background: #1f2937; color: #3b82f6; }
+        
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center;
+        }
+        
+        .modal-content {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            width: 760px; max-height: 86vh; overflow: auto; box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+        }
+        
+        .modal-header {
+            padding: 18px 24px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .modal-body { padding: 22px 24px; }
+        
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group.full { grid-column: 1 / -1; }
+        
+        label { font-size: 12px; color: var(--secondary); font-weight: 500; }
+        
+        input, select, textarea {
+            background: var(--raised); border: 1px solid var(--border); color: var(--text);
+            padding: 9px 12px; border-radius: 8px; font-size: 13px;
+        }
+        
+        .multi-select {
+            display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; background: var(--raised);
+            border: 1px solid var(--border); border-radius: 8px;
+        }
+        
+        .executor-chip {
+            background: #1e293b; color: var(--text); padding: 3px 9px; border-radius: 9999px;
+            font-size: 12px; display: inline-flex; align-items: center; gap: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>Контроли</h1>
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Локально • 134 записи</span>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showDetailModal()">+ Добавить контроль</button>
+                <button class="btn btn-secondary">📥 Импорт Excel</button>
+                <button class="btn btn-success">📤 Экспорт Excel</button>
+                <button class="btn btn-secondary">⚙ Настройки</button>
+            </div>
+        </div>
+        
+        <!-- Counters -->
+        <div class="counters">
+            <div class="counter-chip"><span>Все</span> <span style="color:#64748b">134</span></div>
+            <div class="counter-chip"><span style="color:#ef4444">Просрочено</span> <span>2</span></div>
+            <div class="counter-chip"><span style="color:#f59e0b">Сегодня</span> <span>2</span></div>
+            <div class="counter-chip"><span style="color:#fb923c">Скоро</span> <span>5</span></div>
+            <div class="counter-chip"><span style="color:#22c55e">В работе</span> <span>114</span></div>
+            <div class="counter-chip"><span style="color:#64748b">Исполнено</span> <span>9</span></div>
+            
+            <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                <div style="background:#334155; padding:2px; border-radius:9999px; display:flex; font-size:12px;">
+                    <div style="padding:4px 14px; background:#1e293b; border-radius:9999px;">Активные</div>
+                    <div style="padding:4px 14px; color:#64748b;">Архив</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="filter-bar">
+                <div class="pill-filter active">Все</div>
+                <div class="pill-filter">Просрочено</div>
+                <div class="pill-filter">Сегодня</div>
+                <div class="pill-filter">Скоро</div>
+                <div class="pill-filter">В работе</div>
+                <div class="pill-filter">Исполнено</div>
+                <div style="margin-left:auto; font-size:12px; color:#64748b;">Плитки • 6 колонок на 1600px</div>
+            </div>
+            
+            <div class="grid-container">
+                
+                <!-- Card 1 -->
+                <div class="control-card" onclick="showDetailModal(0)">
+                    <div class="card-status-bar status-overdue"></div>
+                    <div class="card-body">
+                        <div class="card-header">
+                            <div class="card-number">Иссоп-216-2083-25</div>
+                            <div class="card-deadline" style="color:#ef4444;">20.07.2026</div>
+                        </div>
+                        <div class="card-content">Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3</div>
+                        
+                        <div class="card-meta">
+                            <div>
+                                <span class="status-badge status-overdue-text">Просрочено</span>
+                            </div>
+                            <div class="card-executors">Семисенко И.Ю.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 2 -->
+                <div class="control-card" onclick="showDetailModal(1)">
+                    <div class="card-status-bar status-overdue"></div>
+                    <div class="card-body">
+                        <div class="card-header">
+                            <div class="card-number">Иссоп-216-1017-26/дсп</div>
+                            <div class="card-deadline" style="color:#ef4444;">25.07.2026</div>
+                        </div>
+                        <div class="card-content">Распоряжение 8/216-р/17дсп п. 2 — Миронович 01.05.2026, п. 3 — Авакян 01.05.2026, п. 56 Семисенко — 01.09.2026</div>
+                        
+                        <div class="card-meta">
+                            <div>
+                                <span class="status-badge status-overdue-text">Просрочено</span>
+                            </div>
+                            <div class="card-executors">Чашин Э.А., Миронович Д.В.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 3 -->
+                <div class="control-card" onclick="showDetailModal(2)">
+                    <div class="card-status-bar status-today"></div>
+                    <div class="card-body">
+                        <div class="card-header">
+                            <div class="card-number">Вхсоп-9566-22</div>
+                            <div class="card-deadline" style="color:#f59e0b;">04.08.2026</div>
+                        </div>
+                        <div class="card-content">О ходе и результатах расследования УД № 12002600010000068 (по факту убийства Иваха К.А.)</div>
+                        
+                        <div class="card-meta">
+                            <div>
+                                <span class="status-badge status-today-text">Сегодня</span>
+                            </div>
+                            <div class="card-executors">Семисенко И.Ю.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 4 -->
+                <div class="control-card" onclick="showDetailModal(3)">
+                    <div class="card-status-bar status-soon"></div>
+                    <div class="card-body">
+                        <div class="card-header">
+                            <div class="card-number">214/1-37915-19</div>
+                            <div class="card-deadline" style="color:#fb923c;">05.08.2026</div>
+                        </div>
+                        <div class="card-content">Сведения по ППЛ Павлюкову</div>
+                        
+                        <div class="card-meta">
+                            <div>
+                                <span class="status-badge status-soon-text" style="background:#3b2e1f;color:#fb923c;">Скоро</span>
+                            </div>
+                            <div class="card-executors">Гайнутдинов С.И.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 5 -->
+                <div class="control-card" onclick="showDetailModal(4)">
+                    <div class="card-status-bar status-soon"></div>
+                    <div class="card-body">
+                        <div class="card-header">
+                            <div class="card-number">4108-26</div>
+                            <div class="card-deadline" style="color:#fb923c;">05.08.2026</div>
+                        </div>
+                        <div class="card-content">Информация по УД 9916755 и 0126336 (Зерноград)</div>
+                        
+                        <div class="card-meta">
+                            <div>
+                                <span class="status-badge status-soon-text" style="background:#3b2e1f;color:#fb923c;">Скоро</span>
+                            </div>
+                            <div class="card-executors">Ливенский В.О.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 6 -->
+                <div class="control-card" onclick="showDetailModal(5)">
+                    <div class="card-status-bar status-completed"></div>
+                    <div class="card-body">
+                        <div class="card-header">
+                            <div class="card-number">Иссоп 213-8179-25</div>
+                            <div class="card-deadline" style="color:#3b82f6;">04.08.2026</div>
+                        </div>
+                        <div class="card-content">Приказ №88 от 23.10.2025 по розыску лиц и БВП н/л</div>
+                        
+                        <div class="card-meta">
+                            <div>
+                                <span class="status-badge status-completed-text">Исполнено</span>
+                            </div>
+                            <div class="card-executors">Потемкин С.А., Чашин Э.А.</div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <div style="margin-top: 20px; text-align:center; font-size:12px; color:#64748b;">
+                Плитки • Статусная полоса сверху • Hover-эффект • 6 карточек на строку
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <span style="font-size:18px; font-weight:600;">Редактирование контроля</span><br>
+                    <span style="font-size:12px; color:#64748b;" id="modal-number">Иссоп-216-2083-25</span>
+                </div>
+                <span onclick="hideDetailModal()" style="font-size:24px; color:#64748b; cursor:pointer;">×</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Вх. №</label>
+                        <input type="text" id="modal-in-num" value="Иссоп-216-2083-25">
+                    </div>
+                    <div class="form-group">
+                        <label>Дата поступления</label>
+                        <input type="text" value="14.03.2025">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Инициатор</label>
+                        <select>
+                            <option>СУ</option>
+                            <option>ГУК СК</option>
+                            <option>ГУК</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Тип</label>
+                        <select>
+                            <option>разовый</option>
+                            <option>постоянный</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group full">
+                        <label>Содержание</label>
+                        <textarea id="modal-content">Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3</textarea>
+                    </div>
+                    
+                    <div class="form-group full">
+                        <label>Исполнители</label>
+                        <div class="multi-select">
+                            <div class="executor-chip">Семисенко И.Ю. <span style="cursor:pointer">×</span></div>
+                            <div class="executor-chip">Чашин Э.А. <span style="cursor:pointer">×</span></div>
+                            <div style="font-size:12px;color:#64748b;align-self:center;margin-left:4px;">+ Добавить</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>За кем</label>
+                        <select><option>Потемкин С.А.</option><option>Чашин Э.А.</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Срок</label>
+                        <input type="text" id="modal-deadline" value="20.07.2026">
+                    </div>
+                    
+                    <div class="form-group full">
+                        <label>Пункты задания</label>
+                        <textarea style="height:55px;">п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3</textarea>
+                    </div>
+                    
+                    <div class="form-group full">
+                        <label>Календарь (Август 2026)</label>
+                        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px;max-width:340px;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;">
+                                <span>←</span> <strong>Август 2026</strong> <span>→</span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:11px;text-align:center;">
+                                <div style="color:#64748b">Пн</div><div style="color:#64748b">Вт</div><div style="color:#64748b">Ср</div><div style="color:#64748b">Чт</div><div style="color:#64748b">Пт</div><div style="color:#64748b">Сб</div><div style="color:#64748b">Вс</div>
+                                <div></div><div></div><div></div><div></div><div></div><div>1</div><div>2</div>
+                                <div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div>
+                                <div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div>
+                                <div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div>
+                                <div>24</div><div>25</div><div>26</div><div>27</div><div>28</div><div>29</div><div>30</div>
+                                <div>31</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top:22px; display:flex; gap:10px; justify-content:flex-end;">
+                    <button onclick="hideDetailModal()" class="btn btn-secondary">Отмена</button>
+                    <button onclick="hideDetailModal()" class="btn btn-success">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showDetailModal(index = 0) {
+            const modal = document.getElementById('detailModal');
+            modal.style.display = 'flex';
+            
+            const numbers = ["Иссоп-216-2083-25", "Иссоп-216-1017-26/дсп", "Вхсоп-9566-22", "214/1-37915-19", "4108-26", "Иссоп 213-8179-25"];
+            const contents = [
+                "Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3",
+                "Распоряжение 8/216-р/17дсп п. 2 — Миронович 01.05.2026, п. 3 — Авакян 01.05.2026",
+                "О ходе и результатах расследования УД № 12002600010000068 (по факту убийства Иваха К.А.)",
+                "Сведения по ППЛ Павлюкову",
+                "Информация по УД 9916755 и 0126336 (Зерноград)",
+                "Приказ №88 от 23.10.2025 по розыску лиц и БВП н/л"
+            ];
+            const deadlines = ["20.07.2026", "25.07.2026", "04.08.2026", "05.08.2026", "05.08.2026", "04.08.2026"];
+            
+            document.getElementById('modal-number').innerHTML = numbers[index];
+            document.getElementById('modal-in-num').value = numbers[index];
+            document.getElementById('modal-content').innerHTML = contents[index];
+            document.getElementById('modal-deadline').value = deadlines[index];
+        }
+        
+        function hideDetailModal() {
+            document.getElementById('detailModal').style.display = 'none';
+        }
+        
+        document.getElementById('detailModal').addEventListener('click', function(e) {
+            if (e.target.id === 'detailModal') hideDetailModal();
+        });
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('detailModal');
+                if (modal.style.display === 'flex') modal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>04 • Дедлайн-доска — Мокап Контроли</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Segoe+UI:wght@400;500;600&amp;display=swap');
+        
+        :root {
+            --bg: #0b1120;
+            --card: #15202e;
+            --raised: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --secondary: #94a3b8;
+            --muted: #64748b;
+            --accent: #3b82f6;
+            --export: #10b981;
+            --overdue: #ef4444;
+            --today: #f59e0b;
+            --soon: #fb923c;
+            --inwork: #22c55e;
+            --done: #64748b;
+            --completed: #3b82f6;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 13.5px;
+        }
+        
+        .app-container {
+            width: 1600px;
+            margin: 0 auto;
+            min-height: 900px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: var(--raised);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .header h1 { font-size: 22px; font-weight: 600; }
+        
+        .header-actions { display: flex; gap: 8px; align-items: center; }
+        
+        .btn {
+            padding: 8px 16px; border-radius: 8px; font-weight: 500; font-size: 13px;
+            cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border: none;
+        }
+        
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-secondary { background: var(--raised); color: var(--text); border: 1px solid var(--border); }
+        .btn-success { background: var(--export); color: white; }
+        .btn:hover { filter: brightness(1.1); }
+        
+        .status-indicator {
+            display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary);
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--inwork); }
+        
+        .counters {
+            display: flex; gap: 8px; padding: 12px 24px; background: var(--card);
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .counter-chip {
+            padding: 4px 12px; background: var(--raised); border: 1px solid var(--border);
+            border-radius: 9999px; font-size: 12px; display: flex; align-items: center; gap: 6px;
+        }
+        
+        .kanban-board {
+            padding: 16px 24px;
+            display: flex;
+            gap: 14px;
+            overflow-x: auto;
+            flex: 1;
+            min-height: 640px;
+        }
+        
+        .kanban-column {
+            flex: 1;
+            min-width: 250px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .column-header {
+            padding: 12px 16px;
+            background: var(--raised);
+            border-bottom: 1px solid var(--border);
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .column-header .title {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .column-count {
+            background: #334155;
+            font-size: 11px;
+            padding: 2px 9px;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+        
+        .column-body {
+            padding: 10px;
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .kanban-card {
+            background: var(--raised);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 13px;
+            cursor: pointer;
+            transition: all .1s;
+        }
+        
+        .kanban-card:hover {
+            border-color: #475569;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.2);
+        }
+        
+        .kanban-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .kanban-number {
+            font-weight: 700;
+            font-size: 12px;
+        }
+        
+        .kanban-deadline {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 0 6px;
+            border-radius: 5px;
+        }
+        
+        .kanban-content {
+            font-size: 12.5px;
+            line-height: 1.35;
+            color: var(--secondary);
+            margin-bottom: 10px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .kanban-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+        }
+        
+        .kanban-executor {
+            color: var(--muted);
+        }
+        
+        .status-pill {
+            font-size: 10px;
+            padding: 1px 7px;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+        
+        .status-overdue { color: #ef4444; background: #3b1f22; }
+        .status-today { color: #f59e0b; background: #3b2a1f; }
+        .status-soon { color: #fb923c; background: #3b2e1f; }
+        .status-inwork { color: #22c55e; background: #1f2d23; }
+        .status-completed { color: #3b82f6; background: #1f2937; }
+        
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center;
+        }
+        
+        .modal-content {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            width: 720px; max-height: 85vh; overflow: auto;
+        }
+        
+        .modal-header {
+            padding: 18px 24px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .modal-body { padding: 20px 24px; }
+        
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group.full { grid-column: 1 / -1; }
+        
+        label { font-size: 12px; color: var(--secondary); font-weight: 500; }
+        
+        input, select, textarea {
+            background: var(--raised); border: 1px solid var(--border); color: var(--text);
+            padding: 9px 12px; border-radius: 8px; font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>Контроли</h1>
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Локально • 134 записи</span>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showDetailModal()">+ Добавить контроль</button>
+                <button class="btn btn-secondary">📥 Импорт Excel</button>
+                <button class="btn btn-success">📤 Экспорт Excel</button>
+                <button class="btn btn-secondary">⚙ Настройки</button>
+            </div>
+        </div>
+        
+        <!-- Counters -->
+        <div class="counters">
+            <div class="counter-chip"><span>Все</span> <span style="color:#64748b">134</span></div>
+            <div class="counter-chip"><span style="color:#ef4444">Просрочено</span> <span>2</span></div>
+            <div class="counter-chip"><span style="color:#f59e0b">Сегодня</span> <span>2</span></div>
+            <div class="counter-chip"><span style="color:#fb923c">Скоро</span> <span>5</span></div>
+            <div class="counter-chip"><span style="color:#22c55e">В работе</span> <span>114</span></div>
+            <div class="counter-chip"><span style="color:#64748b">Исполнено</span> <span>9</span></div>
+            
+            <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                <div style="background:#334155; padding:2px; border-radius:9999px; display:flex; font-size:12px;">
+                    <div style="padding:4px 14px; background:#1e293b; border-radius:9999px;">Активные</div>
+                    <div style="padding:4px 14px; color:#64748b;">Архив</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Kanban Board -->
+        <div class="kanban-board">
+            
+            <!-- Column: Просрочено -->
+            <div class="kanban-column">
+                <div class="column-header">
+                    <div class="title" style="color:#ef4444;">Просрочено</div>
+                    <div class="column-count">2</div>
+                </div>
+                <div class="column-body">
+                    <div class="kanban-card" onclick="showDetailModal(0)">
+                        <div class="kanban-card-header">
+                            <div class="kanban-number">Иссоп-216-2083-25</div>
+                            <div class="kanban-deadline" style="color:#ef4444;">20.07.2026</div>
+                        </div>
+                        <div class="kanban-content">Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3</div>
+                        <div class="kanban-footer">
+                            <div class="kanban-executor">Семисенко И.Ю.</div>
+                            <div class="status-pill status-overdue">ПРОСРОЧЕНО</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kanban-card" onclick="showDetailModal(1)">
+                        <div class="kanban-card-header">
+                            <div class="kanban-number">Иссоп-216-1017-26/дсп</div>
+                            <div class="kanban-deadline" style="color:#ef4444;">25.07.2026</div>
+                        </div>
+                        <div class="kanban-content">Распоряжение 8/216-р/17дсп п. 2 — Миронович 01.05.2026...</div>
+                        <div class="kanban-footer">
+                            <div class="kanban-executor">Чашин Э.А.</div>
+                            <div class="status-pill status-overdue">ПРОСРОЧЕНО</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Column: Сегодня -->
+            <div class="kanban-column">
+                <div class="column-header">
+                    <div class="title" style="color:#f59e0b;">Сегодня</div>
+                    <div class="column-count">2</div>
+                </div>
+                <div class="column-body">
+                    <div class="kanban-card" onclick="showDetailModal(2)">
+                        <div class="kanban-card-header">
+                            <div class="kanban-number">Вхсоп-9566-22</div>
+                            <div class="kanban-deadline" style="color:#f59e0b;">04.08.2026</div>
+                        </div>
+                        <div class="kanban-content">О ходе и результатах расследования УД № 12002600010000068</div>
+                        <div class="kanban-footer">
+                            <div class="kanban-executor">Семисенко И.Ю.</div>
+                            <div class="status-pill status-today">СЕГОДНЯ</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kanban-card" onclick="showDetailModal(3)">
+                        <div class="kanban-card-header">
+                            <div class="kanban-number">214/1-37915-19</div>
+                            <div class="kanban-deadline" style="color:#f59e0b;">05.08.2026</div>
+                        </div>
+                        <div class="kanban-content">Сведения по ППЛ Павлюкову</div>
+                        <div class="kanban-footer">
+                            <div class="kanban-executor">Гайнутдинов С.И.</div>
+                            <div class="status-pill status-today">СЕГОДНЯ</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Column: Скоро -->
+            <div class="kanban-column">
+                <div class="column-header">
+                    <div class="title" style="color:#fb923c;">Скоро</div>
+                    <div class="column-count">5</div>
+                </div>
+                <div class="column-body">
+                    <div class="kanban-card" onclick="showDetailModal(4)">
+                        <div class="kanban-card-header">
+                            <div class="kanban-number">4108-26</div>
+                            <div class="kanban-deadline" style="color:#fb923c;">05.08.2026</div>
+                        </div>
+                        <div class="kanban-content">Информация по УД 9916755 и 0126336 (Зерноград)</div>
+                        <div class="kanban-footer">
+                            <div class="kanban-executor">Ливенский В.О.</div>
+                            <div class="status-pill status-soon">СКОРО</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kanban-card" onclick="showDetailModal(5)">
+                        <div class="kanban-card-header">
+                            <div class="kanban-number">2854-26</div>
+                            <div class="kanban-deadline" style="color:#fb923c;">05.08.2026</div>
+                        </div>
+                        <div class="kanban-content">информация по УД 12502600010000015 (Белая Калитва — ОВД-1)</div>
+                        <div class="kanban-footer">
+                            <div class="kanban-executor">Семисенко И.Ю.</div>
+                            <div class="status-pill status-soon">СКОРО</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Column: В работе -->
+            <div class="kanban-column">
+                <div class="column-header">
+                    <div class="title" style="color:#22c55e;">В работе</div>
+                    <div class="column-count">114</div>
+                </div>
+                <div class="column-body">
+                    <div style="text-align:center; padding:40px 10px; color:#64748b; font-size:12px;">
+                        <div>114 записей</div>
+                        <div style="margin-top:4px; font-size:11px;">(сворачиваемый раздел)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Column: Исполнено -->
+            <div class="kanban-column">
+                <div class="column-header">
+                    <div class="title" style="color:#64748b;">Исполнено</div>
+                    <div class="column-count">9</div>
+                </div>
+                <div class="column-body">
+                    <div class="kanban-card" onclick="showDetailModal(6)">
+                        <div class="kanban-card-header">
+                            <div class="kanban-number">Иссоп 213-8179-25</div>
+                            <div class="kanban-deadline" style="color:#3b82f6;">04.08.2026</div>
+                        </div>
+                        <div class="kanban-content">Приказ №88 от 23.10.2025 по розыску лиц и БВП н/л</div>
+                        <div class="kanban-footer">
+                            <div class="kanban-executor">Потемкин С.А.</div>
+                            <div class="status-pill status-completed">ИСПОЛНЕНО</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <span style="font-size:18px; font-weight:600;">Редактирование контроля</span><br>
+                    <span style="font-size:12px; color:#64748b;" id="modal-number">Иссоп-216-2083-25</span>
+                </div>
+                <span onclick="hideDetailModal()" style="font-size:24px; color:#64748b; cursor:pointer;">×</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Вх. №</label>
+                        <input type="text" id="modal-in-num" value="Иссоп-216-2083-25">
+                    </div>
+                    <div class="form-group">
+                        <label>Срок исполнения</label>
+                        <input type="text" id="modal-deadline" value="20.07.2026">
+                    </div>
+                    
+                    <div class="form-group full">
+                        <label>Содержание</label>
+                        <textarea id="modal-content">Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3</textarea>
+                    </div>
+                    
+                    <div class="form-group full">
+                        <label>Исполнители</label>
+                        <div style="background:#1e293b;border:1px solid #334155;padding:8px;border-radius:8px;font-size:13px;">
+                            Семисенко И.Ю., Чашин Э.А.
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>За кем</label>
+                        <select><option>Потемкин С.А.</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Статус</label>
+                        <select>
+                            <option>Просрочено</option>
+                            <option>Сегодня</option>
+                            <option>Скоро</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group full">
+                        <label>Календарь (Август 2026)</label>
+                        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px;max-width:340px;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;">
+                                <span>←</span> <strong>Август 2026</strong> <span>→</span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:11px;text-align:center;">
+                                <div style="color:#64748b">Пн</div><div style="color:#64748b">Вт</div><div style="color:#64748b">Ср</div><div style="color:#64748b">Чт</div><div style="color:#64748b">Пт</div><div style="color:#64748b">Сб</div><div style="color:#64748b">Вс</div>
+                                <div></div><div></div><div></div><div></div><div></div><div>1</div><div>2</div>
+                                <div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div>
+                                <div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div>
+                                <div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div>
+                                <div>24</div><div>25</div><div>26</div><div>27</div><div>28</div><div>29</div><div>30</div>
+                                <div>31</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top:22px; display:flex; gap:10px; justify-content:flex-end;">
+                    <button onclick="hideDetailModal()" class="btn btn-secondary">Отмена</button>
+                    <button onclick="hideDetailModal()" class="btn btn-success">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showDetailModal(index = 0) {
+            const modal = document.getElementById('detailModal');
+            modal.style.display = 'flex';
+            
+            const numbers = ["Иссоп-216-2083-25", "Иссоп-216-1017-26/дсп", "Вхсоп-9566-22", "214/1-37915-19", "4108-26", "2854-26", "Иссоп 213-8179-25"];
+            const contents = [
+                "Распоряжение 24/216-р от 14.03.2025 ТиОТ п. 1.1, 1.2, 1.3, 2.1, 2.2, 2.3",
+                "Распоряжение 8/216-р/17дсп п. 2 — Миронович 01.05.2026...",
+                "О ходе и результатах расследования УД № 12002600010000068",
+                "Сведения по ППЛ Павлюкову",
+                "Информация по УД 9916755 и 0126336 (Зерноград)",
+                "информация по УД 12502600010000015",
+                "Приказ №88 от 23.10.2025 по розыску лиц и БВП н/л"
+            ];
+            const deadlines = ["20.07.2026", "25.07.2026", "04.08.2026", "05.08.2026", "05.08.2026", "05.08.2026", "04.08.2026"];
+            
+            document.getElementById('modal-number').innerHTML = numbers[index];
+            document.getElementById('modal-in-num').value = numbers[index];
+            document.getElementById('modal-content').innerHTML = contents[index];
+            document.getElementById('modal-deadline').value = deadlines[index];
+        }
+        
+        function hideDetailModal() {
+            document.getElementById('detailModal').style.display = 'none';
+        }
+        
+        document.getElementById('detailModal').addEventListener('click', function(e) {
+            if (e.target.id === 'detailModal') hideDetailModal();
+        });
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('detailModal');
+                if (modal.style.display === 'flex') modal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
