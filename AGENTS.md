@@ -1848,3 +1848,114 @@ Flet-сессии, headless не покрывает `page.open()` с назна�
 
 - Flet строго 0.23.2; layout-правила AGENTS.md; не ломать вкладки 1–2 и фазы 1–2.
 - Не возвращать `scroll=HIDDEN` + `tight` + `expand` в один Row заголовка/фильтров.
+
+---
+
+## 31. Вкладка «Контроли» — реворк UI + критические фиксы (A–F)
+
+**Дата:** 2026-08-04. **Статус:** реализовано (промпт `PROMPT_контроли_реворк.md`).
+**Ветка:** `arena/019fcc5f-porayonka` (сессия-ветка, результат здесь).
+
+### 31.1 Подтверждённые баги и их причины
+
+**БАГ A — FilePicker не смонтирован**
+- Лог: `AssertionError: Control must be added to the page first.` в `_export`/`_import`.
+- Причина: `page.overlay.append(picker)` без последующего `page.update()` — контрол не примонтирован.
+- Рабочий образец: `ui/zonal/zonal_tab.py` → `on_export_excel()` с `page.update()` после append.
+- Проявления: экспорт, импорт, вложения, DatePicker фильтров.
+
+**БАГ B — вложенные диалоги вылетают**
+- Сценарий: «Добавить контроль» → «выбрать исполнителя» (второй AlertDialog) → «Готово» → закрываются ОБЕ модалки, данные потеряны.
+- Причина: в Flet 0.23.2 второй `page.open()` поверх первого ненадёжен, `page.update()` сносит нижний диалог.
+- Хотфикс фазы 2 (`page.open/close`) не помог.
+
+**БАГ C — нет шапки таблицы**
+- `_rebuild_header()` писал `header_row_ref["control"].controls = [hdr]`, но `header_row_ref["control"]` — `ft.Container`, у него нет `.controls`, только `.content`. Шапка никогда не рендерилась.
+
+**БАГ D — не виден срок контроля**
+- Цепочка: DatePicker не монтировался (A) → `due_date` не выбиралась → `effective_due_date` считалась из задач, но в колонке показывалось пусто; плюс шапка отсутствовала (C).
+
+**БАГ E — обрезанные значения dropdown-фильтров**
+- Даже после увеличения ширин значения показывались как «п -».
+- Причина: `ft.Dropdown(label=…)` — label занимает место и конкурирует с выбранным значением. В Flet 0.23.2 label + value в одной строке обрезаются.
+
+**БАГ F — мусор и deprecated**
+- 7× `[CONTROL_MODAL] Sozdayu kartochku kontrolya` — карточка пересоздавалась на каждое действие, overlay засорялся DatePicker'ами.
+- `DeprecationWarning: on_window_event is deprecated` в `main.py:353`.
+- Серый экран при архивации — исключения в confirm-handlers не ловились.
+
+### 31.2 Что переписано
+
+**`ui/controls/controls_tab.py` — полный реворк:**
+- **FilePicker fix (A):** единый хелпер `_ensure_file_picker(page, attr, on_result)` — `overlay.append` + `page.update()` перед `save_file`/`pick_files`. Применяется для экспорта, импорта, вложений. DatePicker также монтируется один раз через `_ensure_date_picker`.
+- **Радикальный fix B:** убраны вложенные модалки. Карточка контроля теперь не `AlertDialog`, а **Container overlay в Stack** (`detail_overlay`) — master-detail поверх списка. Выбор исполнителей/ответственных — **инлайн-панель внутри карточки** с чекбоксами + поиском, без второго диалога. Toggle «Развернуть/Свернуть», бейдж «Выбрано: N», summary short_name.
+  - Для задач — аналогичный инлайн-пикер ответственных per-task.
+  - Поэтому сценарий «карточка → выбор исполнителей → продолжение заполнения → сохранение» не теряет данные и не вылетает.
+- **Fix C:** `header_row` = `Container`, `_rebuild_header()` теперь пишет `header_row.content = Row(…)` (ранее `.controls`). Шапка видна и ширины совпадают с колонками (`_W` расчёт от `page.width`).
+- **Fix D:** эффективная дата = `effective_due_date` (due + задачи + milestones) → колонка «Срок исполн.» показывает `_display_date(eff)` bold, всегда видна. DatePicker теперь рабочий (A).
+- **Fix E:** все фильтры переведены на `hint_text` вместо `label`, `dense=True`, `content_padding`. Значения читаются полностью на 1280 и 1920. Ширины: статус 160, тип 140, инициатор 190, исполнитель 190, за кем 180, экспорт 170.
+- **Fix F:** убран спам-принт, единый DatePicker, overlay не разрастается; все confirm-handlers в `try/except` с `traceback.print_exc()` ASCII; `main.py` заменён `page.on_window_event` → `page.window.on_event` (совместимо, deprecation убран); `save_zonal_collection` импорт с fallback.
+- **Layout:** корень `ft.Column(scroll=AUTO)` → внутри `ft.Stack([main, detail_overlay], expand=True)`. `main` — `Column(scroll=AUTO)` с title, 2 фильтра-ряда, counters, header, rows. Никаких `scroll=HIDDEN + expand` в одном Row (причина бага 1 из 30.1). Фиксированные высоты: title 46, фильтры 46, counters 38, header 30, rows 58.
+- **UX:** мастер-деталь: список сверху, детальная карточка по центру с затемнённым фоном `#000000AA`, ширина 820, высота 720, скроллится внутри. Инициаторы — добавление прямо в карточке, синхронизируется с фильтром.
+
+**`ui/controls/control_card_modal.py` — рефактор для совместимости:**
+- Убран spam-print, оставлен один ASCII лог.
+- Single DatePicker с `page.update()` fix.
+- Исполнители/ответственные — тот же инлайн-мультивыбор (`_build_inline_multi`) вместо вызова `open_name_picker` (который открывал второй диалог).
+- Вложения — FilePicker с `page.update()` fix, open/remove с подтверждением через `page.open` (один диалог, не вложенный).
+- Сохранён контракт `create_control_card_modal(page, control, available_names, on_save, ...) -> AlertDialog`, но теперь без вложенных диалогов. Основной таб больше его не использует (использует свой overlay), но файл остаётся рабочим.
+
+**`main.py`:**
+- `on_window_event` deprecated → `window.on_event` с fallback.
+- `save_zonal_collection` импорт guarded.
+
+**`ui/controls/name_picker.py`:** не используется для основного сценария (оставлен как утилита, single-dialog safe).
+
+### 31.3 Функционал сохранён (фазы 1–2)
+
+- Список/поиск/фильтры (статус, тип, инициатор, исполнитель, контролер, даты С/По), сортировка, счётчики.
+- Пункты задания, milestones, периодика + конечная дата, короткое ФИО.
+- Архив (Активные|Архив, восстановление, удалить навсегда, файлы вложений удаляются).
+- Вложения (сканы pdf/png/jpg, копия в `%APPDATA%` и shared, open, delete, >20МБ warning).
+- Импорт/экспорт Excel (таблица + полный round-trip с `_controls_full` скрытым листом, предпросмотр).
+- Сетевой режим (shared JSON + polling, индикатор «Локально/Сеть»).
+- Уведомления, custom initiators, роли admin/user (фильтрация по `network_user`).
+- Совместимость schema v2 (`controls.json` с реальными данными пользователя читается).
+
+### 31.4 Проверка (headless + ручная чек-лист)
+
+**Headless:**
+```bash
+python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"  # OK
+```
+Smoke с page-заглушкой:
+- сборка вкладки → header_row.content != None, 12 колонок, pickers mounted (`_controls_file_picker`, `_import`, `_date`, `_attach`).
+- архив/восстановление, short_name, milestones, end_date → COMPLETED, effective_due_date учитывает milestones.
+- импорт легаси-xlsx (ежемесячно → 30 дней), round-trip full (скрытый лист, tasks/milestones/attachments).
+- control_card_modal inline multi-select (get_selected).
+
+**Ручная приёмка GUI (чек-лист из промпта):**
+- Импорт Excel открывает FilePicker и импортирует (предпросмотр) — picker монтируется с update.
+- Экспорт открывает save-диалог и сохраняет .xlsx (оба режима).
+- Карточка → выбор исполнителей ИНЛАЙН → сохранить — никаких вылетов, данные не теряются (вложенных диалогов нет).
+- Шапка таблицы видна и совпадает с колонками; срок контроля отображается (эффективная дата bold).
+- Значения фильтров читаются полностью (hint_text).
+- Удаление → архив без серого экрана; восстановление; исполнение разового/постоянного.
+
+### 31.5 Особенности и что не возвращать
+
+- **Не возвращать** `page.overlay.append(picker); picker.pick()` без `page.update()` — причина БАГа A.
+- **Не возвращать** вложенные `AlertDialog` для выбора исполнителей/ответственных — причина БАГа B. Использовать инлайн-панель с чекбоксами.
+- **Не возвращать** `header_row.controls = [...]` у Container — только `.content`.
+- **Не возвращать** `label=` у filter Dropdown — использовать `hint_text` + `dense`.
+- **Не возвращать** `scroll=HIDDEN + tight + expand` в один Row заголовка/фильтров — ломает кнопки (БАГ 1 из 30.1).
+- **Не возвращать** `on_window_event` — использовать `window.on_event`.
+- Внутри `Column(scroll=AUTO)` — только `expand=True` спейсеры в горизонтальных Row, без `wrap`, `animate`, `gradient`, `shadow` на мелких контейнерах (правило AGENTS §22).
+- `print()` — только ASCII; UI-текст — на русском; `ft.icons.*`.
+
+### 31.6 Известные ограничения реворка
+
+- Детальная карточка — Container overlay, а не системный диалог; закрывается кнопкой «Отмена»/крестик или после сохранения. Фон затемнён, но клик по фону не закрывает (чтобы не потерять ввод).
+- Для упрощения в inline-пикере нет «Добавить своё» для исполнителей (фаза 2 требование 2.0.3 — только выбор из списка). Кастомные инициаторы добавляются отдельно полем.
+- `name_picker.py` остаётся, но не используется в основном сценарии выбора исполнителей; если нужен — работает как single dialog.
+
