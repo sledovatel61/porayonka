@@ -1786,3 +1786,65 @@ Headless-тесты (page-заглушка через `LocalConnection`): сбо
 - Layout-правила из разделов 15.11 / 22 / 24.3 (без `expand`/`wrap`/`animate`/`gradient`
   внутри `Column(scroll=AUTO)`; `ft.icons.*`; ASCII `print()`; русский UI).
 - Не возвращать `page.overlay.append + page.update()` для открытия диалогов в контролях.
+
+---
+
+## 30. Хотфикс вкладки «Контроли» (после фазы 2)
+
+**Дата:** 2026-08-04. **Статус:** реализовано (промпт `PROMPT_контроли_хотфикс.md`).
+
+Критичные баги GUI по живому тесту Windows/Flet 0.23.2 — точечные правки в
+`ui/controls/controls_tab.py`:
+
+### 30.1 Сломана шапка (нет кнопок) — БАГ 1
+
+Причина: `title_row` = `Row(tight=True, scroll=ft.ScrollMode.HIDDEN)` с
+`ft.Container(expand=True)` внутри. Скроллируемый Row меряет детей против
+бесконечной ширины, expand-спейсер выталкивает кнопки за видимую область, а
+`scroll=HIDDEN` делает их недостижимыми.
+
+Фикс: убрать `scroll=ft.ScrollMode.HIDDEN` у `title_row`, `filter_row1`,
+`filter_row2` (везде, где было сочетание `scroll + tight + expand`). Кнопки
+снова прижимаются вправо через expand-спейсер. Переключатель «Активные | Архив»
+живёт в `filter_row1` (ряд поиск/статус/тип, справа `mode_row`).
+
+### 30.2 Серый экран при архивации/удалении — БАГ 2
+
+Падение в UI-слое после успешной записи (данные сохранялись, экран замирал).
+Фикс:
+- все диалоги вкладки уже на `page.open()/page.close()` (единый API, как
+  `name_picker.py`);
+- обработчики `_confirm_delete`, `_complete`, `_restore`, `_delete_forever`,
+  `_extend` (confirm/close), `_preview_import` (confirm/close) обёрнуты в
+  `try/except` с `traceback.print_exc()` (ASCII `print`) — ошибка попадает в
+  консоль, а не в серый экран;
+- порядок в confirm: `_persist` → `page.close` → `_cleanup_dialog` →
+  `_rebuild_table` → `_refresh_counters` → `show_toast`.
+
+### 30.3 Обрезанные значения dropdown-фильтров — БАГ 3
+
+Увеличены ширины фильтров: «Статус» 140→170, «Тип» 120→150, «Инициатор» 180→200,
+«Исполнитель» 180→200, «За кем» 170→190 — выбранные значения читаются полностью.
+
+### 30.4 Бейдж счётчика «Все» — БАГ 4
+
+Причина: при выбранном состоянии бейджу задавался `bgcolor="#ffffff22"` и
+светлый текст → число невидимо (жёлтое пятно). Фикс: бейдж всегда тёмный
+(`COLORS["card"]`) со светлым числом (`text_light`, кегль 11, высота 20);
+`_restyle_counters` больше не ставит полупрозрачный фон.
+
+### 30.5 Проверка
+
+```bash
+python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"
+```
+Headless-smoke: сборка вкладки, `title_row`/`filter_row*` без `scroll`,
+переключение Активные|Архив, архив/восстановление/удаление (data-слой),
+периодика с `end_date`, короткое ФИО, round-trip Excel, миграция v1→v2.
+Ручная приёмка в GUI Windows — обязательна (диалоговые сценарии требуют реальной
+Flet-сессии, headless не покрывает `page.open()` с назначением uid).
+
+### 30.6 Не менять
+
+- Flet строго 0.23.2; layout-правила AGENTS.md; не ломать вкладки 1–2 и фазы 1–2.
+- Не возвращать `scroll=HIDDEN` + `tight` + `expand` в один Row заголовка/фильтров.
