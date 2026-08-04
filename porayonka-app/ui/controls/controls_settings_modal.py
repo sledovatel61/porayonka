@@ -7,6 +7,7 @@ from typing import Callable
 from core.constants import COLORS
 from core.controls_data import DEFAULT_SETTINGS, get_criminalist_names
 from core.controls_models import short_name
+from .glass_theme import GLASS, _RADIUS_CARD
 
 
 def create_controls_settings_modal(
@@ -159,7 +160,7 @@ def create_controls_settings_modal(
 
     dialog = ft.AlertDialog(
         modal=True,
-        bgcolor=COLORS["primary_light"],
+        bgcolor=GLASS["surface_solid"],
         title=ft.Row(controls=[
             ft.Icon(ft.icons.SETTINGS_OUTLINED, size=20, color=COLORS["text"]),
             ft.Text("Настройки контролей", size=16, weight=ft.FontWeight.BOLD,
@@ -219,6 +220,6 @@ def create_controls_settings_modal(
                                   padding=ft.padding.symmetric(horizontal=20, vertical=8))),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
-        shape=ft.RoundedRectangleBorder(radius=12),
+        shape=ft.RoundedRectangleBorder(radius=_RADIUS_CARD),
     )
     return dialog

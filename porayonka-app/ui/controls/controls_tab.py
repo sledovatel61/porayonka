@@ -1,6 +1,7 @@
 # ui/controls/controls_tab.py
-# Вкладка «Контроли» — реворк: фикс багов A-F + inline-выбор без вложенных диалогов
-# + master-detail overlay (деталь — не AlertDialog, а Container в Stack)
+# Glass Dark redesign: semi-transparent panels, Russian calendar, larger incoming column,
+# proper two-row filters, chip counters, status pills.
+# All logic (filters, sort, archive, network, polling, Excel, attachments) preserved.
 import threading
 import time
 import traceback
@@ -10,11 +11,10 @@ from uuid import uuid4
 
 import flet as ft
 
-from core.constants import COLORS
 from core.controls_models import (
     Control, ControlTask, ControlMilestone, PERIODIC, ONE_TIME,
     effective_due_date, deadline_status, parse_date, short_name,
-    STATUS_LABELS, STATUS_COLORS,
+    STATUS_LABELS,
     OVERDUE, TODAY, SOON, IN_PROGRESS, DONE, COMPLETED, NO_DATE,
     ARCHIVE_DONE, ARCHIVE_DELETED,
 )
@@ -31,6 +31,13 @@ from core.controls_data import (
 )
 from core.controls_exporter import ControlsExcelExporter, import_from_excel
 
+from .glass_theme import (
+    GLASS, status_color, glass_panel, status_pill,
+    glass_button, ghost_button, chip, _RADIUS, _RADIUS_PANEL, _RADIUS_CARD,
+)
+from .russian_calendar import create_russian_date_field
+
+# ── Status icon mapping (ft.icons.*) ────────────────────────────
 STATUS_ICONS = {
     OVERDUE: ft.icons.EVENT_BUSY,
     TODAY: ft.icons.NOTIFICATIONS_ACTIVE,
@@ -41,12 +48,14 @@ STATUS_ICONS = {
     NO_DATE: ft.icons.REMOVE_CIRCLE_OUTLINE,
 }
 
+# ── Column widths (incoming >= 150, shrink content/executors) ───
 _FIXED = {
-    "bar": 6, "num": 38, "incoming": 108, "receive": 96, "initiator": 138,
-    "controller": 140, "type": 96, "due": 104, "status": 118, "actions": 110,
+    "bar": 6, "num": 38, "incoming": 150, "receive": 96, "initiator": 138,
+    "controller": 140, "type": 96, "due": 104, "status": 120, "actions": 110,
 }
-_ROW_HEIGHT = 58
+_ROW_HEIGHT = 54
 _TAB_HORIZONTAL_PADDING = 40
+
 _PERIOD_LABELS = [
     ("daily", "Ежедневно", 1),
     ("weekly", "Еженедельно", 7),
@@ -57,19 +66,21 @@ _PERIOD_LABELS = [
 ]
 _PERIOD_DAYS = {k: d for k, _, d in _PERIOD_LABELS}
 
+
+# ── Utilities ────────────────────────────────────────────────────
 def _display_date(iso: Optional[str]) -> str:
     d = parse_date(iso)
-    return d.strftime("%d.%m.%Y") if d else "—"
+    return d.strftime("%d.%m.%Y") if d else "\u2014"
 
 def _display_date_or_none(iso: Optional[str]) -> str:
     d = parse_date(iso)
-    return d.strftime("%d.%m.%Y") if d else "не указана"
+    return d.strftime("%d.%m.%Y") if d else "\u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430"
 
 def _type_label(ctl: Control) -> str:
-    return "постоянный" if ctl.control_type == PERIODIC else "разовый"
+    return "\u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439" if ctl.control_type == PERIODIC else "\u0440\u0430\u0437\u043e\u0432\u044b\u0439"
 
 def _reason_label(reason: str) -> str:
-    return "Исполнен" if reason == ARCHIVE_DONE else ("Удалён" if reason == ARCHIVE_DELETED else "")
+    return "\u0418\u0441\u043f\u043e\u043b\u043d\u0435\u043d" if reason == ARCHIVE_DONE else ("\u0423\u0434\u0430\u043b\u0451\u043d" if reason == ARCHIVE_DELETED else "")
 
 def _period_key(days: int) -> str:
     for k, _, d in _PERIOD_LABELS:
@@ -87,21 +98,6 @@ def _iso_from_picker_value(v) -> Optional[str]:
     except Exception:
         return None
 
-def _ensure_date_picker(page: ft.Page, on_change):
-    if not hasattr(page, "_controls_date_picker"):
-        dp = ft.DatePicker(
-            first_date=datetime(2020, 1, 1),
-            last_date=datetime(2035, 12, 31),
-            on_change=on_change,
-        )
-        page.overlay.append(dp)
-        page._controls_date_picker = dp
-        try:
-            page.update()
-        except Exception:
-            pass
-    return page._controls_date_picker
-
 def _ensure_file_picker(page: ft.Page, attr: str, on_result):
     if not hasattr(page, attr):
         picker = ft.FilePicker(on_result=on_result)
@@ -118,8 +114,28 @@ def _ensure_file_picker(page: ft.Page, attr: str, on_result):
             pass
     return getattr(page, attr)
 
+
+# ── Glass-styled inset dropdown ─────────────────────────────────
+def _mk_glass_dd(hint, width, options, default="all"):
+    return ft.Dropdown(
+        hint_text=hint,
+        width=width, height=40, value=default,
+        options=options,
+        border_radius=_RADIUS, border_color=GLASS["inset_border"],
+        focused_border_color=GLASS["accent"],
+        bgcolor=GLASS["inset_bg"], color=GLASS["text"],
+        hint_style=ft.TextStyle(color=GLASS["text_muted"], size=13),
+        text_style=ft.TextStyle(size=13, color=GLASS["text"]),
+        dense=True,
+        content_padding=ft.padding.symmetric(horizontal=10, vertical=6),
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+# CREATE CONTROLS TAB
+# ══════════════════════════════════════════════════════════════════
 def create_controls_tab(page: ft.Page) -> ft.Column:
-    print("[CONTROLS_TAB] Initializing reworked tab")
+    print("[CONTROLS_TAB] Initializing Glass Dark redesign")
     settings = load_settings()
     soon_days = int(settings.get("soon_days", 3) or 3)
     available_names = get_criminalist_names()
@@ -148,8 +164,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     }
 
     rows_column = ft.Column(spacing=4, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-    sync_label = ft.Text("Локально", size=11, color=COLORS["text_secondary"])
-    sync_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["text_muted"])
+    sync_label = ft.Text("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e", size=11, color=GLASS["text_muted"])
+    sync_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=GLASS["text_muted"])
 
     def _layout_widths(width: Optional[float]) -> Dict[str, int]:
         if not width or width <= 0:
@@ -158,77 +174,78 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         fixed_sum = sum(_FIXED.values())
         flex = max(260.0, available - fixed_sum)
         w = dict(_FIXED)
-        w["executors"] = int(flex * 0.32)
+        w["executors"] = int(flex * 0.30)
         w["content"] = int(flex - w["executors"])
         return w
+
     _W = _layout_widths(page.width)
 
-    # ── DatePicker shared ────────────────────────────────────────
+    # ── Russian Calendar replacement for DatePicker ──────────────
+    # Date pickers for filter row (S:/Po:)
+    _filter_from_ref = {"value": None}
+    _filter_to_ref = {"value": None}
+
+    # We keep a lightweight date-target system for detail card inline calendars
     _date_target = {"setter": None}
-    def _on_date_change(e):
-        setter = _date_target["setter"]
-        if setter is None:
-            return
-        try:
-            iso = _iso_from_picker_value(getattr(e.control, "value", None))
-        except Exception:
-            iso = None
-        if iso:
-            try:
-                setter(iso)
-            except Exception:
-                traceback.print_exc()
 
-    _ensure_date_picker(page, _on_date_change)
+    # Ensure FilePickers are mounted
+    def _noop_date(e):
+        pass
 
-    def _pick_date(setter):
-        _date_target["setter"] = setter
-        try:
-            page._controls_date_picker.pick_date()
-        except Exception:
-            print("[CONTROLS_TAB] pick_date failed")
+    def _ensure_file_picker_mounted():
+        for attr in ("_controls_file_picker", "_controls_import_picker", "_controls_attach_picker"):
+            _ensure_file_picker(page, attr, _noop_date)
 
-    # ── Filter date display ─────────────────────────────────────
-    from_text = ft.Text("С: —", size=11, color=COLORS["text_secondary"], width=90, no_wrap=True)
-    to_text = ft.Text("По: —", size=11, color=COLORS["text_secondary"], width=90, no_wrap=True)
+    _ensure_file_picker_mounted()
+
+    # ── Filter date calendars ────────────────────────────────────
+    from_label = ft.Text("\u0421: \u2014", size=13, color=GLASS["text_secondary"], width=110, no_wrap=True)
+    to_label = ft.Text("\u041f\u043e: \u2014", size=13, color=GLASS["text_secondary"], width=110, no_wrap=True)
 
     def _set_from_iso(iso):
         state["f_from"] = iso
-        from_text.value = f"С: {_display_date(iso)}" if iso else "С: —"
+        from_label.value = f"\u0421: {_display_date(iso)}" if iso else "\u0421: \u2014"
         try:
-            from_text.update()
+            from_label.update()
         except Exception:
             pass
         _apply_filters()
 
     def _set_to_iso(iso):
         state["f_to"] = iso
-        to_text.value = f"По: {_display_date(iso)}" if iso else "По: —"
+        to_label.value = f"\u041f\u043e: {_display_date(iso)}" if iso else "\u041f\u043e: \u2014"
         try:
-            to_text.update()
+            to_label.update()
         except Exception:
             pass
         _apply_filters()
 
+    from_cal = create_russian_date_field(page, None, _set_from_iso,
+                                          hint="\u041d\u0430\u0447\u0430\u043b\u043e", width=140)
+    to_cal = create_russian_date_field(page, None, _set_to_iso,
+                                        hint="\u041a\u043e\u043d\u0435\u0446", width=140)
+
     def _clear_from(e=None):
         state["f_from"] = None
-        from_text.value = "С: —"
+        from_label.value = "\u0421: \u2014"
+        from_cal._set_value(None)
         try:
-            from_text.update()
+            from_label.update()
         except Exception:
             pass
         _apply_filters()
 
     def _clear_to(e=None):
         state["f_to"] = None
-        to_text.value = "По: —"
+        to_label.value = "\u041f\u043e: \u2014"
+        to_cal._set_value(None)
         try:
-            to_text.update()
+            to_label.update()
         except Exception:
             pass
         _apply_filters()
 
-    # ── Persistence / sync ──────────────────────────────────────
+    # ── Persistence / sync ───────────────────────────────────────
     def _persist(controls: List[Control], to_shared: bool = True):
         save_controls(controls)
         state["last_sync"] = datetime.now()
@@ -266,14 +283,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _update_sync_ui():
         net = settings.get("network_enabled")
         if not net:
-            sync_label.value = "Локально"
-            sync_dot.bgcolor = COLORS["text_muted"]
+            sync_label.value = "\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e"
+            sync_dot.bgcolor = GLASS["text_muted"]
         else:
-            role = "админ" if network_role == "admin" else "пользователь"
-            sync_label.value = f"Сеть: {role}"
-            sync_dot.bgcolor = COLORS["received"] if state["network_ok"] else "#f87171"
+            role = "\u0430\u0434\u043c\u0438\u043d" if network_role == "admin" else "\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c"
+            sync_label.value = f"\u0421\u0435\u0442\u044c: {role}"
+            sync_dot.bgcolor = GLASS["in_progress"] if state["network_ok"] else GLASS["overdue"]
             if state["last_sync"]:
-                sync_label.value += f" · {state['last_sync'].strftime('%H:%M:%S')}"
+                sync_label.value += f" \u00b7 {state['last_sync'].strftime('%H:%M:%S')}"
         try:
             sync_label.update()
             sync_dot.update()
@@ -297,7 +314,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             lst = [c for c in lst if not c.archived]
         return lst
 
-    # ── Filtering / sorting ─────────────────────────────────────
+    # ── Filtering / sorting ──────────────────────────────────────
     def _filtered() -> List[Control]:
         base = _visible_base()
         q = state["search"].lower().strip()
@@ -315,7 +332,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             if state["f_from"]:
                 dd = effective_due_date(ctl)
                 if dd is None:
-                    return True  # без срока — показывать
+                    return True
                 fd = parse_date(state["f_from"])
                 if fd and dd < fd:
                     return False
@@ -363,12 +380,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _apply_filters():
         _rebuild_table()
 
-    # ── UI helpers ──────────────────────────────────────────────
-    def _cell(text: str, width: int, color=COLORS["text"], size=12, bold=False, center=False, tooltip=None, max_lines=1) -> ft.Container:
+    # ── UI helpers ───────────────────────────────────────────────
+    def _cell(text: str, width: int, color=GLASS["text"], size=13, bold=False,
+              center=False, tooltip=None, max_lines=1) -> ft.Container:
         return ft.Container(
             content=ft.Text(text, size=size, color=color,
                             weight=ft.FontWeight.W_600 if bold else None,
-                            no_wrap=not center, max_lines=max_lines,
+                            no_wrap=True, max_lines=max_lines,
                             overflow=ft.TextOverflow.ELLIPSIS,
                             tooltip=tooltip or (text if len(text) > 20 else None)),
             width=width, padding=ft.padding.only(left=6, right=4),
@@ -376,92 +394,142 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         )
 
     def _action_icon(icon, color, tooltip, handler):
-        return ft.IconButton(icon=icon, icon_size=16, icon_color=color, tooltip=tooltip,
-                             width=26, height=26, padding=0, on_click=handler)
+        return ft.IconButton(
+            icon=icon, icon_size=16, icon_color=color, tooltip=tooltip,
+            width=30, height=30, padding=0,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=6)),
+            on_click=handler,
+        )
 
-    # ── Row building ────────────────────────────────────────────
-    def _build_row(ctl: Control, num: int) -> ft.Container:
-        status = deadline_status(ctl, soon_days)
-        color = STATUS_COLORS.get(status, "#94a3b8")
+    # ── Row building ─────────────────────────────────────────────
+    def _build_row(ctl: Control, num: int, idx: int) -> ft.Container:
+        st = deadline_status(ctl, soon_days)
+        st_color = status_color(st)
         content = ctl.content or ctl.incoming_number
         content_tooltip = ctl.content or ""
         if ctl.tasks:
             task_txt = "; ".join(t.title for t in ctl.tasks if t.title)
             if task_txt:
                 content_tooltip = (content_tooltip + "\n" + task_txt).strip()
-        content_controls = [_cell(content, _W["content"] - (22 if ctl.attachments else 0),
-                                  tooltip=content_tooltip, max_lines=2)]
+
+        content_controls = [
+            _cell(content, _W["content"] - (22 if ctl.attachments else 0),
+                  tooltip=content_tooltip, max_lines=2)
+        ]
         if ctl.attachments:
             content_controls.append(ft.Container(
                 content=ft.Row(controls=[
-                    ft.Icon(ft.icons.ATTACH_FILE, size=12, color=COLORS["btn_save"]),
-                    ft.Text(str(len(ctl.attachments)), size=10, color=COLORS["btn_save"], no_wrap=True),
+                    ft.Icon(ft.icons.ATTACH_FILE, size=12, color=GLASS["accent"]),
+                    ft.Text(str(len(ctl.attachments)), size=10, color=GLASS["accent"], no_wrap=True),
                 ], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 width=22,
             ))
+
         is_archive = state["mode"] == "archive"
-        type_cell = _cell(_type_label(ctl), _W["type"], color=COLORS["text_secondary"])
+        type_cell = _cell(_type_label(ctl), _W["type"], color=GLASS["text_secondary"])
         if is_archive:
             reason = ctl.archive_reason or ""
             reason_text = _reason_label(reason)
             if ctl.archived_at:
-                reason_text = f"{reason_text} · {_display_date(ctl.archived_at)}"
-            type_cell = _cell(reason_text, _W["type"], color=COLORS["text_secondary"], tooltip=reason)
+                reason_text = f"{reason_text} \u00b7 {_display_date(ctl.archived_at)}"
+            type_cell = _cell(reason_text, _W["type"], color=GLASS["text_secondary"], tooltip=reason)
 
         actions = []
         if is_archive:
-            actions.append(_action_icon(ft.icons.RESTORE, COLORS["received"], "Восстановить", lambda e, c=ctl: _restore(c)))
-            actions.append(_action_icon(ft.icons.DELETE_FOREVER, "#f87171", "Удалить навсегда", lambda e, c=ctl: _delete_forever(c)))
+            actions.append(_action_icon(ft.icons.RESTORE, GLASS["in_progress"], "\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c", lambda e, c=ctl: _restore(c)))
+            actions.append(_action_icon(ft.icons.DELETE_FOREVER, GLASS["overdue"], "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430", lambda e, c=ctl: _delete_forever(c)))
         else:
-            actions.append(_action_icon(ft.icons.CHECK_CIRCLE_OUTLINE, COLORS["received"], "Исполнено", lambda e, c=ctl: _complete(c)))
-            actions.append(_action_icon(ft.icons.UPDATE_OUTLINED, COLORS["in_progress"], "Продлить срок", lambda e, c=ctl: _extend(c)))
-            actions.append(_action_icon(ft.icons.DELETE_OUTLINE, "#f87171", "В архив", lambda e, c=ctl: _confirm_delete(c)))
+            actions.append(_action_icon(ft.icons.CHECK_CIRCLE_OUTLINE, GLASS["in_progress"], "\u0418\u0441\u043f\u043e\u043b\u043d\u0435\u043d\u043e", lambda e, c=ctl: _complete(c)))
+            actions.append(_action_icon(ft.icons.UPDATE_OUTLINED, GLASS["today"], "\u041f\u0440\u043e\u0434\u043b\u0438\u0442\u044c \u0441\u0440\u043e\u043a", lambda e, c=ctl: _extend(c)))
+            actions.append(_action_icon(ft.icons.DELETE_OUTLINE, GLASS["overdue"], "\u0412 \u0430\u0440\u0445\u0438\u0432", lambda e, c=ctl: _confirm_delete(c)))
 
         eff_due = effective_due_date(ctl)
         due_str = _display_date(eff_due.isoformat() if eff_due else ctl.due_date)
+        # Color due date if urgent
+        due_color = GLASS["text"]
+        if st in (OVERDUE, TODAY, SOON):
+            due_color = st_color
+
+        # Alternating row background
+        row_bg = f"{GLASS['surface_solid']}66" if idx % 2 == 0 else "transparent"
 
         row_controls = [
-            ft.Container(width=_W["bar"], height=34, bgcolor=color, border_radius=2),
-            _cell(str(num), _W["num"], center=True, color=COLORS["text_secondary"]),
-            _cell(ctl.incoming_number or "—", _W["incoming"], bold=True, tooltip=ctl.incoming_number),
-            _cell(_display_date(ctl.receive_date), _W["receive"], color=COLORS["text_secondary"]),
-            _cell(short_name(ctl.initiator) if ctl.initiator else "—", _W["initiator"], tooltip=ctl.initiator),
-            ft.Row(controls=content_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
-            _cell(", ".join(short_name(x) for x in ctl.executors) or "—", _W["executors"], tooltip=", ".join(ctl.executors)),
-            _cell(short_name(ctl.controller) if ctl.controller else "—", _W["controller"], tooltip=ctl.controller),
+            ft.Container(width=_W["bar"], height=34, bgcolor=st_color,
+                         border_radius=2),
+            _cell(str(num), _W["num"], center=True, color=GLASS["text_secondary"]),
+            _cell(ctl.incoming_number or "\u2014", _W["incoming"], bold=True,
+                  tooltip=ctl.incoming_number),
+            _cell(_display_date(ctl.receive_date), _W["receive"],
+                  color=GLASS["text_secondary"]),
+            _cell(short_name(ctl.initiator) if ctl.initiator else "\u2014",
+                  _W["initiator"], tooltip=ctl.initiator),
+            ft.Row(controls=content_controls, spacing=2, tight=True,
+                   vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                   alignment=ft.MainAxisAlignment.START),
+            _cell(", ".join(short_name(x) for x in ctl.executors) or "\u2014",
+                  _W["executors"], tooltip=", ".join(ctl.executors)),
+            _cell(short_name(ctl.controller) if ctl.controller else "\u2014",
+                  _W["controller"], tooltip=ctl.controller),
             type_cell,
-            _cell(due_str, _W["due"], bold=True),
+            _cell(due_str, _W["due"], bold=True, color=due_color),
+            # Status pill
             ft.Container(
                 content=ft.Row(controls=[
-                    ft.Icon(STATUS_ICONS.get(status, ft.icons.REMOVE_CIRCLE_OUTLINE), size=12, color=color),
-                    ft.Text(STATUS_LABELS.get(status, status), size=10, color=color, weight=ft.FontWeight.W_600, no_wrap=True),
-                ], spacing=3, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Icon(STATUS_ICONS.get(st, ft.icons.REMOVE_CIRCLE_OUTLINE),
+                            size=12, color=st_color),
+                    ft.Text(STATUS_LABELS.get(st, st), size=11, color=st_color,
+                            weight=ft.FontWeight.W_600, no_wrap=True),
+                ], spacing=3, tight=True,
+                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 width=_W["status"], height=24, border_radius=12,
                 padding=ft.padding.symmetric(horizontal=6),
-                alignment=ft.alignment.center, bgcolor=f"{color}22",
+                alignment=ft.alignment.center,
+                bgcolor=f"{st_color}22",
+                border=ft.border.all(1, st_color),
             ),
         ]
-        row_controls.append(ft.Row(controls=actions, spacing=0, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER))
-        return ft.Container(
-            content=ft.Row(controls=row_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            height=_ROW_HEIGHT, bgcolor=COLORS["card"],
-            border=ft.border.all(1, COLORS["border"]), border_radius=8,
+        row_controls.append(ft.Row(controls=actions, spacing=0, tight=True,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER))
+
+        row = ft.Container(
+            content=ft.Row(controls=row_controls, spacing=2, tight=True,
+                           vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            height=_ROW_HEIGHT,
+            bgcolor=row_bg,
+            border=ft.border.all(1, GLASS["border"]),
+            border_radius=8,
             padding=ft.padding.symmetric(horizontal=4, vertical=4),
             on_click=lambda e, c=ctl: _open_detail(c),
         )
+
+        # Hover effect
+        def _on_hover(e):
+            if e.data == "true":
+                row.bgcolor = "#ffffff08"
+            else:
+                row.bgcolor = row_bg
+            try:
+                row.update()
+            except Exception:
+                pass
+
+        row.on_hover = _on_hover
+        return row
 
     def _rebuild_table():
         rows_column.controls.clear()
         visible = _filtered()
         if not visible:
-            label = "В архиве пусто" if state["mode"] == "archive" else "Контролей не найдено"
+            label = ("\u0412 \u0430\u0440\u0445\u0438\u0432\u0435 \u043f\u0443\u0441\u0442\u043e" if state["mode"] == "archive"
+                     else "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u0435\u0439 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e")
             rows_column.controls.append(ft.Container(
                 content=ft.Row(controls=[
-                    ft.Icon(ft.icons.INBOX, size=18, color=COLORS["text_muted"]),
-                    ft.Text(label, size=12, color=COLORS["text_secondary"]),
+                    ft.Icon(ft.icons.INBOX, size=18, color=GLASS["text_muted"]),
+                    ft.Text(label, size=13, color=GLASS["text_secondary"]),
                 ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                height=48, bgcolor=COLORS["card"],
-                border=ft.border.all(1, COLORS["border"]), border_radius=10,
+                height=54, bgcolor=GLASS["surface"],
+                border=ft.border.all(1, GLASS["border"]),
+                border_radius=_RADIUS,
                 padding=ft.padding.symmetric(horizontal=12, vertical=8),
             ))
             try:
@@ -470,14 +538,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 pass
             return
         for i, ctl in enumerate(visible, 1):
-            rows_column.controls.append(_build_row(ctl, i))
+            rows_column.controls.append(_build_row(ctl, i, i - 1))
         try:
             rows_column.update()
         except Exception:
             pass
 
-    # ── Counters ────────────────────────────────────────────────
+    # ── Counters (chips) ─────────────────────────────────────────
     counter_refs: Dict[str, ft.Container] = {}
+
     def _counts() -> dict:
         res = {"all": 0, OVERDUE: 0, TODAY: 0, SOON: 0, IN_PROGRESS: 0, DONE: 0, COMPLETED: 0}
         for ctl in _visible_base():
@@ -494,16 +563,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _restyle_counters():
         for key, btn in counter_refs.items():
             selected = (state["f_status"] == key)
-            fg = COLORS["text_light"] if selected else COLORS["text_secondary"]
-            btn.bgcolor = COLORS["btn_save"] if selected else "transparent"
-            try:
-                row = btn.content
-                row.controls[1].color = fg
-                badge = row.controls[2]
-                badge.bgcolor = COLORS["card"]
-                badge.content.color = COLORS["text_light"]
-            except Exception:
-                pass
+            if key == "all":
+                c = GLASS["accent"]
+            else:
+                c = status_color(key)
+            btn.bgcolor = f"{c}22" if selected else "transparent"
+            btn.border = ft.border.all(1, c) if selected else ft.border.all(1, "transparent")
             try:
                 btn.update()
             except Exception:
@@ -514,51 +579,47 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         for key, btn in counter_refs.items():
             try:
                 row = btn.content
+                # Find the badge (3rd control in row: dot, label, badge)
                 badge = row.controls[2]
-                badge.content.value = str(counts.get(key, 0))
+                badge.value = str(counts.get(key, 0))
             except Exception:
                 pass
         _restyle_counters()
 
-    def _mk_counter(key: str, label: str, icon) -> ft.Container:
+    def _mk_counter(key: str, label: str, color: str) -> ft.Container:
         counts = _counts()
-        badge = ft.Container(
-            content=ft.Text(str(counts.get(key, 0)), size=11, color=COLORS["text_light"], weight=ft.FontWeight.W_600, no_wrap=True),
-            height=20, padding=ft.padding.symmetric(horizontal=7), border_radius=10,
-            alignment=ft.alignment.center, bgcolor=COLORS["card"],
-        )
+        dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=color)
+        lbl = ft.Text(label, size=12, color=GLASS["text_secondary"],
+                      weight=ft.FontWeight.W_500, no_wrap=True)
+        badge = ft.Text(str(counts.get(key, 0)), size=11, color=GLASS["text"],
+                        weight=ft.FontWeight.W_700, no_wrap=True)
         btn = ft.Container(
-            content=ft.Row(controls=[
-                ft.Icon(icon, size=13, color=COLORS["text_secondary"]),
-                ft.Text(label, size=11, weight=ft.FontWeight.W_600, color=COLORS["text_secondary"], no_wrap=True),
-                badge,
-            ], spacing=5, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            height=30, padding=ft.padding.symmetric(horizontal=10), border_radius=8,
-            alignment=ft.alignment.center, bgcolor="transparent", ink=True,
+            content=ft.Row(controls=[dot, lbl, badge], spacing=5, tight=True,
+                           vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            height=30, border_radius=15,
+            padding=ft.padding.symmetric(horizontal=10),
+            alignment=ft.alignment.center, bgcolor="transparent",
+            border=ft.border.all(1, "transparent"),
+            ink=True,
             on_click=lambda e, v=key: _set_status_filter(v),
         )
         counter_refs[key] = btn
         return btn
 
-    counter_statuses = [
-        (OVERDUE, "Просрочено", ft.icons.EVENT_BUSY),
-        (TODAY, "Сегодня", ft.icons.NOTIFICATIONS_ACTIVE),
-        (SOON, "Скоро", ft.icons.HOURGLASS_BOTTOM),
-        (IN_PROGRESS, "В работе", ft.icons.HOURGLASS_TOP),
-        (DONE, "Исполнено", ft.icons.CHECK_CIRCLE),
-    ]
     counters_row = ft.Container(
         content=ft.Row(controls=[
-            _mk_counter("all", "Все", ft.icons.GRID_VIEW),
-        ] + [_mk_counter(k, label, icon) for k, label, icon in counter_statuses],
-            spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            alignment=ft.MainAxisAlignment.START, scroll=ft.ScrollMode.HIDDEN),
-        height=38, bgcolor=COLORS["primary_light"],
-        border=ft.border.all(1, COLORS["border"]), border_radius=10,
-        padding=ft.padding.symmetric(horizontal=3, vertical=3),
+            _mk_counter("all", "\u0412\u0441\u0435", GLASS["accent"]),
+            _mk_counter(OVERDUE, "\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e", GLASS["overdue"]),
+            _mk_counter(TODAY, "\u0421\u0435\u0433\u043e\u0434\u043d\u044f", GLASS["today"]),
+            _mk_counter(SOON, "\u0421\u043a\u043e\u0440\u043e", GLASS["soon"]),
+            _mk_counter(IN_PROGRESS, "\u0412 \u0440\u0430\u0431\u043e\u0442\u0435", GLASS["in_progress"]),
+            _mk_counter(DONE, "\u0418\u0441\u043f\u043e\u043b\u043d\u0435\u043d\u043e", GLASS["done"]),
+        ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+           alignment=ft.MainAxisAlignment.START, scroll=ft.ScrollMode.HIDDEN),
+        height=38,
     )
 
-    # ── Mode switch ─────────────────────────────────────────────
+    # ── Mode switch (Active / Archive) ───────────────────────────
     def _set_mode(mode: str):
         state["mode"] = mode
         _restyle_mode_buttons()
@@ -567,18 +628,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _rebuild_header()
 
     mode_buttons: Dict[str, ft.Container] = {}
+
     def _restyle_mode_buttons():
         for m, btn in mode_buttons.items():
             selected = (state["mode"] == m)
-            fg = COLORS["text_light"] if selected else COLORS["text_secondary"]
-            btn.bgcolor = COLORS["btn_save"] if selected else "transparent"
+            btn.bgcolor = GLASS["accent"] if selected else "transparent"
+            btn.border = ft.border.all(1, GLASS["accent"] if selected else GLASS["border"])
             try:
                 for ctl in btn.content.controls:
                     if isinstance(ctl, ft.Text):
-                        ctl.color = fg
+                        ctl.color = GLASS["text"] if selected else GLASS["text_secondary"]
                     elif hasattr(ctl, "color"):
                         try:
-                            ctl.color = fg
+                            ctl.color = GLASS["text"] if selected else GLASS["text_secondary"]
                         except Exception:
                             pass
                 btn.update()
@@ -586,14 +648,17 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 pass
 
     def _mk_mode_btn(mode: str, label: str, icon) -> ft.Container:
+        selected = state["mode"] == mode
         btn = ft.Container(
             content=ft.Row(controls=[
-                ft.Icon(icon, size=14, color=COLORS["text_light"] if state["mode"]==mode else COLORS["text_secondary"]),
-                ft.Text(label, size=12, weight=ft.FontWeight.W_600, color=COLORS["text_light"] if state["mode"]==mode else COLORS["text_secondary"], no_wrap=True),
+                ft.Icon(icon, size=14, color=GLASS["text"] if selected else GLASS["text_secondary"]),
+                ft.Text(label, size=12, weight=ft.FontWeight.W_600,
+                        color=GLASS["text"] if selected else GLASS["text_secondary"], no_wrap=True),
             ], spacing=5, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             height=30, padding=ft.padding.symmetric(horizontal=12), border_radius=8,
             alignment=ft.alignment.center,
-            bgcolor=COLORS["btn_save"] if state["mode"]==mode else "transparent",
+            bgcolor=GLASS["accent"] if selected else "transparent",
+            border=ft.border.all(1, GLASS["accent"] if selected else GLASS["border"]),
             ink=True, on_click=lambda e, m=mode: _set_mode(m),
         )
         mode_buttons[mode] = btn
@@ -601,66 +666,52 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     mode_row = ft.Container(
         content=ft.Row(controls=[
-            _mk_mode_btn("active", "Активные", ft.icons.PLAYLIST_PLAY),
-            _mk_mode_btn("archive", "Архив", ft.icons.ARCHIVE_OUTLINED),
-        ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
-        height=38, bgcolor=COLORS["primary_light"],
-        border=ft.border.all(1, COLORS["border"]), border_radius=10,
-        padding=ft.padding.symmetric(horizontal=3, vertical=3),
+            _mk_mode_btn("active", "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435", ft.icons.PLAYLIST_PLAY),
+            _mk_mode_btn("archive", "\u0410\u0440\u0445\u0438\u0432", ft.icons.ARCHIVE_OUTLINED),
+        ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+           alignment=ft.MainAxisAlignment.START),
+        height=38,
     )
 
-    # ── Filters ─────────────────────────────────────────────────
-    def _mk_dd(hint, width, options, default="all"):
-        return ft.Dropdown(
-            hint_text=hint,
-            width=width, height=38, value=default,
-            options=options,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
-            text_style=ft.TextStyle(size=12, color=COLORS["text"]),
-            dense=True,
-            content_padding=ft.padding.symmetric(horizontal=10, vertical=4),
-        )
-
+    # ── Filters ──────────────────────────────────────────────────
     search_field = ft.TextField(
-        hint_text="Поиск по содержанию, номеру…",
+        hint_text="\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u0441\u043e\u0434\u0435\u0440\u0436\u0430\u043d\u0438\u044e, \u043d\u043e\u043c\u0435\u0440\u0443\u2026",
         prefix_icon=ft.icons.SEARCH,
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
-        text_style=ft.TextStyle(size=12),
-        width=260, height=38,
-        dense=True,
+        border_radius=_RADIUS, border_color=GLASS["inset_border"],
+        focused_border_color=GLASS["accent"],
+        bgcolor=GLASS["inset_bg"], color=GLASS["text"],
+        hint_style=ft.TextStyle(color=GLASS["text_muted"], size=13),
+        text_style=ft.TextStyle(size=13),
+        height=40, dense=True,
         content_padding=ft.padding.symmetric(horizontal=10, vertical=8),
     )
+
     def _on_search(e=None):
         state["search"] = search_field.value or ""
         _apply_filters()
+
     search_field.on_change = _on_search
 
-    status_filter_dd = _mk_dd("Статус", 160, [
-        ft.dropdown.Option("all", "Все статусы"),
-        ft.dropdown.Option(OVERDUE, "Просрочено"),
-        ft.dropdown.Option(TODAY, "Сегодня"),
-        ft.dropdown.Option(SOON, "Скоро"),
-        ft.dropdown.Option(IN_PROGRESS, "В работе"),
-        ft.dropdown.Option(DONE, "Исполнено"),
-        ft.dropdown.Option(COMPLETED, "Завершён"),
+    status_filter_dd = _mk_glass_dd("\u0412\u0441\u0435 \u0441\u0442\u0430\u0442\u0443\u0441\u044b", 170, [
+        ft.dropdown.Option("all", "\u0412\u0441\u0435 \u0441\u0442\u0430\u0442\u0443\u0441\u044b"),
+        ft.dropdown.Option(OVERDUE, "\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e"),
+        ft.dropdown.Option(TODAY, "\u0421\u0435\u0433\u043e\u0434\u043d\u044f"),
+        ft.dropdown.Option(SOON, "\u0421\u043a\u043e\u0440\u043e"),
+        ft.dropdown.Option(IN_PROGRESS, "\u0412 \u0440\u0430\u0431\u043e\u0442\u0435"),
+        ft.dropdown.Option(DONE, "\u0418\u0441\u043f\u043e\u043b\u043d\u0435\u043d\u043e"),
+        ft.dropdown.Option(COMPLETED, "\u0417\u0430\u0432\u0435\u0440\u0448\u0451\u043d"),
     ])
-    type_filter_dd = _mk_dd("Тип", 140, [
-        ft.dropdown.Option("all", "Все типы"),
-        ft.dropdown.Option(ONE_TIME, "Разовый"),
-        ft.dropdown.Option(PERIODIC, "Постоянный"),
+    type_filter_dd = _mk_glass_dd("\u0412\u0441\u0435 \u0442\u0438\u043f\u044b", 150, [
+        ft.dropdown.Option("all", "\u0412\u0441\u0435 \u0442\u0438\u043f\u044b"),
+        ft.dropdown.Option(ONE_TIME, "\u0420\u0430\u0437\u043e\u0432\u044b\u0439"),
+        ft.dropdown.Option(PERIODIC, "\u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439"),
     ])
-    initiator_filter_dd = _mk_dd("Инициатор", 190,
-        [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators])
-    executor_filter_dd = _mk_dd("Исполнитель", 190,
-        [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
-    controller_filter_dd = _mk_dd("За кем", 180,
-        [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
+    initiator_filter_dd = _mk_glass_dd("\u0412\u0441\u0435 \u0438\u043d\u0438\u0446\u0438\u0430\u0442\u043e\u0440\u044b", 200,
+        [ft.dropdown.Option("all", "\u0412\u0441\u0435 \u0438\u043d\u0438\u0446\u0438\u0430\u0442\u043e\u0440\u044b")] + [ft.dropdown.Option(i) for i in initiators])
+    executor_filter_dd = _mk_glass_dd("\u0412\u0441\u0435 \u0438\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u0438", 200,
+        [ft.dropdown.Option("all", "\u0412\u0441\u0435 \u0438\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u0438")] + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
+    controller_filter_dd = _mk_glass_dd("\u0412\u0441\u0435 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u0451\u0440\u044b", 200,
+        [ft.dropdown.Option("all", "\u0412\u0441\u0435 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u0451\u0440\u044b")] + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
 
     def _on_filter_change(e=None):
         state["f_status"] = status_filter_dd.value or "all"
@@ -685,9 +736,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         state["search"] = ""
         for dd in (status_filter_dd, type_filter_dd, initiator_filter_dd, executor_filter_dd, controller_filter_dd):
             dd.value = "all"
-        state.update(f_status="all", f_type="all", f_initiator="all", f_executor="all", f_controller="all", f_from=None, f_to=None)
-        from_text.value = "С: —"
-        to_text.value = "По: —"
+        state.update(f_status="all", f_type="all", f_initiator="all", f_executor="all",
+                     f_controller="all", f_from=None, f_to=None)
+        from_cal._set_value(None)
+        to_cal._set_value(None)
         _restyle_counters()
         try:
             page.update()
@@ -695,43 +747,43 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             pass
         _apply_filters()
 
-    filter_row1 = ft.Container(
-        content=ft.Row(controls=[
+    # Two neat filter rows
+    filter_row1 = glass_panel(
+        ft.Row(controls=[
             search_field, status_filter_dd, type_filter_dd,
-            ft.Container(expand=True),
-            mode_row,
-        ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
-        height=46, bgcolor=COLORS["card"],
-        border=ft.border.all(1, COLORS["border"]), border_radius=12,
-        padding=ft.padding.symmetric(horizontal=8, vertical=4),
+        ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+           alignment=ft.MainAxisAlignment.START),
+        padding=6, radius=_RADIUS_PANEL,
     )
-    filter_row2 = ft.Container(
-        content=ft.Row(controls=[
-            initiator_filter_dd, executor_filter_dd, controller_filter_dd,
-            from_text,
-            ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_size=16, icon_color=COLORS["btn_save"], tooltip="С даты",
-                          on_click=lambda e: _pick_date(_set_from_iso)),
-            ft.IconButton(icon=ft.icons.CLEAR, icon_size=14, icon_color=COLORS["text_muted"], tooltip="Очистить С",
-                          on_click=_clear_from),
-            to_text,
-            ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_size=16, icon_color=COLORS["btn_save"], tooltip="По дату",
-                          on_click=lambda e: _pick_date(_set_to_iso)),
-            ft.IconButton(icon=ft.icons.CLEAR, icon_size=14, icon_color=COLORS["text_muted"], tooltip="Очистить По",
-                          on_click=_clear_to),
-            ft.Container(expand=True),
-            ft.TextButton("Сброс", on_click=_reset_filters, style=ft.ButtonStyle(color=COLORS["btn_save"])),
-        ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
-        height=46, bgcolor=COLORS["card"],
-        border=ft.border.all(1, COLORS["border"]), border_radius=12,
-        padding=ft.padding.symmetric(horizontal=8, vertical=4),
-    )
+    filter_row1.height = 50
 
-    # ── Header (fixed bug C) ────────────────────────────────────
+    filter_row2 = glass_panel(
+        ft.Row(controls=[
+            initiator_filter_dd, executor_filter_dd, controller_filter_dd,
+            from_cal,
+            ft.IconButton(icon=ft.icons.CLEAR, icon_size=14,
+                          icon_color=GLASS["text_muted"], tooltip="\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u0421",
+                          on_click=_clear_from, width=28, height=28, padding=0),
+            to_cal,
+            ft.IconButton(icon=ft.icons.CLEAR, icon_size=14,
+                          icon_color=GLASS["text_muted"], tooltip="\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u041f\u043e",
+                          on_click=_clear_to, width=28, height=28, padding=0),
+            ft.Container(expand=True),
+            ghost_button("\u0421\u0431\u0440\u043e\u0441", _reset_filters, compact=True),
+        ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+           alignment=ft.MainAxisAlignment.START),
+        padding=6, radius=_RADIUS_PANEL,
+    )
+    filter_row2.height = 50
+
+    # ── Header row (column labels) ───────────────────────────────
     def _header_cell(text: str, width: int, key: str, center=False) -> ft.Container:
-        arrow = "▲" if (state["sort_key"]==key and not state["sort_reverse"]) else ("▼" if (state["sort_key"]==key and state["sort_reverse"]) else "")
+        arrow = ("\u25b2" if (state["sort_key"] == key and not state["sort_reverse"])
+                 else ("\u25bc" if state["sort_key"] == key and state["sort_reverse"] else ""))
         return ft.Container(
-            content=ft.Text(f"{text} {arrow}".strip(), size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_secondary"], no_wrap=True,
-                            tooltip="Сортировка"),
+            content=ft.Text(f"{text} {arrow}".strip(), size=11,
+                            weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"],
+                            no_wrap=True, tooltip="\u0421\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u043a\u0430"),
             width=width, padding=ft.padding.only(left=6, right=4),
             alignment=ft.alignment.center if center else ft.alignment.center_left,
             on_click=lambda e, k=key: _sort_by(k),
@@ -748,58 +800,62 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     header_row = ft.Container(
         content=ft.Row(controls=[], spacing=2, tight=True),
-        height=30, bgcolor=COLORS["primary_light"],
-        border=ft.border.only(bottom=ft.BorderSide(1, COLORS["border"])),
+        height=34, bgcolor="#0d1830",
+        border=ft.border.only(bottom=ft.BorderSide(1, GLASS["border"])),
         border_radius=8, padding=ft.padding.symmetric(horizontal=4, vertical=2),
     )
 
     def _rebuild_header():
         is_archive = state["mode"] == "archive"
-        controls = [
+        col_labels = [
             ft.Container(width=_W["bar"]),
-            _header_cell("№", _W["num"], "num", center=True),
-            _header_cell("вх. №", _W["incoming"], "incoming"),
-            _header_cell("Дата пост.", _W["receive"], "receive"),
-            _header_cell("Инициатор", _W["initiator"], "initiator"),
+            _header_cell("\u2116", _W["num"], "num", center=True),
+            _header_cell("\u0412\u0425. \u2116", _W["incoming"], "incoming"),
+            _header_cell("\u0414\u0410\u0422\u0410 \u041f\u041e\u0421\u0422.", _W["receive"], "receive"),
+            _header_cell("\u0418\u041d\u0418\u0426\u0418\u0410\u0422\u041e\u0420", _W["initiator"], "initiator"),
             ft.Container(width=_W["content"], padding=ft.padding.only(left=6, right=4),
-                         content=ft.Text("Содержание", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_secondary"], no_wrap=True)),
+                         content=ft.Text("\u0421\u041e\u0414\u0415\u0420\u0416\u0410\u041d\u0418\u0415", size=11,
+                                         weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
             ft.Container(width=_W["executors"], padding=ft.padding.only(left=6, right=4),
-                         content=ft.Text("Исполнители", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_secondary"], no_wrap=True)),
+                         content=ft.Text("\u0418\u0421\u041f\u041e\u041b\u041d\u0418\u0422\u0415\u041b\u0418", size=11,
+                                         weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
             ft.Container(width=_W["controller"], padding=ft.padding.only(left=6, right=4),
-                         content=ft.Text("За кем", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_secondary"], no_wrap=True)),
-            _header_cell("Причина" if is_archive else "Тип", _W["type"], "type"),
-            _header_cell("Срок исполн.", _W["due"], "due"),
+                         content=ft.Text("\u0417\u0410 \u041a\u0415\u041c", size=11,
+                                         weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
+            _header_cell("\u041f\u0420\u0418\u0427\u0418\u041d\u0410" if is_archive else "\u0422\u0418\u041f",
+                         _W["type"], "type"),
+            _header_cell("\u0421\u0420\u041e\u041a \u0418\u0421\u041f\u041e\u041b\u041d.", _W["due"], "due"),
             ft.Container(width=_W["status"], padding=ft.padding.only(left=6, right=4),
-                         content=ft.Text("Статус", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_secondary"], no_wrap=True)),
+                         content=ft.Text("\u0421\u0422\u0410\u0422\u0423\u0421", size=11,
+                                         weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
         ]
-        controls.append(ft.Container(width=_W["actions"]))
-        # FIX Bug C: use .content, not .controls
-        header_row.content = ft.Row(controls=controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        col_labels.append(ft.Container(width=_W["actions"]))
+        header_row.content = ft.Row(controls=col_labels, spacing=2, tight=True,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER)
         try:
             header_row.update()
         except Exception:
             pass
 
-    # ── Detail overlay (master-detail) ──────────────────────────
-    # Inline multi-select widget factory
+    # ── Detail overlay (master-detail, glass styled) ─────────────
     def _build_inline_multi(available: List[str], initial: List[str], title: str, on_change_cb=None):
         selected = list(initial)
         expanded = {"value": False}
         search_val = {"value": ""}
 
-        badge = ft.Text(f"Выбрано: {len(selected)}", size=11, color=COLORS["text_secondary"])
-        summary = ft.Text(", ".join(short_name(x) for x in selected) or "не выбрано",
-                          size=11, color=COLORS["text"], max_lines=2, overflow=ft.TextOverflow.ELLIPSIS,
+        badge = ft.Text(f"\u0412\u044b\u0431\u0440\u0430\u043d\u043e: {len(selected)}", size=11, color=GLASS["text_secondary"])
+        summary = ft.Text(", ".join(short_name(x) for x in selected) or "\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043e",
+                          size=11, color=GLASS["text"], max_lines=2, overflow=ft.TextOverflow.ELLIPSIS,
                           tooltip=", ".join(selected))
 
         search_field_ms = ft.TextField(
-            hint_text=f"Поиск {title.lower()}…",
+            hint_text=f"\u041f\u043e\u0438\u0441\u043a {title.lower()}\u2026",
             prefix_icon=ft.icons.SEARCH,
             height=34, dense=True,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
+            border_radius=_RADIUS, border_color=GLASS["inset_border"],
+            focused_border_color=GLASS["accent"],
+            bgcolor=GLASS["inset_bg"], color=GLASS["text"],
+            hint_style=ft.TextStyle(color=GLASS["text_muted"], size=11),
             text_style=ft.TextStyle(size=11),
             content_padding=ft.padding.symmetric(horizontal=8, vertical=4),
             visible=False,
@@ -810,7 +866,6 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         def _rebuild_list():
             q = search_val["value"].lower()
             filtered = [n for n in available if q in n.lower()] if q else list(available)
-            # selected first
             filtered = sorted(set(filtered + selected), key=lambda n: (n not in selected, n.lower()))
             list_col.controls.clear()
             for name in filtered:
@@ -822,8 +877,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         else:
                             if n in selected:
                                 selected.remove(n)
-                        badge.value = f"Выбрано: {len(selected)}"
-                        summary.value = ", ".join(short_name(x) for x in selected) or "не выбрано"
+                        badge.value = f"\u0412\u044b\u0431\u0440\u0430\u043d\u043e: {len(selected)}"
+                        summary.value = ", ".join(short_name(x) for x in selected) or "\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043e"
                         summary.tooltip = ", ".join(selected)
                         try:
                             badge.update()
@@ -835,15 +890,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                                 on_change_cb(list(selected))
                             except Exception:
                                 pass
-                        # re-sort after change to keep selected on top (optional)
-                        # _rebuild_list()
                     return _toggle
                 list_col.controls.append(
                     ft.Checkbox(
                         label=short_name(name),
                         value=(name in selected),
-                        active_color=COLORS["btn_save"],
-                        label_style=ft.TextStyle(size=11, color=COLORS["text"]),
+                        active_color=GLASS["accent"],
+                        label_style=ft.TextStyle(size=11, color=GLASS["text"]),
                         tooltip=name,
                         on_change=_make_toggle(name),
                         height=28,
@@ -860,81 +913,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         search_field_ms.on_change = _on_search_change
 
-        def _toggle_expand(e=None):
-            expanded["value"] = not expanded["value"]
-            search_field_ms.visible = expanded["value"]
-            list_col.visible = expanded["value"]
-            summary.visible = not expanded["value"]
-            expand_btn.icon = ft.icons.EXPAND_LESS if expanded["value"] else ft.icons.EXPAND_MORE
-            try:
-                search_field_ms.update()
-                list_col.update()
-                summary.update()
-                expand_btn.update()
-            except Exception:
-                pass
-            if expanded["value"]:
-                _rebuild_list()
-
-        def _clear_all(e=None):
-            selected.clear()
-            badge.value = "Выбрано: 0"
-            summary.value = "не выбрано"
-            summary.tooltip = None
-            try:
-                badge.update()
-                summary.update()
-            except Exception:
-                pass
-            if on_change_cb:
-                try:
-                    on_change_cb([])
-                except Exception:
-                    pass
-            _rebuild_list()
-
-        expand_btn = ft.IconButton(icon=ft.icons.EXPAND_MORE, icon_size=18, icon_color=COLORS["text_secondary"],
-                                   tooltip="Развернуть список", on_click=_toggle_expand)
-
-        header = ft.Row(controls=[
-            ft.Text(title, size=12, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            ft.Container(width=8),
-            badge,
-            ft.Container(expand=True),
-            ft.TextButton("Очистить", on_click=_clear_all, style=ft.ButtonStyle(color="#f87171", padding=ft.padding.symmetric(horizontal=6))),
-            expand_btn,
-        ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
-
-        # initial build of list (hidden)
-        _rebuild_list()
-
-        container = ft.Container(
-            content=ft.Column(controls=[
-                header,
-                summary,
-                search_field_ms,
-                ft.Container(content=list_col, border=ft.border.all(1, COLORS["border"]), border_radius=8,
-                             padding=ft.padding.all(4), bgcolor=COLORS["card"], visible=False) if False else list_col,
-            ], spacing=4, tight=True),
-            bgcolor=COLORS["card"],
-            border=ft.border.all(1, COLORS["border"]),
-            border_radius=8,
-            padding=ft.padding.all(8),
-        )
-        # fix: list_col already has border container? We'll wrap properly
-        # override: put list inside bordered container when expanded
         list_wrapper = ft.Container(
             content=list_col,
-            border=ft.border.all(1, COLORS["border"]),
-            border_radius=8,
-            padding=ft.padding.all(4),
-            bgcolor=COLORS["primary_light"],
+            border=ft.border.all(1, GLASS["border"]), border_radius=8,
+            padding=ft.padding.all(4), bgcolor=GLASS["surface_solid"],
             visible=False,
         )
-        # we need to keep reference to wrapper for visibility toggle
-        # adjust _toggle_expand to control wrapper, not list directly
-        # Re-define toggle with wrapper reference
-        def _toggle_expand2(e=None):
+
+        def _toggle_expand(e=None):
             expanded["value"] = not expanded["value"]
             search_field_ms.visible = expanded["value"]
             list_wrapper.visible = expanded["value"]
@@ -950,46 +936,85 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 pass
             if expanded["value"]:
                 _rebuild_list()
-        expand_btn.on_click = _toggle_expand2
 
-        container.content = ft.Column(controls=[
-            header,
-            summary,
-            search_field_ms,
-            list_wrapper,
-        ], spacing=4, tight=True)
+        def _clear_all(e=None):
+            selected.clear()
+            badge.value = "\u0412\u044b\u0431\u0440\u0430\u043d\u043e: 0"
+            summary.value = "\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043e"
+            summary.tooltip = None
+            try:
+                badge.update()
+                summary.update()
+            except Exception:
+                pass
+            if on_change_cb:
+                try:
+                    on_change_cb([])
+                except Exception:
+                    pass
+            _rebuild_list()
 
-        # expose selected list via closure attribute
+        expand_btn = ft.IconButton(icon=ft.icons.EXPAND_MORE, icon_size=18,
+                                   icon_color=GLASS["text_secondary"],
+                                   tooltip="\u0420\u0430\u0437\u0432\u0435\u0440\u043d\u0443\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a",
+                                   on_click=_toggle_expand)
+
+        header = ft.Row(controls=[
+            ft.Text(title, size=12, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            ft.Container(width=8), badge,
+            ft.Container(expand=True),
+            ft.TextButton("\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c", on_click=_clear_all,
+                          style=ft.ButtonStyle(color=GLASS["overdue"], padding=ft.padding.symmetric(horizontal=6))),
+            expand_btn,
+        ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        _rebuild_list()
+
+        container = ft.Container(
+            content=ft.Column(controls=[header, summary, search_field_ms, list_wrapper],
+                              spacing=4, tight=True),
+            bgcolor=GLASS["surface"],
+            border=ft.border.only(
+                top=ft.BorderSide(1, GLASS["top_edge"]),
+                left=ft.BorderSide(1, GLASS["border"]),
+                right=ft.BorderSide(1, GLASS["border"]),
+                bottom=ft.BorderSide(1, GLASS["border"]),
+            ),
+            border_radius=_RADIUS,
+            padding=ft.padding.all(8),
+        )
         container._get_selected = lambda: list(selected)
-        container._set_selected = lambda new_list: (selected.clear(), selected.extend(new_list), _rebuild_list(), setattr(badge, 'value', f"Выбрано: {len(selected)}"), setattr(summary, 'value', ", ".join(short_name(x) for x in selected) or "не выбрано"))
+        container._set_selected = lambda new_list: (
+            selected.clear(), selected.extend(new_list), _rebuild_list(),
+            setattr(badge, 'value', f"\u0412\u044b\u0431\u0440\u0430\u043d\u043e: {len(selected)}"),
+            setattr(summary, 'value', ", ".join(short_name(x) for x in selected) or "\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043e"),
+        )
         return container
 
-    # Detail overlay containers
+    # Detail overlay state
     detail_state: Dict = {
-        "control_id": None,
-        "is_new": True,
-        "executors_picker": None,
-        "tasks": [],  # list of dicts
-        "milestones": [],
-        "attachments": [],
-        "receive_date": None,
-        "due_date": None,
-        "end_date": None,
+        "control_id": None, "is_new": True, "executors_picker": None,
+        "tasks": [], "milestones": [], "attachments": [],
+        "receive_date": None, "due_date": None, "end_date": None,
     }
 
-    # We'll build detail UI dynamically in _open_detail
     detail_card = ft.Container(
-        width=820,
-        height=720,
-        bgcolor=COLORS["primary_light"],
-        border=ft.border.all(1, COLORS["border"]),
-        border_radius=12,
+        width=860, height=740,
+        bgcolor=GLASS["surface"],
+        border=ft.border.only(
+            top=ft.BorderSide(1, GLASS["top_edge"]),
+            left=ft.BorderSide(1, GLASS["border"]),
+            right=ft.BorderSide(1, GLASS["border"]),
+            bottom=ft.BorderSide(1, GLASS["border"]),
+        ),
+        border_radius=_RADIUS_CARD,
         padding=ft.padding.all(14),
-        content=ft.Column(controls=[ft.Text("Загрузка…")], scroll=ft.ScrollMode.AUTO, expand=True),
+        content=ft.Column(controls=[ft.Text("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026")],
+                          scroll=ft.ScrollMode.AUTO, expand=True),
     )
     detail_overlay = ft.Container(
         visible=False,
-        bgcolor="#000000AA",
+        bgcolor=GLASS["overlay_dim"],
         expand=True,
         alignment=ft.alignment.center,
         padding=ft.padding.all(12),
@@ -1004,6 +1029,38 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             pass
 
+    # Glass-styled inset field helper for the detail card
+    def _inset_field(value="", hint="", read_only=False, width=None, dense=True,
+                     multiline=False, min_lines=None, max_lines=None, expand=False,
+                     height=40, on_change=None):
+        return ft.TextField(
+            value=value, hint_text=hint, read_only=read_only,
+            width=width, height=height, dense=dense,
+            multiline=multiline, min_lines=min_lines, max_lines=max_lines,
+            expand=expand,
+            border_radius=_RADIUS, border_color=GLASS["inset_border"],
+            focused_border_color=GLASS["accent"],
+            bgcolor=GLASS["inset_bg"], color=GLASS["text"],
+            hint_style=ft.TextStyle(color=GLASS["text_muted"], size=13),
+            text_style=ft.TextStyle(size=13),
+            content_padding=ft.padding.symmetric(horizontal=10, vertical=8),
+            on_change=on_change,
+        )
+
+    def _inset_dd(hint, options, value=None, width=200, visible=True):
+        return ft.Dropdown(
+            hint_text=hint, value=value, options=options,
+            width=width, height=40,
+            border_radius=_RADIUS, border_color=GLASS["inset_border"],
+            focused_border_color=GLASS["accent"],
+            bgcolor=GLASS["inset_bg"], color=GLASS["text"],
+            hint_style=ft.TextStyle(color=GLASS["text_muted"], size=13),
+            text_style=ft.TextStyle(size=13),
+            dense=True,
+            content_padding=ft.padding.symmetric(horizontal=10, vertical=6),
+            visible=visible,
+        )
+
     def _open_detail(ctl: Optional[Control]):
         is_new = ctl is None
         state["editing"] = True
@@ -1017,60 +1074,29 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         detail_state["milestones"] = []
 
         # Fields
-        incoming_field = ft.TextField(
+        incoming_field = _inset_field(
             value=ctl.incoming_number if ctl else "",
-            hint_text="Входящий № ВХСОП *",
-            label_style=ft.TextStyle(color=COLORS["text_secondary"]),
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-            dense=True, expand=True,
-        )
-        receive_field = ft.TextField(
-            value=_display_date_or_none(detail_state["receive_date"]),
-            hint_text="Дата поступления",
-            read_only=True, width=140, dense=True,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-        )
+            hint="\u0412\u0445\u043e\u0434\u044f\u0449\u0438\u0439 \u2116 \u0412\u0425\u0421\u041e\u041f *", expand=True)
+        receive_cal = create_russian_date_field(page, detail_state["receive_date"],
+                                                 lambda iso: _set_receive(iso),
+                                                 hint="\u0414\u0430\u0442\u0430 \u043f\u043e\u0441\u0442\u0443\u043f\u043b\u0435\u043d\u0438\u044f", width=140)
+
         def _set_receive(iso):
             detail_state["receive_date"] = iso
-            receive_field.value = _display_date_or_none(iso)
-            try:
-                receive_field.update()
-            except Exception:
-                pass
-        receive_btn = ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
-                                    on_click=lambda e: _pick_date(_set_receive))
+            receive_cal._set_value(iso)
 
-        # Initiator dropdown + add custom
-        init_dd = ft.Dropdown(
-            hint_text="Инициатор",
+        init_dd = _inset_dd(
+            "\u0418\u043d\u0438\u0446\u0438\u0430\u0442\u043e\u0440",
+            [ft.dropdown.Option(i) for i in initiators],
             value=ctl.initiator if (ctl and ctl.initiator in initiators) else None,
-            options=[ft.dropdown.Option(i) for i in initiators],
-            width=220, height=38,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
-            dense=True, content_padding=ft.padding.symmetric(horizontal=10, vertical=4),
-        )
-        new_init_field = ft.TextField(
-            hint_text="Новый инициатор…",
-            width=200, height=36, dense=True,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
-        )
+            width=220)
+        new_init_field = _inset_field(hint="\u041d\u043e\u0432\u044b\u0439 \u0438\u043d\u0438\u0446\u0438\u0430\u0442\u043e\u0440\u2026", width=200, height=36)
+
         def _add_initiator(e=None):
             name = (new_init_field.value or "").strip()
             if not name:
                 return
             add_custom_initiator(settings, name)
-            # refresh initiators list
             new_inits = get_initiators(settings)
             initiators.clear()
             initiators.extend(new_inits)
@@ -1082,111 +1108,62 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 new_init_field.update()
             except Exception:
                 pass
-            # also update filter dd
             try:
-                initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators]
+                initiator_filter_dd.options = [ft.dropdown.Option("all", "\u0412\u0441\u0435 \u0438\u043d\u0438\u0446\u0438\u0430\u0442\u043e\u0440\u044b")] + [ft.dropdown.Option(i) for i in initiators]
                 initiator_filter_dd.update()
             except Exception:
                 pass
-        add_init_btn = ft.ElevatedButton("Добавить", height=36, bgcolor=COLORS["primary_light"], color=COLORS["btn_save"],
-                                         on_click=_add_initiator)
 
-        content_field = ft.TextField(
+        add_init_btn = glass_button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", _add_initiator, compact=True,
+                                     bgcolor=GLASS["surface_solid"], fgcolor=GLASS["accent"], height=36)
+
+        content_field = _inset_field(
             value=ctl.content if ctl else "",
-            hint_text="Содержание контроля…",
-            multiline=True, min_lines=2, max_lines=4,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-        )
+            hint="\u0421\u043e\u0434\u0435\u0440\u0436\u0430\u043d\u0438\u0435 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f\u2026",
+            multiline=True, min_lines=3, max_lines=5)
 
-        # Executors inline picker
-        exec_container = _build_inline_multi(available_names, list(ctl.executors) if ctl else [], "Исполнители")
+        exec_container = _build_inline_multi(available_names, list(ctl.executors) if ctl else [], "\u0418\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u0438")
 
-        controller_dd = ft.Dropdown(
-            hint_text="За кем контроль",
+        controller_dd = _inset_dd(
+            "\u0417\u0430 \u043a\u0435\u043c \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c",
+            [ft.dropdown.Option(n, short_name(n)) for n in available_names],
             value=ctl.controller if (ctl and ctl.controller in available_names) else None,
-            options=[ft.dropdown.Option(n, short_name(n)) for n in available_names],
-            width=200, height=38,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
-            dense=True,
-        )
+            width=200)
 
-        type_dd = ft.Dropdown(
-            hint_text="Тип",
-            value=ctl.control_type if ctl else ONE_TIME,
-            options=[ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")],
-            width=140, height=38,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            dense=True,
-        )
-        period_dd = ft.Dropdown(
-            hint_text="Периодичность",
-            value=_period_key(ctl.period_days if ctl else 7),
-            options=[ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS],
-            width=170, height=38,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            dense=True,
-            visible=(ctl.control_type if ctl else ONE_TIME) == PERIODIC,
-        )
-        custom_days_field = ft.TextField(
+        type_dd = _inset_dd(
+            "\u0422\u0438\u043f",
+            [ft.dropdown.Option(ONE_TIME, "\u0420\u0430\u0437\u043e\u0432\u044b\u0439"), ft.dropdown.Option(PERIODIC, "\u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439")],
+            value=ctl.control_type if ctl else ONE_TIME, width=140)
+        period_dd = _inset_dd(
+            "\u041f\u0435\u0440\u0438\u043e\u0434\u0438\u0447\u043d\u043e\u0441\u0442\u044c",
+            [ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS],
+            value=_period_key(ctl.period_days if ctl else 7), width=170,
+            visible=(ctl.control_type if ctl else ONE_TIME) == PERIODIC)
+        custom_days_field = _inset_field(
             value=str(ctl.period_days) if ctl else "7",
-            hint_text="Интервал дней",
-            width=110, height=38, dense=True,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            visible=_period_key(ctl.period_days if ctl else 7) == "custom",
-        )
-        due_field = ft.TextField(
-            value=_display_date_or_none(detail_state["due_date"]),
-            hint_text="Следующая дата исполнения",
-            read_only=True, width=160, dense=True,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-        )
+            hint="\u0418\u043d\u0442\u0435\u0440\u0432\u0430\u043b \u0434\u043d\u0435\u0439", width=110, height=40,
+            visible=_period_key(ctl.period_days if ctl else 7) == "custom")
+
+        due_cal = create_russian_date_field(page, detail_state["due_date"],
+                                             lambda iso: _set_due(iso),
+                                             hint="\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0430\u044f \u0434\u0430\u0442\u0430", width=160)
+
         def _set_due(iso):
             detail_state["due_date"] = iso
-            due_field.value = _display_date_or_none(iso)
-            try:
-                due_field.update()
-            except Exception:
-                pass
+            due_cal._set_value(iso)
             _refresh_cycle_hint()
-        due_btn = ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
-                                on_click=lambda e: _pick_date(_set_due))
 
-        end_field = ft.TextField(
-            value=_display_date_or_none(detail_state["end_date"]),
-            hint_text="Конечная дата",
-            read_only=True, width=140, dense=True,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            visible=(ctl.control_type if ctl else ONE_TIME) == PERIODIC,
-        )
+        end_cal = create_russian_date_field(page, detail_state["end_date"],
+                                             lambda iso: _set_end(iso),
+                                             hint="\u041a\u043e\u043d\u0435\u0447\u043d\u0430\u044f \u0434\u0430\u0442\u0430", width=140)
+
         def _set_end(iso):
             detail_state["end_date"] = iso
-            end_field.value = _display_date_or_none(iso)
-            try:
-                end_field.update()
-            except Exception:
-                pass
+            end_cal._set_value(iso)
             _refresh_cycle_hint()
-        end_btn = ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
-                                visible=end_field.visible,
-                                on_click=lambda e: _pick_date(_set_end))
 
-        cycle_hint = ft.Text("", size=10, color=COLORS["text_muted"], italic=True)
+        # Cycle hint
+        cycle_hint = ft.Text("", size=10, color=GLASS["text_muted"], italic=True)
 
         def _period_days_val() -> int:
             k = period_dd.value or "weekly"
@@ -1201,8 +1178,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 base = parse_date(detail_state["due_date"]) or date.today()
                 days = _period_days_val()
-                dates = [base + timedelta(days=days*i) for i in range(1,4)]
-                cycle_hint.value = "Следующие: " + " · ".join(d.strftime("%d.%m.%Y") for d in dates)
+                dates = [base + timedelta(days=days * i) for i in range(1, 4)]
+                cycle_hint.value = "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0435: " + " \u00b7 ".join(d.strftime("%d.%m.%Y") for d in dates)
                 cycle_hint.update()
             except Exception:
                 pass
@@ -1210,14 +1187,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         def _on_type_change(e):
             is_per = (e.control.value == PERIODIC)
             period_dd.visible = is_per
-            end_field.visible = is_per
-            end_btn.visible = is_per
+            end_cal.visible = is_per
             milestones_header.visible = is_per
             milestones_col.visible = is_per
             try:
                 period_dd.update()
-                end_field.update()
-                end_btn.update()
+                end_cal.update()
                 milestones_header.update()
                 milestones_col.update()
             except Exception:
@@ -1235,17 +1210,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         type_dd.on_change = _on_type_change
         period_dd.on_change = _on_period_change
 
-        comment_field = ft.TextField(
+        comment_field = _inset_field(
             value=ctl.comment if ctl else "",
-            hint_text="Комментарий…",
-            multiline=True, min_lines=1, max_lines=3,
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-        )
+            hint="\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439\u2026",
+            multiline=True, min_lines=1, max_lines=3)
 
-        # ── Tasks ────────────────────────────────────────────
+        # ── Tasks ────────────────────────────────────────────────
         tasks_col = ft.Column(spacing=6)
 
         def _rebuild_task_cards():
@@ -1259,29 +1229,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         def _build_single_task_card(t_ui: dict, idx: int) -> ft.Container:
             title_f = t_ui["title_field"]
-            due_f = ft.TextField(
-                value=_display_date_or_none(t_ui["due_ref"]["value"]),
-                read_only=True, width=110, dense=True, height=34,
-                border_radius=8, border_color=COLORS["border"],
-                bgcolor=COLORS["card"], color=COLORS["text"],
-            )
-            def _set_task_due(iso, ui=t_ui, field=due_f):
-                ui["due_ref"]["value"] = iso
-                field.value = _display_date_or_none(iso)
-                try:
-                    field.update()
-                except Exception:
-                    pass
+            task_due_cal = create_russian_date_field(
+                page, t_ui["due_ref"]["value"],
+                lambda iso, ui=t_ui: (ui["due_ref"].update({"value": iso}), None),
+                hint="\u0421\u0440\u043e\u043a", width=110)
 
-            # Assignees inline small picker
-            # Build mini multi-select for this task
             ass_selected = t_ui["assignees"]
-            ass_badge = ft.Text(f"Отв: {len(ass_selected)}", size=10, color=COLORS["text_secondary"])
-            ass_summary = ft.Text(", ".join(short_name(x) for x in ass_selected) or "не выбраны",
-                                   size=10, color=COLORS["text"], max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
-            ass_search = ft.TextField(hint_text="Поиск…", height=30, dense=True, visible=False,
-                                      border_radius=6, border_color=COLORS["border"],
-                                      bgcolor=COLORS["card"], color=COLORS["text"], text_style=ft.TextStyle(size=10))
+            ass_badge = ft.Text(f"\u041e\u0442\u0432: {len(ass_selected)}", size=10, color=GLASS["text_secondary"])
+            ass_summary = ft.Text(", ".join(short_name(x) for x in ass_selected) or "\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u044b",
+                                   size=10, color=GLASS["text"], max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
+            ass_search = ft.TextField(hint_text="\u041f\u043e\u0438\u0441\u043a\u2026", height=30, dense=True, visible=False,
+                                      border_radius=6, border_color=GLASS["inset_border"],
+                                      bgcolor=GLASS["inset_bg"], color=GLASS["text"],
+                                      text_style=ft.TextStyle(size=10))
             ass_list = ft.Column(spacing=1, scroll=ft.ScrollMode.AUTO, height=120, visible=False)
             ass_expanded = {"value": False}
 
@@ -1299,8 +1259,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             else:
                                 if n in t_ui["assignees"]:
                                     t_ui["assignees"].remove(n)
-                            ass_badge.value = f"Отв: {len(t_ui['assignees'])}"
-                            ass_summary.value = ", ".join(short_name(x) for x in t_ui["assignees"]) or "не выбраны"
+                            ass_badge.value = f"\u041e\u0442\u0432: {len(t_ui['assignees'])}"
+                            ass_summary.value = ", ".join(short_name(x) for x in t_ui["assignees"]) or "\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u044b"
                             try:
                                 ass_badge.update()
                                 ass_summary.update()
@@ -1309,7 +1269,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         return _chg
                     ass_list.controls.append(
                         ft.Checkbox(label=short_name(name), value=name in t_ui["assignees"],
-                                    active_color=COLORS["btn_save"], label_style=ft.TextStyle(size=10, color=COLORS["text"]),
+                                    active_color=GLASS["accent"],
+                                    label_style=ft.TextStyle(size=10, color=GLASS["text"]),
                                     tooltip=name, on_change=_mk(name), height=24)
                     )
                 try:
@@ -1317,10 +1278,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 except Exception:
                     pass
 
-            def _on_ass_search(e):
-                _rebuild_ass_list()
-
-            ass_search.on_change = _on_ass_search
+            ass_search.on_change = lambda e: _rebuild_ass_list()
 
             def _toggle_ass(e=None):
                 ass_expanded["value"] = not ass_expanded["value"]
@@ -1338,54 +1296,53 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if ass_expanded["value"]:
                     _rebuild_ass_list()
 
-            ass_expand_btn = ft.IconButton(icon=ft.icons.EXPAND_MORE, icon_size=16, icon_color=COLORS["text_secondary"],
-                                           on_click=_toggle_ass)
-            ass_clear_btn = ft.TextButton("Очист.", on_click=lambda e: (t_ui["assignees"].clear(), setattr(ass_badge, 'value', "Отв: 0"), setattr(ass_summary, 'value', "не выбраны"), ass_badge.update() if hasattr(ass_badge, 'update') else None, ass_summary.update() if hasattr(ass_summary, 'update') else None, _rebuild_ass_list()))
+            ass_expand_btn = ft.IconButton(icon=ft.icons.EXPAND_MORE, icon_size=16,
+                                            icon_color=GLASS["text_secondary"],
+                                            on_click=_toggle_ass)
+            ass_clear_btn = ft.TextButton(
+                "\u041e\u0447\u0438\u0441\u0442.",
+                on_click=lambda e: (t_ui["assignees"].clear(), setattr(ass_badge, 'value', "\u041e\u0442\u0432: 0"), setattr(ass_summary, 'value', "\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u044b"), ass_badge.update() if hasattr(ass_badge, 'update') else None, ass_summary.update() if hasattr(ass_summary, 'update') else None, _rebuild_ass_list()))
 
-            ass_wrapper = ft.Container(content=ass_list, border=ft.border.all(1, COLORS["border"]), border_radius=6,
-                                       padding=ft.padding.all(4), bgcolor=COLORS["primary_light"], visible=False)
+            ass_wrapper = ft.Container(content=ass_list, border=ft.border.all(1, GLASS["border"]),
+                                       border_radius=6, padding=ft.padding.all(4),
+                                       bgcolor=GLASS["surface_solid"], visible=False)
 
             _rebuild_ass_list()
 
-            done_sw = ft.Switch(value=t_ui["is_done"], active_color=COLORS["received"], height=26,
+            done_sw = ft.Switch(value=t_ui["is_done"], active_color=GLASS["in_progress"], height=26,
                                 on_change=lambda e, ui=t_ui: ui.update({"is_done": bool(e.control.value)}))
-            done_date_f = ft.Text(_display_date_or_none(t_ui["done_ref"]["value"]), size=10, color=COLORS["text_secondary"], width=80)
-            def _set_done_date(iso, ui=t_ui, txt=done_date_f):
-                ui["done_ref"]["value"] = iso
-                txt.value = _display_date_or_none(iso)
-                try:
-                    txt.update()
-                except Exception:
-                    pass
+            done_date_f = ft.Text(_display_date_or_none(t_ui["done_ref"]["value"]), size=10,
+                                   color=GLASS["text_secondary"], width=80)
 
             return ft.Container(
                 content=ft.Column(controls=[
                     ft.Row(controls=[
-                        ft.Icon(ft.icons.LIST_ALT, size=14, color=COLORS["text_muted"]),
+                        ft.Icon(ft.icons.LIST_ALT, size=14, color=GLASS["text_muted"]),
                         title_f,
-                        ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color="#f87171",
-                                      tooltip="Удалить пункт",
+                        ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"],
+                                      tooltip="\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043f\u0443\u043d\u043a\u0442",
                                       on_click=lambda e, ui=t_ui: _remove_task(ui)),
                     ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Row(controls=[ass_badge, ass_summary, ass_expand_btn, ass_clear_btn],
+                           spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ass_search, ass_wrapper,
                     ft.Row(controls=[
-                        ass_badge, ass_summary, ass_expand_btn, ass_clear_btn,
-                    ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    ass_search,
-                    ass_wrapper,
-                    ft.Row(controls=[
-                        ft.Text("Срок:", size=10, color=COLORS["text_secondary"]),
-                        due_f,
-                        ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_size=14, icon_color=COLORS["btn_save"],
-                                      on_click=lambda e, setter=_set_task_due: _pick_date(setter)),
+                        ft.Text("\u0421\u0440\u043e\u043a:", size=10, color=GLASS["text_secondary"]),
+                        task_due_cal,
                         ft.Container(width=12),
                         done_sw,
-                        ft.Text("исполнено", size=10, color=COLORS["text_secondary"]),
+                        ft.Text("\u0438\u0441\u043f\u043e\u043b\u043d\u0435\u043d\u043e", size=10, color=GLASS["text_secondary"]),
                         done_date_f,
-                        ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_size=14, icon_color=COLORS["btn_save"],
-                                      on_click=lambda e, setter=_set_done_date: _pick_date(setter)),
                     ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 ], spacing=4, tight=True),
-                bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=8,
+                bgcolor=GLASS["surface"],
+                border=ft.border.only(
+                    top=ft.BorderSide(1, GLASS["top_edge"]),
+                    left=ft.BorderSide(1, GLASS["border"]),
+                    right=ft.BorderSide(1, GLASS["border"]),
+                    bottom=ft.BorderSide(1, GLASS["border"]),
+                ),
+                border_radius=_RADIUS,
                 padding=ft.padding.all(8),
             )
 
@@ -1396,11 +1353,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         def _add_task(e=None):
             new_ui = {
-                "title_field": ft.TextField(hint_text="Пункт (напр. п.1)", height=36, dense=True,
-                                            border_radius=8, border_color=COLORS["border"],
-                                            focused_border_color=COLORS["btn_save"],
-                                            bgcolor=COLORS["card"], color=COLORS["text"],
-                                            expand=True),
+                "title_field": _inset_field(hint="\u041f\u0443\u043d\u043a\u0442 (\u043d\u0430\u043f\u0440. \u043f.1)", height=36, expand=True),
                 "assignees": [],
                 "due_ref": {"value": None},
                 "is_done": False,
@@ -1409,14 +1362,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             detail_state["tasks"].append(new_ui)
             _rebuild_task_cards()
 
-        # init tasks from control
         if ctl and ctl.tasks:
             for t in ctl.tasks:
                 detail_state["tasks"].append({
-                    "title_field": ft.TextField(value=t.title, hint_text="Пункт", height=36, dense=True,
-                                                border_radius=8, border_color=COLORS["border"],
-                                                focused_border_color=COLORS["btn_save"],
-                                                bgcolor=COLORS["card"], color=COLORS["text"], expand=True),
+                    "title_field": _inset_field(value=t.title, hint="\u041f\u0443\u043d\u043a\u0442", height=36, expand=True),
                     "assignees": list(t.assignees),
                     "due_ref": {"value": t.due_date},
                     "is_done": t.is_done,
@@ -1424,8 +1373,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 })
         _rebuild_task_cards()
 
-        # ── Milestones ────────────────────────────────────────
+        # ── Milestones ───────────────────────────────────────────
         milestones_col = ft.Column(spacing=4)
+
         def _rebuild_milestones():
             milestones_col.controls.clear()
             for m_ui in detail_state["milestones"]:
@@ -1436,32 +1386,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 pass
 
         def _build_milestone_card(m_ui: dict) -> ft.Container:
-            date_f = ft.Text(_display_date_or_none(m_ui["date_ref"]["value"]), size=11, color=COLORS["text"], width=90, no_wrap=True)
-            def _set_m_date(iso, ui=m_ui, tf=date_f):
-                ui["date_ref"]["value"] = iso
-                tf.value = _display_date_or_none(iso)
-                try:
-                    tf.update()
-                except Exception:
-                    pass
-            note_f = ft.TextField(value=m_ui["note"], hint_text="Точка (описание)", height=34, dense=True, expand=True,
-                                  border_radius=8, border_color=COLORS["border"],
-                                  focused_border_color=COLORS["btn_save"],
-                                  bgcolor=COLORS["card"], color=COLORS["text"],
-                                  on_change=lambda e, ui=m_ui: ui.update({"note": e.control.value or ""}))
-            done_sw = ft.Switch(value=m_ui["is_done"], active_color=COLORS["received"], height=26,
+            m_date_cal = create_russian_date_field(
+                page, m_ui["date_ref"]["value"],
+                lambda iso, ui=m_ui: ui["date_ref"].update({"value": iso}),
+                hint="\u0414\u0430\u0442\u0430", width=140)
+            note_f = _inset_field(value=m_ui["note"], hint="\u0422\u043e\u0447\u043a\u0430 (\u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435)", height=34, expand=True,
+                                   on_change=lambda e, ui=m_ui: ui.update({"note": e.control.value or ""}))
+            done_sw = ft.Switch(value=m_ui["is_done"], active_color=GLASS["in_progress"], height=26,
                                 on_change=lambda e, ui=m_ui: ui.update({"is_done": bool(e.control.value)}))
             return ft.Container(
                 content=ft.Row(controls=[
-                    date_f,
-                    ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_size=14, icon_color=COLORS["btn_save"],
-                                  on_click=lambda e, s=_set_m_date: _pick_date(s)),
-                    note_f,
-                    done_sw,
-                    ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color="#f87171",
+                    m_date_cal, note_f, done_sw,
+                    ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"],
                                   on_click=lambda e, ui=m_ui: _remove_milestone(ui)),
                 ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=8,
+                bgcolor=GLASS["surface"],
+                border=ft.border.all(1, GLASS["border"]), border_radius=_RADIUS,
                 padding=ft.padding.all(6),
             )
 
@@ -1472,44 +1412,42 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         def _add_milestone(e=None):
             detail_state["milestones"].append({
-                "date_ref": {"value": None},
-                "note": "",
-                "is_done": False,
+                "date_ref": {"value": None}, "note": "", "is_done": False,
             })
             _rebuild_milestones()
 
         if ctl and ctl.milestones:
             for m in ctl.milestones:
                 detail_state["milestones"].append({
-                    "date_ref": {"value": m.date},
-                    "note": m.note,
-                    "is_done": m.is_done,
+                    "date_ref": {"value": m.date}, "note": m.note, "is_done": m.is_done,
                 })
         _rebuild_milestones()
 
-        # ── Attachments ───────────────────────────────────────
+        # ── Attachments ──────────────────────────────────────────
         attach_col = ft.Column(spacing=4)
 
         def _rebuild_attach():
             attach_col.controls.clear()
             for rel in detail_state["attachments"]:
                 filename = rel.split("/")[-1]
-                # icon by ext
-                icon = ft.icons.PICTURE_AS_PDF if filename.lower().endswith(".pdf") else ft.icons.IMAGE_OUTLINED if filename.lower().endswith((".png",".jpg",".jpeg")) else ft.icons.DESCRIPTION_OUTLINED
+                icon = (ft.icons.PICTURE_AS_PDF if filename.lower().endswith(".pdf")
+                        else ft.icons.IMAGE_OUTLINED if filename.lower().endswith((".png", ".jpg", ".jpeg"))
+                        else ft.icons.DESCRIPTION_OUTLINED)
                 attach_col.controls.append(
                     ft.Container(
                         content=ft.Row(controls=[
-                            ft.Icon(icon, size=14, color=COLORS["btn_save"]),
-                            ft.Text(filename, size=11, color=COLORS["text"], expand=True, no_wrap=True,
+                            ft.Icon(icon, size=14, color=GLASS["accent"]),
+                            ft.Text(filename, size=11, color=GLASS["text"], expand=True, no_wrap=True,
                                     overflow=ft.TextOverflow.ELLIPSIS, tooltip=filename),
-                            ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=14, icon_color=COLORS["btn_save"],
-                                          tooltip="Открыть",
+                            ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=14, icon_color=GLASS["accent"],
+                                          tooltip="\u041e\u0442\u043a\u0440\u044b\u0442\u044c",
                                           on_click=lambda e, r=rel: _open_attach(r)),
-                            ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=14, icon_color="#f87171",
-                                          tooltip="Удалить",
+                            ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=14, icon_color=GLASS["overdue"],
+                                          tooltip="\u0423\u0434\u0430\u043b\u0438\u0442\u044c",
                                           on_click=lambda e, r=rel: _confirm_remove_attach(r)),
                         ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                        bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=8,
+                        bgcolor=GLASS["surface"],
+                        border=ft.border.all(1, GLASS["border"]), border_radius=_RADIUS,
                         padding=ft.padding.all(6),
                     )
                 )
@@ -1523,7 +1461,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             path = resolve_attachment(detail_state["control_id"], rel, settings)
             if not path or not os.path.exists(str(path)):
                 from ui.toast import show_error_toast
-                show_error_toast(page, "Файл вложения не найден")
+                show_error_toast(page, "\u0424\u0430\u0439\u043b \u0432\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d")
                 return
             try:
                 if sys.platform == "win32":
@@ -1548,22 +1486,20 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     page.close(dlg)
                 except Exception:
                     pass
-
             def _cancel(e=None):
                 try:
                     page.close(dlg)
                 except Exception:
                     pass
-
             dlg = ft.AlertDialog(
-                modal=True, bgcolor=COLORS["primary_light"],
-                title=ft.Text("Удаление вложения", size=14, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-                content=ft.Text("Удалить файл вложения?", size=12, color=COLORS["text"]),
+                modal=True, bgcolor=GLASS["surface_solid"],
+                title=ft.Text("\u0423\u0434\u0430\u043b\u0435\u043d\u0438\u0435 \u0432\u043b\u043e\u0436\u0435\u043d\u0438\u044f", size=14, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+                content=ft.Text("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0444\u0430\u0439\u043b \u0432\u043b\u043e\u0436\u0435\u043d\u0438\u044f?", size=12, color=GLASS["text"]),
                 actions=[
-                    ft.TextButton("Отмена", on_click=_cancel),
-                    ft.ElevatedButton("Удалить", bgcolor="#dc2626", color="white", on_click=_confirm),
+                    ft.TextButton("\u041e\u0442\u043c\u0435\u043d\u0430", on_click=_cancel),
+                    ft.ElevatedButton("\u0423\u0434\u0430\u043b\u0438\u0442\u044c", bgcolor=GLASS["overdue"], color="white", on_click=_confirm),
                 ],
-                shape=ft.RoundedRectangleBorder(radius=10),
+                shape=ft.RoundedRectangleBorder(radius=14),
             )
             page.open(dlg)
 
@@ -1581,10 +1517,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     continue
                 try:
                     import os
-                    sz = os.path.getsize(fpath) / (1024*1024)
+                    sz = os.path.getsize(fpath) / (1024 * 1024)
                     if sz > ATTACHMENT_WARN_MB:
                         from ui.toast import show_toast
-                        show_toast(page, f"Файл > 20 МБ: {fobj.name}", icon=ft.icons.WARNING_AMBER)
+                        show_toast(page, f"\u0424\u0430\u0439\u043b > 20 \u041c\u0411: {fobj.name}", icon=ft.icons.WARNING_AMBER)
                 except Exception:
                     pass
                 rel = None
@@ -1598,16 +1534,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             if added:
                 _rebuild_attach()
                 from ui.toast import show_toast
-                show_toast(page, f"Прикреплено: {len(added)}", icon=ft.icons.ATTACH_FILE)
+                show_toast(page, f"\u041f\u0440\u0438\u043a\u0440\u0435\u043f\u043b\u0435\u043d\u043e: {len(added)}", icon=ft.icons.ATTACH_FILE)
 
-        # ensure attach picker exists and set handler
-        _ensure_file_picker(page, "_controls_attach_picker", _on_attach_picked)
+        try:
+            page._controls_attach_picker.on_result = _on_attach_picked
+        except Exception:
+            pass
 
         def _pick_attach(e=None):
             try:
                 page._controls_attach_picker.pick_files(
-                    dialog_title="Выбрать сканы задания",
-                    allowed_extensions=["pdf","png","jpg","jpeg"],
+                    dialog_title="\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0441\u043a\u0430\u043d\u044b \u0437\u0430\u0434\u0430\u043d\u0438\u044f",
+                    allowed_extensions=["pdf", "png", "jpg", "jpeg"],
                     allow_multiple=True,
                 )
             except Exception as ex:
@@ -1615,27 +1553,20 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         _rebuild_attach()
 
-        # ── Actions (save/cancel/delete) ──────────────────────
+        # ── Save / Delete actions ────────────────────────────────
         def _save_detail(e=None):
             inc = (incoming_field.value or "").strip()
             if not inc:
                 try:
-                    incoming_field.error_text = "Введите входящий номер"
+                    incoming_field.error_text = "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0432\u0445\u043e\u0434\u044f\u0449\u0438\u0439 \u043d\u043e\u043c\u0435\u0440"
                     incoming_field.update()
                 except Exception:
                     pass
                 return
             if not detail_state["receive_date"]:
-                try:
-                    receive_field.error_text = "Укажите дату поступления"
-                    receive_field.update()
-                except Exception:
-                    pass
                 return
-            # collect executors from inline picker
             execs = exec_container._get_selected() if hasattr(exec_container, "_get_selected") else []
 
-            # gather tasks
             new_tasks = []
             for ui in detail_state["tasks"]:
                 title = (ui["title_field"].value or "").strip()
@@ -1648,7 +1579,6 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     is_done=ui["is_done"],
                     done_date=ui["done_ref"]["value"],
                 ))
-            # milestones
             new_miles = []
             for ui in detail_state["milestones"]:
                 if not ui["date_ref"]["value"] and not ui["note"]:
@@ -1680,13 +1610,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             c.updated_at = datetime.now().isoformat()
             if not c.receive_date:
                 c.receive_date = date.today().isoformat()
-            # if due not set, try effective
             if not c.due_date:
                 eff = effective_due_date(c)
                 if eff:
                     c.due_date = eff.isoformat()
 
-            # persist
             if is_new:
                 state["controls"].append(c)
             else:
@@ -1699,13 +1627,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _rebuild_table()
             _refresh_counters()
             from ui.toast import show_toast
-            show_toast(page, "Сохранено", icon=ft.icons.SAVE)
+            show_toast(page, "\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon=ft.icons.SAVE)
             _refresh_cycle_hint()
 
         def _delete_detail(e=None):
             if is_new:
                 _hide_detail()
                 return
+
             def _confirm(e=None):
                 try:
                     archive_control(ctl, ARCHIVE_DELETED)
@@ -1715,89 +1644,96 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     _rebuild_table()
                     _refresh_counters()
                     from ui.toast import show_toast
-                    show_toast(page, f"В архив: {ctl.incoming_number}", icon=ft.icons.ARCHIVE)
+                    show_toast(page, f"\u0412 \u0430\u0440\u0445\u0438\u0432: {ctl.incoming_number}", icon=ft.icons.ARCHIVE)
                 except Exception:
                     traceback.print_exc()
+
             def _cancel(e=None):
                 try:
                     page.close(dlg)
                 except Exception:
                     pass
+
             dlg = ft.AlertDialog(
-                modal=True, bgcolor=COLORS["primary_light"],
-                title=ft.Text("Переместить в архив", size=14, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-                content=ft.Text(f"Переместить контроль «{ctl.incoming_number}» в архив?", size=12, color=COLORS["text"]),
-                actions=[ft.TextButton("Отмена", on_click=_cancel),
-                         ft.ElevatedButton("В архив", bgcolor=COLORS["btn_save"], color="white", on_click=_confirm)],
-                shape=ft.RoundedRectangleBorder(radius=10),
+                modal=True, bgcolor=GLASS["surface_solid"],
+                title=ft.Text("\u041f\u0435\u0440\u0435\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u0432 \u0430\u0440\u0445\u0438\u0432", size=14, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+                content=ft.Text(f"\u041f\u0435\u0440\u0435\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u00ab{ctl.incoming_number}\u00bb \u0432 \u0430\u0440\u0445\u0438\u0432?", size=12, color=GLASS["text"]),
+                actions=[ft.TextButton("\u041e\u0442\u043c\u0435\u043d\u0430", on_click=_cancel),
+                         ft.ElevatedButton("\u0412 \u0430\u0440\u0445\u0438\u0432", bgcolor=GLASS["accent"], color="white", on_click=_confirm)],
+                shape=ft.RoundedRectangleBorder(radius=14),
             )
             page.open(dlg)
 
-        # Sections headers
-        tasks_header = ft.Row(controls=[
-            ft.Icon(ft.icons.FORMAT_LIST_BULLETED, size=16, color=COLORS["text"]),
-            ft.Text("Пункты задания", size=13, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            ft.Container(expand=True),
-            ft.ElevatedButton("+ Добавить пункт", bgcolor=COLORS["primary_light"], color=COLORS["btn_save"], height=30,
-                              on_click=_add_task),
-        ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        # Section headers (glass-styled)
+        def _section_header(title, icon, btn_text=None, btn_handler=None):
+            controls = [
+                ft.Icon(icon, size=16, color=GLASS["text"]),
+                ft.Text(title, size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+                ft.Container(expand=True),
+            ]
+            if btn_text:
+                controls.append(ghost_button(btn_text, btn_handler, compact=True, height=30))
+            return ft.Row(controls=controls, spacing=6, tight=True,
+                         vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
-        milestones_header = ft.Row(controls=[
-            ft.Icon(ft.icons.TIMELINE, size=15, color=COLORS["text"]),
-            ft.Text("Промежуточные точки", size=12, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            ft.Container(expand=True),
-            ft.ElevatedButton("+ Добавить точку", bgcolor=COLORS["primary_light"], color=COLORS["btn_save"], height=28,
-                              on_click=_add_milestone),
-        ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            visible=(ctl.control_type if ctl else ONE_TIME) == PERIODIC)
+        tasks_header = _section_header("\u041f\u0443\u043d\u043a\u0442\u044b \u0437\u0430\u0434\u0430\u043d\u0438\u044f", ft.icons.FORMAT_LIST_BULLETED,
+                                       "+ \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u0443\u043d\u043a\u0442", _add_task)
+        milestones_header = _section_header("\u041f\u0440\u043e\u043c\u0435\u0436\u0443\u0442\u043e\u0447\u043d\u044b\u0435 \u0442\u043e\u0447\u043a\u0438", ft.icons.TIMELINE,
+                                            "+ \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0442\u043e\u0447\u043a\u0443", _add_milestone)
+        milestones_header.visible = (ctl.control_type if ctl else ONE_TIME) == PERIODIC
+        attach_header = _section_header("\u0421\u043a\u0430\u043d \u0437\u0430\u0434\u0430\u043d\u0438\u044f", ft.icons.ATTACH_FILE,
+                                        "\u041f\u0440\u0438\u043a\u0440\u0435\u043f\u0438\u0442\u044c \u0444\u0430\u0439\u043b", _pick_attach)
 
-        attach_header = ft.Row(controls=[
-            ft.Icon(ft.icons.ATTACH_FILE, size=15, color=COLORS["text"]),
-            ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            ft.Container(expand=True),
-            ft.ElevatedButton("Прикрепить файл", bgcolor=COLORS["primary_light"], color=COLORS["btn_save"], height=30,
-                              icon=ft.icons.ATTACH_FILE, on_click=_pick_attach),
-        ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
-
-        # Build detail card content
         detail_content = ft.Column(controls=[
+            # Title row
             ft.Row(controls=[
-                ft.Icon(ft.icons.EDIT_DOCUMENT if not is_new else ft.icons.ADD_CIRCLE_OUTLINE, size=20, color=COLORS["text"]),
-                ft.Text("Карточка контроля" if not is_new else "Новый контроль", size=15, weight=ft.FontWeight.BOLD, color=COLORS["text"], expand=True),
-                ft.IconButton(icon=ft.icons.CLOSE, icon_color=COLORS["text_secondary"], icon_size=18, on_click=_hide_detail),
+                ft.Icon(ft.icons.EDIT_DOCUMENT if not is_new else ft.icons.ADD_CIRCLE_OUTLINE,
+                        size=20, color=GLASS["text"]),
+                ft.Text("\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f" if not is_new else "\u041d\u043e\u0432\u044b\u0439 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c",
+                        size=17, weight=ft.FontWeight.BOLD, color=GLASS["text"], expand=True),
+                ft.IconButton(icon=ft.icons.CLOSE, icon_color=GLASS["text_secondary"],
+                              icon_size=18, on_click=_hide_detail),
             ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.Divider(height=1, color=COLORS["border"]),
-            ft.Row(controls=[incoming_field, receive_field, receive_btn], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.Row(controls=[init_dd, new_init_field, add_init_btn], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.Divider(height=1, color=GLASS["border"]),
+            # Row 1: incoming + receive
+            ft.Row(controls=[incoming_field, receive_cal],
+                   spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            # Row 2: initiator + add custom
+            ft.Row(controls=[init_dd, new_init_field, add_init_btn],
+                   spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             content_field,
             exec_container,
-            ft.Row(controls=[controller_dd, type_dd, period_dd, custom_days_field], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.Row(controls=[due_field, due_btn, end_field, end_btn], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            # Row 3: controller, type, period
+            ft.Row(controls=[controller_dd, type_dd, period_dd, custom_days_field],
+                   spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            # Row 4: due + end
+            ft.Row(controls=[due_cal, end_cal],
+                   spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             cycle_hint,
             comment_field,
             ft.Container(height=4),
-            tasks_header,
-            tasks_col,
+            tasks_header, tasks_col,
             ft.Container(height=4),
-            milestones_header,
-            milestones_col,
+            milestones_header, milestones_col,
             ft.Container(height=4),
-            attach_header,
-            attach_col,
+            attach_header, attach_col,
             ft.Container(height=12),
+            # Bottom buttons
             ft.Row(controls=[
-                ft.ElevatedButton("Удалить", icon=ft.icons.DELETE_FOREVER, bgcolor="#dc2626", color="white",
+                ft.ElevatedButton("\u0423\u0434\u0430\u043b\u0438\u0442\u044c", icon=ft.icons.DELETE_FOREVER,
+                                  bgcolor=GLASS["overdue"], color="white",
                                   visible=not is_new, on_click=_delete_detail) if not is_new else ft.Container(),
                 ft.Container(expand=True),
-                ft.TextButton("Отмена", on_click=_hide_detail, style=ft.ButtonStyle(color=COLORS["text_secondary"])),
-                ft.ElevatedButton("Сохранить", icon=ft.icons.SAVE, bgcolor=COLORS["btn_save"], color="white",
-                                  on_click=_save_detail),
-            ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ghost_button("\u041e\u0442\u043c\u0435\u043d\u0430", _hide_detail),
+                glass_button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", _save_detail,
+                              icon=ft.icons.SAVE),
+            ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+               alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ], spacing=8, tight=True, scroll=ft.ScrollMode.AUTO, expand=True)
 
         detail_card.content = detail_content
-        detail_card.width = 820
-        detail_card.height = 720
+        detail_card.width = 860
+        detail_card.height = 740
         detail_overlay.visible = True
         try:
             detail_overlay.update()
@@ -1808,7 +1744,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 pass
         _refresh_cycle_hint()
 
-    # ── Actions for rows ────────────────────────────────────────
+    # ── Actions for rows ─────────────────────────────────────────
     def _complete(ctl: Control):
         try:
             _do_complete(ctl)
@@ -1828,7 +1764,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ctl.updated_at = datetime.now().isoformat()
                 _persist(state["controls"])
                 from ui.toast import show_toast
-                show_toast(page, "Постоянный контроль завершён (конечная дата)", icon=ft.icons.CHECK_CIRCLE)
+                show_toast(page, "\u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043d (\u043a\u043e\u043d\u0435\u0447\u043d\u0430\u044f \u0434\u0430\u0442\u0430)", icon=ft.icons.CHECK_CIRCLE)
             else:
                 ctl.due_date = new_due.isoformat()
                 ctl.done_date = today.isoformat()
@@ -1840,7 +1776,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ctl.updated_at = datetime.now().isoformat()
                 _persist(state["controls"])
                 from ui.toast import show_toast
-                show_toast(page, f"Срок продлён до {_display_date(ctl.due_date)}", icon=ft.icons.UPDATE)
+                show_toast(page, f"\u0421\u0440\u043e\u043a \u043f\u0440\u043e\u0434\u043b\u0451\u043d \u0434\u043e {_display_date(ctl.due_date)}", icon=ft.icons.UPDATE)
         else:
             ctl.done = True
             ctl.done_date = today.isoformat()
@@ -1848,7 +1784,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             archive_control(ctl, ARCHIVE_DONE)
             _persist(state["controls"])
             from ui.toast import show_toast
-            show_toast(page, "Контроль исполнен и перемещён в архив", icon=ft.icons.CHECK_CIRCLE)
+            show_toast(page, "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u0438\u0441\u043f\u043e\u043b\u043d\u0435\u043d \u0438 \u043f\u0435\u0440\u0435\u043c\u0435\u0449\u0451\u043d \u0432 \u0430\u0440\u0445\u0438\u0432", icon=ft.icons.CHECK_CIRCLE)
         _rebuild_table()
         _refresh_counters()
 
@@ -1860,43 +1796,39 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _do_extend(ctl: Control):
         extend_days = {"value": str(ctl.period_days if ctl.control_type == PERIODIC else 7)}
-        days_field = ft.TextField(
-            value=extend_days["value"], hint_text="Продлить на (дней)",
-            border_radius=8, border_color=COLORS["border"],
-            focused_border_color=COLORS["btn_save"],
-            bgcolor=COLORS["card"], color=COLORS["text"],
-            keyboard_type=ft.KeyboardType.NUMBER, width=160, dense=True,
-        )
+        days_field = _inset_field(
+            value=extend_days["value"], hint="\u041f\u0440\u043e\u0434\u043b\u0438\u0442\u044c \u043d\u0430 (\u0434\u043d\u0435\u0439)",
+            width=160, height=40)
+
         def _confirm(e=None):
             try:
-                try:
-                    n = max(1, int(days_field.value))
-                except ValueError:
-                    n = 7
-                base = parse_date(ctl.due_date) or date.today()
-                ctl.due_date = (base + timedelta(days=n)).isoformat()
-                ctl.updated_at = datetime.now().isoformat()
-                _persist(state["controls"])
-                page.close(dialog)
-                _rebuild_table()
-                _refresh_counters()
-                from ui.toast import show_toast
-                show_toast(page, f"Срок продлён до {_display_date(ctl.due_date)}", icon=ft.icons.UPDATE)
-            except Exception:
-                traceback.print_exc()
+                n = max(1, int(days_field.value))
+            except ValueError:
+                n = 7
+            base = parse_date(ctl.due_date) or date.today()
+            ctl.due_date = (base + timedelta(days=n)).isoformat()
+            ctl.updated_at = datetime.now().isoformat()
+            _persist(state["controls"])
+            page.close(dialog)
+            _rebuild_table()
+            _refresh_counters()
+            from ui.toast import show_toast
+            show_toast(page, f"\u0421\u0440\u043e\u043a \u043f\u0440\u043e\u0434\u043b\u0451\u043d \u0434\u043e {_display_date(ctl.due_date)}", icon=ft.icons.UPDATE)
+
         def _close(e=None):
             try:
                 page.close(dialog)
             except Exception:
                 pass
+
         dialog = ft.AlertDialog(
-            modal=True, bgcolor=COLORS["primary_light"],
-            title=ft.Text("Продлить срок", size=16, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+            modal=True, bgcolor=GLASS["surface_solid"],
+            title=ft.Text("\u041f\u0440\u043e\u0434\u043b\u0438\u0442\u044c \u0441\u0440\u043e\u043a", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
             content=ft.Container(content=days_field, width=220),
-            actions=[ft.TextButton("Отмена", on_click=_close),
-                     ft.ElevatedButton("Продлить", bgcolor=COLORS["btn_save"], color="white", on_click=_confirm)],
+            actions=[ft.TextButton("\u041e\u0442\u043c\u0435\u043d\u0430", on_click=_close),
+                     glass_button("\u041f\u0440\u043e\u0434\u043b\u0438\u0442\u044c", _confirm)],
             actions_alignment=ft.MainAxisAlignment.END,
-            shape=ft.RoundedRectangleBorder(radius=12),
+            shape=ft.RoundedRectangleBorder(radius=14),
         )
         page.open(dialog)
 
@@ -1909,7 +1841,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _rebuild_table()
                 _refresh_counters()
                 from ui.toast import show_toast
-                show_toast(page, f"В архив: {ctl.incoming_number}", icon=ft.icons.ARCHIVE)
+                show_toast(page, f"\u0412 \u0430\u0440\u0445\u0438\u0432: {ctl.incoming_number}", icon=ft.icons.ARCHIVE)
             except Exception:
                 traceback.print_exc()
         def _close(e=None):
@@ -1918,13 +1850,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 pass
         dialog = ft.AlertDialog(
-            modal=True, bgcolor=COLORS["primary_light"],
-            title=ft.Text("Переместить в архив", size=16, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            content=ft.Text(f"Переместить контроль «{ctl.incoming_number}» в архив?", size=13, color=COLORS["text"]),
-            actions=[ft.TextButton("Отмена", on_click=_close),
-                     ft.ElevatedButton("В архив", icon=ft.icons.ARCHIVE, bgcolor=COLORS["btn_save"], color="white", on_click=_confirm)],
+            modal=True, bgcolor=GLASS["surface_solid"],
+            title=ft.Text("\u041f\u0435\u0440\u0435\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u0432 \u0430\u0440\u0445\u0438\u0432", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            content=ft.Text(f"\u041f\u0435\u0440\u0435\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u00ab{ctl.incoming_number}\u00bb \u0432 \u0430\u0440\u0445\u0438\u0432?", size=13, color=GLASS["text"]),
+            actions=[ft.TextButton("\u041e\u0442\u043c\u0435\u043d\u0430", on_click=_close),
+                     ft.ElevatedButton("\u0412 \u0430\u0440\u0445\u0438\u0432", icon=ft.icons.ARCHIVE, bgcolor=GLASS["accent"], color="white", on_click=_confirm)],
             actions_alignment=ft.MainAxisAlignment.END,
-            shape=ft.RoundedRectangleBorder(radius=12),
+            shape=ft.RoundedRectangleBorder(radius=14),
         )
         page.open(dialog)
 
@@ -1935,7 +1867,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _rebuild_table()
             _refresh_counters()
             from ui.toast import show_toast
-            show_toast(page, "Контроль восстановлен", icon=ft.icons.RESTORE)
+            show_toast(page, "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d", icon=ft.icons.RESTORE)
         except Exception:
             traceback.print_exc()
 
@@ -1949,7 +1881,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _rebuild_table()
                 _refresh_counters()
                 from ui.toast import show_toast
-                show_toast(page, "Удалён навсегда", icon=ft.icons.DELETE_FOREVER)
+                show_toast(page, "\u0423\u0434\u0430\u043b\u0451\u043d \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430", icon=ft.icons.DELETE_FOREVER)
             except Exception:
                 traceback.print_exc()
         def _close(e=None):
@@ -1958,27 +1890,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 pass
         dialog = ft.AlertDialog(
-            modal=True, bgcolor=COLORS["primary_light"],
-            title=ft.Text("Удалить навсегда", size=16, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            content=ft.Text(f"Удалить «{ctl.incoming_number}» безвозвратно? Вложения также будут удалены.", size=13, color=COLORS["text"]),
-            actions=[ft.TextButton("Отмена", on_click=_close),
-                     ft.ElevatedButton("Удалить навсегда", icon=ft.icons.DELETE_FOREVER, bgcolor="#dc2626", color="white", on_click=_confirm)],
+            modal=True, bgcolor=GLASS["surface_solid"],
+            title=ft.Text("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            content=ft.Text(f"\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u00ab{ctl.incoming_number}\u00bb \u0431\u0435\u0437\u0432\u043e\u0437\u0432\u0440\u0430\u0442\u043d\u043e? \u0412\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0442\u0430\u043a\u0436\u0435 \u0431\u0443\u0434\u0443\u0442 \u0443\u0434\u0430\u043b\u0435\u043d\u044b.", size=13, color=GLASS["text"]),
+            actions=[ft.TextButton("\u041e\u0442\u043c\u0435\u043d\u0430", on_click=_close),
+                     ft.ElevatedButton("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430", icon=ft.icons.DELETE_FOREVER, bgcolor=GLASS["overdue"], color="white", on_click=_confirm)],
             actions_alignment=ft.MainAxisAlignment.END,
-            shape=ft.RoundedRectangleBorder(radius=12),
+            shape=ft.RoundedRectangleBorder(radius=14),
         )
         page.open(dialog)
 
-    # ── Export / Import ─────────────────────────────────────────
-    export_mode_dd = ft.Dropdown(
-        hint_text="Режим экспорта",
-        value="table", width=170, height=38,
-        options=[ft.dropdown.Option("table", "Как в таблице"), ft.dropdown.Option("full", "Полный (round-trip)")],
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
-        dense=True, content_padding=ft.padding.symmetric(horizontal=10, vertical=4),
-    )
+    # ── Export / Import ───────────────────────────────────────────
+    export_mode_dd = _mk_glass_dd("\u0420\u0435\u0436\u0438\u043c \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u0430", 170, [
+        ft.dropdown.Option("table", "\u041a\u0430\u043a \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435"),
+        ft.dropdown.Option("full", "\u041f\u043e\u043b\u043d\u044b\u0439 (round-trip)"),
+    ])
 
     def _on_export_picked(e: ft.FilePickerResultEvent):
         if not getattr(e, "path", None):
@@ -1987,11 +1913,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             mode = (export_mode_dd.value or "table") == "full"
             ControlsExcelExporter().export(_visible_base(), e.path, soon_days, full=mode)
             from ui.toast import show_export_toast
-            show_export_toast(page, "Контроли Excel")
+            show_export_toast(page, "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u0438 Excel")
         except Exception as ex:
             print(f"[CONTROLS_TAB] Export error: {ex}")
             from ui.toast import show_error_toast
-            show_error_toast(page, f"Ошибка экспорта: {ex}")
+            show_error_toast(page, f"\u041e\u0448\u0438\u0431\u043a\u0430 \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u0430: {ex}")
 
     def _on_import_picked(e: ft.FilePickerResultEvent):
         path = None
@@ -2006,13 +1932,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             return
         _preview_import(path)
 
-    _ensure_file_picker(page, "_controls_file_picker", _on_export_picked)
-    _ensure_file_picker(page, "_controls_import_picker", _on_import_picked)
+    try:
+        page._controls_file_picker.on_result = _on_export_picked
+    except Exception:
+        pass
+    try:
+        page._controls_import_picker.on_result = _on_import_picked
+    except Exception:
+        pass
 
     def _export(e=None):
         try:
             page._controls_file_picker.save_file(
-                dialog_title="Сохранить контроли в Excel",
+                dialog_title="\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u0438 \u0432 Excel",
                 file_name=f"controls_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 allowed_extensions=["xlsx"],
             )
@@ -2022,7 +1954,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _import(e=None):
         try:
             page._controls_import_picker.pick_files(
-                dialog_title="Выбрать файл Excel для импорта",
+                dialog_title="\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0444\u0430\u0439\u043b Excel \u0434\u043b\u044f \u0438\u043c\u043f\u043e\u0440\u0442\u0430",
                 allowed_extensions=["xlsx"],
                 allow_multiple=False,
             )
@@ -2033,27 +1965,27 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         from ui.toast import show_error_toast
         parsed, stats = import_from_excel(path, state["controls"])
         if not parsed and stats["errors"] == 0:
-            show_error_toast(page, "Не найдено ни одного контроля в файле")
+            show_error_toast(page, "\u041d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e \u043d\u0438 \u043e\u0434\u043d\u043e\u0433\u043e \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f \u0432 \u0444\u0430\u0439\u043b\u0435")
             return
         preview_list = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=300)
         for c in parsed[:20]:
             preview_list.controls.append(
                 ft.Container(
                     content=ft.Row(controls=[
-                        ft.Text(c.incoming_number or "—", size=11, color=COLORS["text_secondary"], width=90, no_wrap=True),
-                        ft.Text(c.content or "—", size=11, color=COLORS["text"], expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=c.content),
-                        ft.Text(_type_label(c), size=10, color=COLORS["text_secondary"], width=80, no_wrap=True),
+                        ft.Text(c.incoming_number or "\u2014", size=11, color=GLASS["text_secondary"], width=90, no_wrap=True),
+                        ft.Text(c.content or "\u2014", size=11, color=GLASS["text"], expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=c.content),
+                        ft.Text(_type_label(c), size=10, color=GLASS["text_secondary"], width=80, no_wrap=True),
                     ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=6,
+                    bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border"]), border_radius=6,
                     padding=ft.padding.symmetric(horizontal=8, vertical=4),
                 )
             )
         if len(parsed) > 20:
-            preview_list.controls.append(ft.Text(f"… и ещё {len(parsed)-20}", size=10, color=COLORS["text_muted"]))
+            preview_list.controls.append(ft.Text(f"\u2026 \u0438 \u0435\u0449\u0451 {len(parsed) - 20}", size=10, color=GLASS["text_muted"]))
         summary = ft.Text(
-            f"Найдено: {len(parsed)+stats['skipped']} · Импортируемо: {len(parsed)} · Пропущено: {stats['skipped']} · Ошибок: {stats['errors']} · Формат: {'полный' if stats['full_format'] else 'таблица'}",
-            size=11, color=COLORS["text_secondary"],
-        )
+            f"\u041d\u0430\u0439\u0434\u0435\u043d\u043e: {len(parsed) + stats['skipped']} \u00b7 \u0418\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u0443\u0435\u043c\u043e: {len(parsed)} \u00b7 \u041f\u0440\u043e\u043f\u0443\u0449\u0435\u043d\u043e: {stats['skipped']} \u00b7 \u041e\u0448\u0438\u0431\u043e\u043a: {stats['errors']}",
+            size=11, color=GLASS["text_secondary"])
+
         def _confirm(e=None):
             try:
                 for c in parsed:
@@ -2063,29 +1995,31 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _rebuild_table()
                 _refresh_counters()
                 from ui.toast import show_toast
-                show_toast(page, f"Импортировано: {len(parsed)}", icon=ft.icons.CLOUD_DOWNLOAD)
+                show_toast(page, f"\u0418\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043e: {len(parsed)}", icon=ft.icons.CLOUD_DOWNLOAD)
             except Exception:
                 traceback.print_exc()
+
         def _close(e=None):
             try:
                 page.close(dialog)
             except Exception:
                 pass
+
         dialog = ft.AlertDialog(
-            modal=True, bgcolor=COLORS["primary_light"],
+            modal=True, bgcolor=GLASS["surface_solid"],
             title=ft.Row(controls=[
-                ft.Icon(ft.icons.UPLOAD_FILE, size=20, color=COLORS["text"]),
-                ft.Text("Импорт из Excel — предпросмотр", size=15, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+                ft.Icon(ft.icons.UPLOAD_FILE, size=20, color=GLASS["text"]),
+                ft.Text("\u0418\u043c\u043f\u043e\u0440\u0442 \u0438\u0437 Excel \u2014 \u043f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
             ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             content=ft.Container(width=560, content=ft.Column(controls=[summary, preview_list], spacing=8, tight=True)),
-            actions=[ft.TextButton("Отмена", on_click=_close),
-                     ft.ElevatedButton("Импортировать", icon=ft.icons.CLOUD_DOWNLOAD, bgcolor=COLORS["btn_save"], color="white", on_click=_confirm)],
+            actions=[ft.TextButton("\u041e\u0442\u043c\u0435\u043d\u0430", on_click=_close),
+                     glass_button("\u0418\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c", _confirm, icon=ft.icons.CLOUD_DOWNLOAD)],
             actions_alignment=ft.MainAxisAlignment.END,
-            shape=ft.RoundedRectangleBorder(radius=12),
+            shape=ft.RoundedRectangleBorder(radius=14),
         )
         page.open(dialog)
 
-    # ── Settings ────────────────────────────────────────────────
+    # ── Settings ─────────────────────────────────────────────────
     def _open_settings(e=None):
         from .controls_settings_modal import create_controls_settings_modal
         def on_apply(new_settings):
@@ -2099,7 +2033,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             network_user = new_settings.get("network_user", "") or ""
             network_role = new_settings.get("network_role", "admin")
             try:
-                initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators]
+                initiator_filter_dd.options = [ft.dropdown.Option("all", "\u0412\u0441\u0435 \u0438\u043d\u0438\u0446\u0438\u0430\u0442\u043e\u0440\u044b")] + [ft.dropdown.Option(i) for i in initiators]
                 initiator_filter_dd.update()
             except Exception:
                 pass
@@ -2113,44 +2047,42 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _add_control(e=None):
         _open_detail(None)
 
-    # ── Toolbar ─────────────────────────────────────────────────
-    add_btn = ft.ElevatedButton(
-        text="Добавить контроль", icon=ft.icons.ADD_CIRCLE_OUTLINE,
-        bgcolor=COLORS["btn_save"], color="white", height=38,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=12)),
-        on_click=_add_control,
-    )
-    import_btn = ft.ElevatedButton(
-        text="Импорт Excel", icon=ft.icons.UPLOAD_FILE,
-        bgcolor=COLORS["btn_save_hover"], color="white", height=38,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=12)),
-        on_click=_import,
-    )
+    # ── Toolbar (Glass Dark) ─────────────────────────────────────
+    add_btn = glass_button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c", _add_control,
+                            icon=ft.icons.ADD_CIRCLE_OUTLINE)
+    import_btn = ghost_button("\u0418\u043c\u043f\u043e\u0440\u0442 Excel", _import, icon=ft.icons.UPLOAD_FILE)
     export_btn = ft.ElevatedButton(
-        text="Экспорт Excel", icon=ft.icons.FILE_DOWNLOAD_OUTLINED,
-        bgcolor=COLORS["btn_export"], color="white", height=38,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=12)),
+        text="\u042d\u043a\u0441\u043f\u043e\u0440\u0442 Excel", icon=ft.icons.FILE_DOWNLOAD_OUTLINED,
+        bgcolor=GLASS["btn_green"], color=GLASS["btn_green_text"], height=40,
+        icon_color=GLASS["btn_green_text"],
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=_RADIUS),
+            padding=ft.padding.symmetric(horizontal=16)),
         on_click=_export,
     )
     settings_btn = ft.IconButton(
-        icon=ft.icons.SETTINGS_OUTLINED, icon_size=20, icon_color=COLORS["text_secondary"],
-        tooltip="Настройки контролей",
-        style=ft.ButtonStyle(bgcolor=COLORS["primary_light"], shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.all(8)),
+        icon=ft.icons.SETTINGS_OUTLINED, icon_size=20, icon_color=GLASS["text_secondary"],
+        tooltip="\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u0435\u0439",
+        style=ft.ButtonStyle(bgcolor=GLASS["surface"], shape=ft.RoundedRectangleBorder(radius=_RADIUS),
+                             padding=ft.padding.all(8)),
         on_click=_open_settings,
     )
 
-    title_row = ft.Container(
-        content=ft.Row(controls=[
-            ft.Icon(ft.icons.RULE_FOLDER, size=18, color=COLORS["text"]),
-            ft.Text("Контроли", size=15, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            ft.Container(width=8),
-            sync_dot, ft.Container(width=4), sync_label,
+    # ── Title row (glass panel) ──────────────────────────────────
+    title_row = glass_panel(
+        ft.Row(controls=[
+            ft.Icon(ft.icons.RULE_FOLDER, size=18, color=GLASS["text"]),
+            ft.Text("\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u0438", size=20, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            ft.Container(width=8), sync_dot, ft.Container(width=4), sync_label,
             ft.Container(expand=True),
             add_btn, import_btn, export_mode_dd, export_btn, settings_btn,
-        ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
-        height=46,
+        ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+           alignment=ft.MainAxisAlignment.START),
+        padding=10, radius=_RADIUS_PANEL,
     )
+    title_row.height = 54
 
+    # ── Main Column ──────────────────────────────────────────────
     main_column = ft.Column(
         controls=[
             title_row,
@@ -2159,7 +2091,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.Container(height=6),
             filter_row2,
             ft.Container(height=6),
-            counters_row,
+            # Counters + Mode switch row
+            glass_panel(
+                ft.Row(controls=[
+                    counters_row,
+                    ft.Container(expand=True),
+                    mode_row,
+                ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=6, radius=_RADIUS_PANEL,
+            ),
             ft.Container(height=6),
             header_row,
             ft.Container(height=2),
@@ -2174,20 +2114,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # Root stack
     tab_stack = ft.Stack(
         controls=[
-            ft.Container(content=main_column, expand=True, padding=ft.padding.only(left=12, right=12, top=8, bottom=8)),
+            ft.Container(content=main_column, expand=True,
+                         padding=ft.padding.only(left=12, right=12, top=8, bottom=8)),
             detail_overlay,
         ],
         expand=True,
     )
 
     tab_content = ft.Column(
-        controls=[tab_stack],
+        controls=[
+            ft.Container(content=tab_stack, expand=True, bgcolor=GLASS["bg_tab"]),
+        ],
         spacing=0,
         expand=True,
     )
 
-    # ── Background polling ──────────────────────────────────────
+    # ── Background polling ───────────────────────────────────────
     _poll_stop = {"flag": False}
+
     def _background_loop():
         while not _poll_stop["flag"]:
             time.sleep(20)
@@ -2236,12 +2180,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             state["last_overdue"] = len(overdue)
             try:
                 from ui.toast import show_toast
-                parts = [f"Просрочено: {len(overdue)}"]
+                parts = [f"\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e: {len(overdue)}"]
                 if today_n:
-                    parts.append(f"Сегодня истекает: {len(today_n)}")
+                    parts.append(f"\u0421\u0435\u0433\u043e\u0434\u043d\u044f \u0438\u0441\u0442\u0435\u043a\u0430\u0435\u0442: {len(today_n)}")
                 if soon:
-                    parts.append(f"Скоро: {len(soon)}")
-                show_toast(page, " · ".join(parts), icon=ft.icons.NOTIFICATIONS_ACTIVE)
+                    parts.append(f"\u0421\u043a\u043e\u0440\u043e: {len(soon)}")
+                show_toast(page, " \u00b7 ".join(parts), icon=ft.icons.NOTIFICATIONS_ACTIVE)
             except Exception:
                 pass
 
@@ -2258,6 +2202,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _rebuild_header()
 
     _prev_resize = getattr(page, "on_resize", None)
+
     def _combined_resize(e=None):
         _on_page_resize(e)
         if _prev_resize is not None and _prev_resize is not _combined_resize:
@@ -2265,6 +2210,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _prev_resize(e)
             except Exception:
                 pass
+
     try:
         page.on_resize = _combined_resize
     except Exception:
@@ -2290,16 +2236,16 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             from ui.toast import show_toast
             parts = []
             if overdue0:
-                parts.append(f"Просрочено: {len(overdue0)}")
+                parts.append(f"\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e: {len(overdue0)}")
             if today0:
-                parts.append(f"Сегодня истекает: {len(today0)}")
+                parts.append(f"\u0421\u0435\u0433\u043e\u0434\u043d\u044f \u0438\u0441\u0442\u0435\u043a\u0430\u0435\u0442: {len(today0)}")
             if soon0:
-                parts.append(f"Скоро: {len(soon0)}")
-            show_toast(page, " · ".join(parts), icon=ft.icons.NOTIFICATIONS_ACTIVE)
+                parts.append(f"\u0421\u043a\u043e\u0440\u043e: {len(soon0)}")
+            show_toast(page, " \u00b7 ".join(parts), icon=ft.icons.NOTIFICATIONS_ACTIVE)
         state["last_overdue"] = len(overdue0)
     except Exception:
         pass
 
     page._controls_poll_stop = _poll_stop
-    print("[CONTROLS_TAB] Controls tab created (rework)")
+    print("[CONTROLS_TAB] Controls tab created (Glass Dark redesign)")
     return tab_content

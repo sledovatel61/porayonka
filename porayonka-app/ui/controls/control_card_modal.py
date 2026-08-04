@@ -9,6 +9,7 @@ from uuid import uuid4
 import flet as ft
 
 from core.constants import COLORS
+from .glass_theme import GLASS, _RADIUS as _GLASS_RADIUS, _RADIUS_CARD
 from core.controls_models import (
     Control, ControlTask, ControlMilestone, ONE_TIME, PERIODIC,
     parse_date, short_name,
@@ -791,7 +792,7 @@ def create_control_card_modal(
 
     dlg = ft.AlertDialog(
         modal=True,
-        bgcolor=COLORS["primary_light"],
+        bgcolor=GLASS["surface_solid"],
         title=ft.Row(controls=[
             ft.Icon(ft.icons.EDIT_DOCUMENT if is_edit else ft.icons.ADD_CIRCLE_OUTLINE, size=20, color="white"),
             ft.Text("Карточка контроля" if is_edit else "Добавить контроль", size=15, weight=ft.FontWeight.BOLD, color="white", expand=True),
@@ -800,7 +801,7 @@ def create_control_card_modal(
         content=content_holder,
         actions=actions,
         actions_alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        shape=ft.RoundedRectangleBorder(radius=12),
+        shape=ft.RoundedRectangleBorder(radius=_RADIUS_CARD),
     )
     dialog_ref["dlg"] = dlg
     return dlg
