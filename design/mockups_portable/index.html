@@ -147,6 +147,38 @@
             content: '→';
         }
 
+        a.card-photo {
+            padding: 0;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        a.card-photo .thumb {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            border-bottom: 1px solid var(--border);
+            display: block;
+        }
+
+        a.card-photo .body {
+            padding: 14px 16px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        a.card-photo b {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        a.card-photo .desc {
+            color: var(--secondary);
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
         .series-link {
             display: inline-flex;
             align-items: center;
@@ -191,7 +223,7 @@
         <div class="badge">Мокапы</div>
         <h1>Вкладка «Контроли»</h1>
         <p class="subtitle">
-            Автономные HTML-прототипы третьей вкладки приложения «Порайонка». Все файлы работают офлайн: достаточно открыть любой из них в браузере.
+            Автономные HTML-прототипы и фото-эталоны третьей вкладки приложения «Порайонка». Все файлы работают офлайн: достаточно открыть любой из них в браузере.
         </p>
     </header>
 
@@ -268,6 +300,86 @@
                 </a>
             </div>
             <a class="series-link" href="v3/index.html">Открыть галерею серии v3 →</a>
+        </section>
+
+        <section>
+            <div class="section-header">
+                <h2>Фото-мокапы — 10 направлений дизайна</h2>
+                <span class="count">10 PNG 1600×900</span>
+            </div>
+            <div class="grid">
+                <a class="card card-photo" href="photo/01_glass_dark.png">
+                    <img class="thumb" src="photo/thumbs/01_glass_dark.png" alt="Glass Dark">
+                    <div class="body">
+                        <b>01 · Glass Dark</b>
+                        <span class="desc">Глубокий синий, матовые «стеклянные» панели, мягкое свечение. Максимальный «вау».</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/02_neon_ops.png">
+                    <img class="thumb" src="photo/thumbs/02_neon_ops.png" alt="Neon Ops">
+                    <div class="body">
+                        <b>02 · Neon Ops</b>
+                        <span class="desc">Оперативный центр: неоновые статусы, циановая подсветка, моноширинные цифры.</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/03_premium_gov.png">
+                    <img class="thumb" src="photo/thumbs/03_premium_gov.png" alt="Premium Gov">
+                    <div class="body">
+                        <b>03 · Premium Gov</b>
+                        <span class="desc">Солидный гос-инструмент: navy, золото/латунь, строгая сетка.</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/04_minimal_light_dark.png">
+                    <img class="thumb" src="photo/thumbs/04_minimal_light_dark.png" alt="Minimal Light-Dark">
+                    <div class="body">
+                        <b>04 · Minimal Light-Dark</b>
+                        <span class="desc">Linear/Notion-стиль: серо-графит, много воздуха, индиго-акцент.</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/05_emerald_command.png">
+                    <img class="thumb" src="photo/thumbs/05_emerald_command.png" alt="Emerald Command">
+                    <div class="body">
+                        <b>05 · Emerald Command</b>
+                        <span class="desc">Зелёно-чёрная консоль: изумрудные акценты, статусы-«лампы».</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/06_aurora_gradient.png">
+                    <img class="thumb" src="photo/thumbs/06_aurora_gradient.png" alt="Aurora Gradient">
+                    <div class="body">
+                        <b>06 · Aurora Gradient</b>
+                        <span class="desc">Тёмная база с мягкими северными градиентами на шапке.</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/07_terminal_amber.png">
+                    <img class="thumb" src="photo/thumbs/07_terminal_amber.png" alt="Terminal Amber">
+                    <div class="body">
+                        <b>07 · Terminal Amber</b>
+                        <span class="desc">Ретро-терминал: янтарный текст, моноширинные цифры, плотная сетка.</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/08_fluent_material.png">
+                    <img class="thumb" src="photo/thumbs/08_fluent_material.png" alt="Fluent Material">
+                    <div class="body">
+                        <b>08 · Fluent Material</b>
+                        <span class="desc">Material 3 dark: округлые карточки, тональные поверхности, фиолет.</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/09_high_contrast_pro.png">
+                    <img class="thumb" src="photo/thumbs/09_high_contrast_pro.png" alt="High Contrast Pro">
+                    <div class="body">
+                        <b>09 · High Contrast Pro</b>
+                        <span class="desc">Максимальная читаемость: чёрный, белый текст, жирные границы. Для Win7/старых мониторов.</span>
+                    </div>
+                </a>
+                <a class="card card-photo" href="photo/10_soft_neumorph.png">
+                    <img class="thumb" src="photo/thumbs/10_soft_neumorph.png" alt="Soft Neumorph">
+                    <div class="body">
+                        <b>10 · Soft Neumorph</b>
+                        <span class="desc">Тактильный неоморфизм: приподнятые карточки, пыльно-синий акцент.</span>
+                    </div>
+                </a>
+            </div>
+            <a class="series-link" href="photo/index.html">Открыть галерею фото-мокапов →</a>
         </section>
     </main>
 
