@@ -3,6 +3,7 @@
 # активные/архив, импорт/экспорт Excel, уведомления, сетевая синхронизация.
 import threading
 import time
+import traceback
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Dict
 
@@ -458,6 +459,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         page.open(dialog)
 
     def _complete(ctl: Control):
+        try:
+            _do_complete(ctl)
+        except Exception:
+            print("[CONTROLS_TAB] _complete error:")
+            traceback.print_exc()
+
+    def _do_complete(ctl: Control):
         today = date.today()
         if ctl.control_type == PERIODIC:
             base = parse_date(ctl.due_date) or today
@@ -498,6 +506,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _refresh_counters()
 
     def _extend(ctl: Control):
+        try:
+            _do_extend(ctl)
+        except Exception:
+            print("[CONTROLS_TAB] _extend error:")
+            traceback.print_exc()
+
+    def _do_extend(ctl: Control):
         extend_days = {"value": str(ctl.period_days if ctl.control_type == PERIODIC else 7)}
         days_field = ft.TextField(
             value=extend_days["value"], label="Продлить на (дней)",
@@ -510,24 +525,32 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         def _confirm(e=None):
             try:
-                n = max(1, int(days_field.value))
-            except ValueError:
-                n = 7
-            base = parse_date(ctl.due_date) or date.today()
-            ctl.due_date = (base + timedelta(days=n)).isoformat()
-            ctl.updated_at = datetime.now().isoformat()
-            _persist(state["controls"])
-            from ui.toast import show_toast
-            show_toast(page, f"Срок продлён до {_display_date(ctl.due_date)}",
-                       icon=ft.icons.UPDATE)
-            page.close(dialog)
-            _cleanup_dialog(dialog)
-            _rebuild_table()
-            _refresh_counters()
+                try:
+                    n = max(1, int(days_field.value))
+                except ValueError:
+                    n = 7
+                base = parse_date(ctl.due_date) or date.today()
+                ctl.due_date = (base + timedelta(days=n)).isoformat()
+                ctl.updated_at = datetime.now().isoformat()
+                _persist(state["controls"])
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+                _rebuild_table()
+                _refresh_counters()
+                from ui.toast import show_toast
+                show_toast(page, f"Срок продлён до {_display_date(ctl.due_date)}",
+                           icon=ft.icons.UPDATE)
+            except Exception:
+                print("[CONTROLS_TAB] _extend confirm error:")
+                traceback.print_exc()
 
         def _close(e=None):
-            page.close(dialog)
-            _cleanup_dialog(dialog)
+            try:
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+            except Exception:
+                print("[CONTROLS_TAB] close error:")
+                traceback.print_exc()
 
         dialog = ft.AlertDialog(
             modal=True, bgcolor=COLORS["primary_light"],
@@ -546,18 +569,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _confirm_delete(ctl: Control):
         def _confirm(e=None):
-            archive_control(ctl, ARCHIVE_DELETED)
-            _persist(state["controls"])
-            page.close(dialog)
-            _cleanup_dialog(dialog)
-            from ui.toast import show_toast
-            show_toast(page, f"В архив: {ctl.incoming_number}", icon=ft.icons.ARCHIVE)
-            _rebuild_table()
-            _refresh_counters()
+            try:
+                archive_control(ctl, ARCHIVE_DELETED)
+                _persist(state["controls"])
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+                _rebuild_table()
+                _refresh_counters()
+                from ui.toast import show_toast
+                show_toast(page, f"В архив: {ctl.incoming_number}", icon=ft.icons.ARCHIVE)
+            except Exception:
+                print("[CONTROLS_TAB] _confirm_delete error:")
+                traceback.print_exc()
 
         def _close(e=None):
-            page.close(dialog)
-            _cleanup_dialog(dialog)
+            try:
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+            except Exception:
+                print("[CONTROLS_TAB] close error:")
+                traceback.print_exc()
 
         dialog = ft.AlertDialog(
             modal=True, bgcolor=COLORS["primary_light"],
@@ -577,28 +608,40 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         page.open(dialog)
 
     def _restore(ctl: Control):
-        restore_control(ctl)
-        _persist(state["controls"])
-        from ui.toast import show_toast
-        show_toast(page, "Контроль восстановлен", icon=ft.icons.RESTORE)
-        _rebuild_table()
-        _refresh_counters()
+        try:
+            restore_control(ctl)
+            _persist(state["controls"])
+            _rebuild_table()
+            _refresh_counters()
+            from ui.toast import show_toast
+            show_toast(page, "Контроль восстановлен", icon=ft.icons.RESTORE)
+        except Exception:
+            print("[CONTROLS_TAB] _restore error:")
+            traceback.print_exc()
 
     def _delete_forever(ctl: Control):
         def _confirm(e=None):
-            delete_all_attachments(ctl.id, settings)
-            state["controls"] = [c for c in state["controls"] if c.id != ctl.id]
-            _persist(state["controls"])
-            page.close(dialog)
-            _cleanup_dialog(dialog)
-            from ui.toast import show_toast
-            show_toast(page, "Удалён навсегда", icon=ft.icons.DELETE_FOREVER)
-            _rebuild_table()
-            _refresh_counters()
+            try:
+                delete_all_attachments(ctl.id, settings)
+                state["controls"] = [c for c in state["controls"] if c.id != ctl.id]
+                _persist(state["controls"])
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+                _rebuild_table()
+                _refresh_counters()
+                from ui.toast import show_toast
+                show_toast(page, "Удалён навсегда", icon=ft.icons.DELETE_FOREVER)
+            except Exception:
+                print("[CONTROLS_TAB] _delete_forever error:")
+                traceback.print_exc()
 
         def _close(e=None):
-            page.close(dialog)
-            _cleanup_dialog(dialog)
+            try:
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+            except Exception:
+                print("[CONTROLS_TAB] close error:")
+                traceback.print_exc()
 
         dialog = ft.AlertDialog(
             modal=True, bgcolor=COLORS["primary_light"],
@@ -651,8 +694,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 row.controls[1].color = fg
                 badge = row.controls[2]
-                badge.bgcolor = "#ffffff22" if selected else COLORS["card"]
-                badge.content.color = fg
+                # Бейдж всегда тёмный с читаемым светлым числом — чтобы не было
+                # «жёлтого пятна» при выбранном состоянии.
+                badge.bgcolor = COLORS["card"]
+                badge.content.color = COLORS["text_light"]
             except Exception:
                 pass
             try:
@@ -675,9 +720,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         counts = _counts()
         fg = COLORS["text_secondary"]
         badge = ft.Container(
-            content=ft.Text(str(counts.get(key, 0)), size=10, color=fg,
+            content=ft.Text(str(counts.get(key, 0)), size=11, color=COLORS["text_light"],
                             weight=ft.FontWeight.W_600, no_wrap=True),
-            height=18, padding=ft.padding.symmetric(horizontal=6), border_radius=9,
+            height=20, padding=ft.padding.symmetric(horizontal=7), border_radius=10,
             alignment=ft.alignment.center, bgcolor=COLORS["card"],
         )
         btn = ft.Container(
@@ -788,25 +833,25 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             bgcolor=COLORS["card"], color=COLORS["text"],
         )
 
-    status_filter_dd = _mk_filter_dd("Статус", 140, [
+    status_filter_dd = _mk_filter_dd("Статус", 170, [
         ft.dropdown.Option("all", "Все"), ft.dropdown.Option(OVERDUE, "Просрочено"),
         ft.dropdown.Option(TODAY, "Сегодня"), ft.dropdown.Option(SOON, "Скоро"),
         ft.dropdown.Option(IN_PROGRESS, "В работе"), ft.dropdown.Option(DONE, "Исполнено"),
         ft.dropdown.Option(COMPLETED, "Завершён"),
     ])
-    type_filter_dd = _mk_filter_dd("Тип", 120, [
+    type_filter_dd = _mk_filter_dd("Тип", 150, [
         ft.dropdown.Option("all", "Все"), ft.dropdown.Option(ONE_TIME, "Разовый"),
         ft.dropdown.Option(PERIODIC, "Постоянный"),
     ])
-    initiator_filter_dd = _mk_filter_dd("Инициатор", 180,
+    initiator_filter_dd = _mk_filter_dd("Инициатор", 200,
                                         [ft.dropdown.Option("all", "Все")]
                                         + [ft.dropdown.Option(i) for i in initiators])
     executor_filter_dd = _mk_filter_dd(
-        "Исполнитель", 180,
+        "Исполнитель", 200,
         [ft.dropdown.Option("all", "Все")]
         + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
     controller_filter_dd = _mk_filter_dd(
-        "За кем", 170,
+        "За кем", 190,
         [ft.dropdown.Option("all", "Все")]
         + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
 
@@ -851,7 +896,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.Container(expand=True),
             mode_row,
         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
-           alignment=ft.MainAxisAlignment.START, scroll=ft.ScrollMode.HIDDEN),
+           alignment=ft.MainAxisAlignment.START),
         height=46, bgcolor=COLORS["card"],
         border=ft.border.all(1, COLORS["border"]), border_radius=12,
         padding=ft.padding.symmetric(horizontal=8, vertical=4),
@@ -871,7 +916,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.TextButton("Сброс", on_click=_reset_filters,
                           style=ft.ButtonStyle(color=COLORS["btn_save"])),
         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
-           alignment=ft.MainAxisAlignment.START, scroll=ft.ScrollMode.HIDDEN),
+           alignment=ft.MainAxisAlignment.START),
         height=46, bgcolor=COLORS["card"],
         border=ft.border.all(1, COLORS["border"]), border_radius=12,
         padding=ft.padding.symmetric(horizontal=8, vertical=4),
@@ -1031,20 +1076,28 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         )
 
         def _confirm(e=None):
-            for c in parsed:
-                state["controls"].append(c)
-            _persist(state["controls"])
-            page.close(dialog)
-            _cleanup_dialog(dialog)
-            from ui.toast import show_toast
-            show_toast(page, f"Импортировано: {len(parsed)}",
-                       icon=ft.icons.CLOUD_DOWNLOAD)
-            _rebuild_table()
-            _refresh_counters()
+            try:
+                for c in parsed:
+                    state["controls"].append(c)
+                _persist(state["controls"])
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+                _rebuild_table()
+                _refresh_counters()
+                from ui.toast import show_toast
+                show_toast(page, f"Импортировано: {len(parsed)}",
+                           icon=ft.icons.CLOUD_DOWNLOAD)
+            except Exception:
+                print("[CONTROLS_TAB] import confirm error:")
+                traceback.print_exc()
 
         def _close(e=None):
-            page.close(dialog)
-            _cleanup_dialog(dialog)
+            try:
+                page.close(dialog)
+                _cleanup_dialog(dialog)
+            except Exception:
+                print("[CONTROLS_TAB] close error:")
+                traceback.print_exc()
 
         dialog = ft.AlertDialog(
             modal=True, bgcolor=COLORS["primary_light"],
@@ -1147,7 +1200,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             export_btn,
             settings_btn,
         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
-           alignment=ft.MainAxisAlignment.START, scroll=ft.ScrollMode.HIDDEN),
+           alignment=ft.MainAxisAlignment.START),
         height=46,
     )
 
