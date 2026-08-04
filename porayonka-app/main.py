@@ -190,6 +190,32 @@ def main(page: ft.Page) -> None:
             expand=True,
         )
 
+    # ── Создать третью вкладку (Контроли) ───────────────────────
+    print("[MAIN] Создаю вкладку Контроли...")
+    try:
+        from ui.controls.controls_tab import create_controls_tab
+        controls_content_raw = create_controls_tab(page)
+
+        tab3_content = ft.Container(
+            content=controls_content_raw,
+            padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
+            expand=True,
+        )
+        print("[MAIN] [OK] Vkladka Kontroli sozdana")
+    except Exception as e:
+        import traceback
+        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Kontroli: {e}")
+        traceback.print_exc()
+        tab3_content = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
+                ],
+            ),
+            padding=ft.padding.all(20),
+            expand=True,
+        )
+
     # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
     tab1_container = ft.Container(
         content=tab1_content,
@@ -201,14 +227,20 @@ def main(page: ft.Page) -> None:
         expand=True,
         visible=False,
     )
+    tab3_container = ft.Container(
+        content=tab3_content,
+        expand=True,
+        visible=False,
+    )
     content_area = ft.Stack(
-        controls=[tab1_container, tab2_container],
+        controls=[tab1_container, tab2_container, tab3_container],
         fit=ft.StackFit.EXPAND,
         expand=True,
     )
 
     def _restyle_tabs():
-        for idx, (btn, ico) in enumerate(((btn_tab1, icon_tab1), (btn_tab2, icon_tab2))):
+        for idx, (btn, ico) in enumerate(
+                ((btn_tab1, icon_tab1), (btn_tab2, icon_tab2), (btn_tab3, icon_tab3))):
             selected = (idx == active_tab["value"])
             btn.bgcolor = COLORS["btn_save"] if selected else "transparent"
             for ctl in btn.content.controls:
@@ -224,6 +256,7 @@ def main(page: ft.Page) -> None:
         active_tab["value"] = index
         tab1_container.visible = (index == 0)
         tab2_container.visible = (index == 1)
+        tab3_container.visible = (index == 2)
         _restyle_tabs()
         try:
             content_area.update()
@@ -262,10 +295,11 @@ def main(page: ft.Page) -> None:
     active_tab = {"value": 0}
     btn_tab1, icon_tab1 = _mk_tab_btn(0, "Следственные отделы", ft.icons.ACCOUNT_BALANCE_OUTLINED)
     btn_tab2, icon_tab2 = _mk_tab_btn(1, "Зональные", ft.icons.MAP_OUTLINED)
+    btn_tab3, icon_tab3 = _mk_tab_btn(2, "Контроли", ft.icons.RULE_FOLDER)
 
     tab_bar = ft.Container(
         content=ft.Row(
-            controls=[btn_tab1, btn_tab2],
+            controls=[btn_tab1, btn_tab2, btn_tab3],
             spacing=4,
             alignment=ft.MainAxisAlignment.START,
             tight=True,
@@ -296,6 +330,12 @@ def main(page: ft.Page) -> None:
     # Сохранение при закрытии окна (страховка в дополнение к autosave)
     def _on_window_event(e):
         if e.data == "close":
+            # Остановить фоновый polling вкладки «Контроли»
+            try:
+                if hasattr(page, "_controls_poll_stop"):
+                    page._controls_poll_stop["flag"] = True
+            except Exception:
+                pass
             try:
                 save_departments(departments)
                 if hasattr(page, "_zonal_collection"):
