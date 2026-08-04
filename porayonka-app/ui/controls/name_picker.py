@@ -1,8 +1,11 @@
 # ui/controls/name_picker.py
 # Диалог выбора имён из списка (исполнители, ответственные пунктов).
+# Использует page.open()/page.close() — обновляется только этот диалог,
+# поэтому вложенный вызов из карточки контроля не сносит нижний dialog.
 import flet as ft
 from typing import Callable, List
 from core.constants import COLORS
+from core.controls_models import short_name
 
 
 def open_name_picker(
@@ -13,12 +16,7 @@ def open_name_picker(
     on_confirm: Callable[[List[str]], None],
     allow_custom: bool = True,
 ) -> None:
-    """Открыть диалог мультивыбора имён.
-
-    :param available: список доступных имён (из криминалистов + дефолтные)
-    :param selected:  уже выбранные имена
-    :param on_confirm: callback(new_selected_list)
-    """
+    """Открыть диалог мультивыбора имён (возвращает полные ФИО)."""
     current = list(selected)
     search = ft.TextField(
         label="Поиск",
@@ -34,17 +32,14 @@ def open_name_picker(
     )
     list_col = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, height=260)
 
-    boxes = {}
-
     def _rebuild(query: str = ""):
         list_col.controls.clear()
         names = [n for n in available if query.lower() in n.lower()]
-        # Сначала — уже выбранные (чтобы не потерять при фильтрации)
         names = sorted(set(names + current), key=lambda n: (n not in current, n))
         if not names:
             if allow_custom:
                 list_col.controls.append(
-                    ft.Text("Ничего не найдено. Введите имя вручную и нажмите «Добавить».",
+                    ft.Text("Ничего не найдено. Введите имя и нажмите «Добавить».",
                             size=11, color=COLORS["text_muted"])
                 )
             else:
@@ -53,13 +48,13 @@ def open_name_picker(
                 )
         for n in names:
             cb = ft.Checkbox(
-                label=n,
+                label=short_name(n) if n else n,
                 value=(n in current),
                 active_color=COLORS["btn_save"],
                 label_style=ft.TextStyle(size=12, color=COLORS["text"]),
+                tooltip=n,  # полное ФИО для однозначности
                 on_change=lambda e, name=n: _toggle(name, e.control.value),
             )
-            boxes[n] = cb
             list_col.controls.append(cb)
         try:
             list_col.update()
@@ -98,13 +93,20 @@ def open_name_picker(
         _rebuild()
 
     def _close(e=None):
-        dialog.open = False
-        page.update()
+        page.close(dialog)
+        _cleanup()
 
     def _confirm(e=None):
         on_confirm(current)
-        dialog.open = False
-        page.update()
+        page.close(dialog)
+        _cleanup()
+
+    def _cleanup():
+        try:
+            if dialog in page.overlay:
+                page.overlay.remove(dialog)
+        except Exception:
+            pass
 
     def _on_search(e=None):
         _rebuild(search.value or "")
@@ -174,6 +176,4 @@ def open_name_picker(
         actions_alignment=ft.MainAxisAlignment.END,
         shape=ft.RoundedRectangleBorder(radius=12),
     )
-    page.overlay.append(dialog)
-    dialog.open = True
-    page.update()
+    page.open(dialog)

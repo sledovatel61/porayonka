@@ -1,16 +1,16 @@
 # core/controls_data.py
-# Загрузка/сохранение контролей, настроек и сетевая синхронизация.
+# Загрузка/сохранение контролей, настроек, вложений и сетевая синхронизация.
 import json
 import os
 import shutil
-from datetime import datetime, date
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Callable
+from typing import List, Optional
 
-from .controls_models import Control, ONE_TIME, PERIODIC
+from .controls_models import Control, short_name
 
 # Версия схемы — используется для миграции при изменении формата
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DEFAULT_CONTROLLERS = ["Потемкин С.А.", "Чашин Э.А."]
 DEFAULT_INITIATORS = [
@@ -21,9 +21,14 @@ DEFAULT_SETTINGS = {
     "soon_days": 3,          # за сколько дней считать срок «скорым»
     "network_enabled": False,
     "network_role": "admin",     # admin | user
-    "network_user": "",          # имя компьютера/пользователя (по-фамильно)
+    "network_user": "",          # имя пользователя (по-фамильно), из списка криминалистов
     "network_shared_path": "",   # путь к общей папке/файлу
+    "custom_initiators": [],     # список пользовательских инициаторов (v2)
 }
+
+# Максимальный размер вложения, при котором показывается предупреждение
+ATTACHMENT_WARN_MB = 20
+ATTACHMENT_ALLOWED_EXT = (".pdf", ".png", ".jpg", ".jpeg")
 
 
 # ────────────────────────────────────────────────
@@ -43,6 +48,20 @@ def get_controls_file() -> Path:
 
 def get_settings_file() -> Path:
     return get_data_path() / "controls_settings.json"
+
+
+def get_attachments_path() -> Path:
+    """Локальная папка вложений: %APPDATA%\\porayonka\\controls_attachments."""
+    path = get_data_path() / "controls_attachments"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_attachment_dir(control_id: str) -> Path:
+    """Папка вложений конкретного контроля (локально)."""
+    path = get_attachments_path() / control_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 # ────────────────────────────────────────────────
@@ -75,7 +94,6 @@ def save_controls(controls: List[Control]) -> str:
         "last_saved": now,
         "controls": [c.to_dict() for c in controls],
     }
-    # Резервная копия перед перезаписью (защита от конфликтов)
     _make_backup(file_path)
     try:
         with open(file_path, "w", encoding="utf-8") as f:
@@ -103,10 +121,10 @@ def _make_backup(file_path: Path, keep: int = 3) -> None:
 
 
 def _migrate(version: int, controls: List[Control]) -> None:
-    """Точка расширения для миграции формата при будущих версиях схемы."""
-    if version < 1:
-        # Первичная миграция не требуется — поля уже обрабатываются с дефолтами.
-        pass
+    """Миграция формата при будущих версиях схемы."""
+    # Поля schema v2 (end_date, milestones, attachments, archived, ...)
+    # обрабатываются Control.from_dict с дефолтами, отдельная миграция не нужна.
+    pass
 
 
 # ────────────────────────────────────────────────
@@ -142,6 +160,27 @@ def save_settings(settings: dict) -> None:
         raise
 
 
+def add_custom_initiator(settings: dict, name: str) -> None:
+    """Добавить пользовательский инициатор в настройки."""
+    name = (name or "").strip()
+    if not name:
+        return
+    custom = list(settings.get("custom_initiators", []) or [])
+    if name not in custom and name not in DEFAULT_INITIATORS:
+        custom.append(name)
+    settings["custom_initiators"] = custom
+    save_settings(settings)
+
+
+def remove_custom_initiator(settings: dict, name: str) -> None:
+    """Удалить пользовательский инициатор из настроек."""
+    custom = list(settings.get("custom_initiators", []) or [])
+    if name in custom:
+        custom.remove(name)
+    settings["custom_initiators"] = custom
+    save_settings(settings)
+
+
 # ────────────────────────────────────────────────
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ────────────────────────────────────────────────
@@ -152,11 +191,10 @@ def next_control_number(controls: List[Control]) -> int:
 
 
 def get_criminalist_names() -> List[str]:
-    """Список ФИО криминалистов из вкладки «Зональные»."""
+    """Список ФИО криминалистов из вкладки «Зональные» + дефолтные контролеры."""
     try:
         from .zonal_data import load_criminalists
         names = [c.full_name for c in load_criminalists() if c.full_name]
-        # Объединяем с дефолтными контролерами
         for n in DEFAULT_CONTROLLERS:
             if n not in names:
                 names.append(n)
@@ -165,8 +203,174 @@ def get_criminalist_names() -> List[str]:
         return list(DEFAULT_CONTROLLERS)
 
 
-def get_initiators() -> List[str]:
-    return list(DEFAULT_INITIATORS)
+def get_criminalist_short_names() -> List[str]:
+    """Сокращённые ФИО криминалистов («Семисенко И.Ю.»)."""
+    return [short_name(n) for n in get_criminalist_names()]
+
+
+def get_initiators(settings: dict) -> List[str]:
+    """Список инициаторов: встроенные + пользовательские из настроек."""
+    return list(DEFAULT_INITIATORS) + list(settings.get("custom_initiators", []) or [])
+
+
+# ────────────────────────────────────────────────
+# АРХИВ
+# ────────────────────────────────────────────────
+
+def archive_control(control: Control, reason: str) -> None:
+    """Переместить контроль в архив."""
+    control.archived = True
+    control.archived_at = datetime.now().isoformat()
+    control.archive_reason = reason
+    control.updated_at = datetime.now().isoformat()
+
+
+def restore_control(control: Control) -> None:
+    """Вернуть контроль из архива в активные."""
+    control.archived = False
+    control.archived_at = None
+    control.archive_reason = ""
+    control.updated_at = datetime.now().isoformat()
+
+
+# ────────────────────────────────────────────────
+# ВЛОЖЕНИЯ (СКАНЫ)
+# ────────────────────────────────────────────────
+
+def get_attachment_source_path(control_id: str, rel_path: str) -> Optional[Path]:
+    """Локальный абсолютный путь вложения по относительному пути."""
+    safe = Path(rel_path).name
+    return get_attachment_dir(control_id) / safe if safe else None
+
+
+def copy_attachment_to_local(control_id: str, source_path: str) -> Optional[str]:
+    """Скопировать файл в локальную папку вложений контроля.
+
+    Возвращает относительный путь (`<control_id>/<filename>`) или None.
+    """
+    try:
+        src = Path(source_path)
+        if not src.exists():
+            return None
+        target_dir = get_attachment_dir(control_id)
+        filename = _unique_filename(target_dir, src.name)
+        shutil.copy2(src, target_dir / filename)
+        return f"{control_id}/{filename}"
+    except OSError as e:
+        print(f"[CONTROLS_DATA] copy attachment error: {e}")
+        return None
+
+
+def copy_attachment_to_shared(control_id: str, source_path: str, settings: dict) -> Optional[str]:
+    """Скопировать файл в общую сетевую папку вложений.
+
+    Возвращает относительный путь или None. Shared-папка определяется как
+    родитель общей папки/файла (shared_dir/controls_attachments/...).
+    """
+    shared_dir = _shared_dir(settings)
+    if shared_dir is None:
+        return None
+    try:
+        src = Path(source_path)
+        if not src.exists():
+            return None
+        target_dir = shared_dir / "controls_attachments" / control_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        filename = _unique_filename(target_dir, src.name)
+        shutil.copy2(src, target_dir / filename)
+        return f"{control_id}/{filename}"
+    except OSError as e:
+        print(f"[CONTROLS_DATA] copy attachment to shared error: {e}")
+        return None
+
+
+def _unique_filename(target_dir: Path, name: str) -> str:
+    """Уникальное имя файла при коллизии: `name`, `name_1`, `name_2`, ..."""
+    candidate = Path(name)
+    stem, suffix = candidate.stem, candidate.suffix
+    if not (target_dir / candidate.name).exists():
+        return candidate.name
+    i = 1
+    while (target_dir / f"{stem}_{i}{suffix}").exists():
+        i += 1
+    return f"{stem}_{i}{suffix}"
+
+
+def open_attachment(control_id: str, rel_path: str) -> Optional[Path]:
+    """Найти абсолютный путь вложения (локально, затем в общей папке).
+
+    При сетевом режиме вложения открываются из общей папки, если их нет локально.
+    """
+    local = get_attachment_source_path(control_id, rel_path)
+    if local and local.exists():
+        return local
+    return None
+
+
+def resolve_attachment(control_id: str, rel_path: str, settings: dict) -> Optional[Path]:
+    """Разрешить путь вложения: сначала общая папка, затем локально."""
+    shared_dir = _shared_dir(settings)
+    if shared_dir is not None:
+        cand = shared_dir / "controls_attachments" / control_id / Path(rel_path).name
+        if cand.exists():
+            return cand
+    local = get_attachment_source_path(control_id, rel_path)
+    if local and local.exists():
+        return local
+    return None
+
+
+def delete_attachment(control_id: str, rel_path: str, settings: dict) -> None:
+    """Удалить файл вложения (локально и из общей папки)."""
+    local = get_attachment_source_path(control_id, rel_path)
+    if local and local.exists():
+        try:
+            local.unlink()
+        except OSError:
+            pass
+    shared_dir = _shared_dir(settings)
+    if shared_dir is not None:
+        cand = shared_dir / "controls_attachments" / control_id / Path(rel_path).name
+        if cand.exists():
+            try:
+                cand.unlink()
+            except OSError:
+                pass
+
+
+def delete_all_attachments(control_id: str, settings: dict) -> None:
+    """Удалить папку вложений контроля (локально и в общей папке)."""
+    local_dir = get_attachment_dir(control_id)
+    try:
+        shutil.rmtree(local_dir, ignore_errors=True)
+    except OSError:
+        pass
+    shared_dir = _shared_dir(settings)
+    if shared_dir is not None:
+        cand = shared_dir / "controls_attachments" / control_id
+        try:
+            shutil.rmtree(cand, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def attachment_abs(rel_path: str) -> Path:
+    """Абсолютный путь локального вложения по относительному пути."""
+    parts = rel_path.split("/")
+    if len(parts) == 2:
+        return get_attachment_dir(parts[0]) / parts[1]
+    return get_attachments_path() / rel_path
+
+
+def _shared_dir(settings: dict) -> Optional[Path]:
+    """Общая сетевая папка (родитель controls.json / пути)."""
+    raw = (settings.get("network_shared_path") or "").strip()
+    if not raw:
+        return None
+    p = Path(raw)
+    if p.suffix.lower() == ".json":
+        return p.parent
+    return p
 
 
 # ────────────────────────────────────────────────
@@ -217,7 +421,6 @@ def write_shared_controls(controls: List[Control], settings: dict) -> bool:
             "last_saved": datetime.now().isoformat(),
             "controls": [c.to_dict() for c in controls],
         }
-        # Резервная копия перед перезаписью общего файла
         if p.exists():
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             shutil.copy2(p, p.with_name(f"controls.json.bak.{stamp}"))
@@ -240,3 +443,21 @@ def get_shared_mtime(settings: dict) -> Optional[float]:
         return p.stat().st_mtime
     except OSError:
         return None
+
+
+def sync_attachments_from_shared(control_id: str, rel_paths: List[str], settings: dict) -> None:
+    """Подтянуть недостающие вложения из общей папки локально."""
+    shared_dir = _shared_dir(settings)
+    if shared_dir is None:
+        return
+    for rel in rel_paths:
+        shared_file = shared_dir / "controls_attachments" / control_id / Path(rel).name
+        if not shared_file.exists():
+            continue
+        local = get_attachment_dir(control_id) / Path(rel).name
+        if local.exists():
+            continue
+        try:
+            shutil.copy2(shared_file, local)
+        except OSError:
+            pass
