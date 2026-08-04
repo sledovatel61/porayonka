@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мокапы вкладки «Контроли» — Порайонка</title>
+    <style>
+        :root {
+            --bg: #0b1120;
+            --card: #15202e;
+            --raised: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --secondary: #94a3b8;
+            --muted: #64748b;
+            --accent: #3b82f6;
+            --accent-weak: #3b82f622;
+            --overdue: #ef4444;
+            --today: #f59e0b;
+            --success: #22c55e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 40px 32px 60px;
+            line-height: 1.5;
+        }
+
+        header {
+            max-width: 1400px;
+            margin: 0 auto 36px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: var(--secondary);
+            font-size: 16px;
+            max-width: 720px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--accent-weak);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 12px;
+        }
+
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        section {
+            margin-bottom: 44px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: baseline;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .count {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        a.card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            color: inherit;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+            min-height: 170px;
+        }
+
+        a.card:hover {
+            background: var(--raised);
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        a.card b {
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        a.card .desc {
+            color: var(--secondary);
+            font-size: 14px;
+            line-height: 1.45;
+            flex-grow: 1;
+        }
+
+        a.card .meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent);
+            font-size: 13px;
+            font-weight: 500;
+            margin-top: auto;
+        }
+
+        a.card .meta::after {
+            content: '→';
+        }
+
+        .series-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 16px;
+            background: var(--raised);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 18px;
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .series-link:hover {
+            border-color: var(--accent);
+        }
+
+        footer {
+            max-width: 1400px;
+            margin: 48px auto 0;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .dot-overdue { background: var(--overdue); }
+        .dot-today { background: var(--today); }
+        .dot-success { background: var(--success); }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="badge">Мокапы</div>
+        <h1>Вкладка «Контроли»</h1>
+        <p class="subtitle">
+            Автономные HTML-прототипы третьей вкладки приложения «Порайонка». Все файлы работают офлайн: достаточно открыть любой из них в браузере.
+        </p>
+    </header>
+
+    <main>
+        <section>
+            <div class="section-header">
+                <h2>Серия 1 — варианты раскладки</h2>
+                <span class="count">5 мокапов</span>
+            </div>
+            <div class="grid">
+                <a class="card" href="01_excel_pro.html">
+                    <b>Excel-Pro</b>
+                    <span class="desc">Классическая таблица с фильтрами по колонкам. Близко к текущей Excel-схеме, но в современном виде.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="02_master_detail.html">
+                    <b>Master-Detail</b>
+                    <span class="desc">Список контролей слева, детальная карточка с пунктами и сроками справа.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="03_cards_grid.html">
+                    <b>Cards Grid</b>
+                    <span class="desc">Карточная сетка: каждый контроль — отдельная плитка со статусом, сроком и исполнителями.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="04_deadline_board.html">
+                    <b>Deadline Board</b>
+                    <span class="desc">Kanban-доска по срокам: просрочено, сегодня, скоро, в работе, исполнено.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="05_command_center.html">
+                    <b>Command Center</b>
+                    <span class="desc">Дашборд сверху + таблица + выдвижная панель детализации.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-header">
+                <h2>Серия 3 — премиальные скины</h2>
+                <span class="count">6 мокапов</span>
+            </div>
+            <div class="grid">
+                <a class="card" href="v3/01_graphite_pro.html">
+                    <b>Graphite Pro</b>
+                    <span class="desc">Сдержанный инженерный интерфейс: тонкие границы и ясная таблица.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="v3/02_vercel_geist.html">
+                    <b>Vercel / Geist</b>
+                    <span class="desc">Воздушный монохромный минимализм с единственным синим сигналом.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="v3/03_linear.html">
+                    <b>Linear</b>
+                    <span class="desc">Мягкая глубина, индиго-навигация и аккуратные pill-компоненты.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="v3/04_emerald_ops_premium.html">
+                    <b>Emerald Ops Premium</b>
+                    <span class="desc">Оперативный пульт: строгая сетка и световые статусы без визуального шума.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="v3/05_midnight_gold_premium.html">
+                    <b>Midnight Gold Premium</b>
+                    <span class="desc">Сдержанный государственный premium: navy, латунный акцент и серьёзный ритм.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+                <a class="card" href="v3/06_cobalt_archive.html">
+                    <b>Cobalt Archive</b>
+                    <span class="desc">Современный архивный стиль: крупные поверхности и ясная иерархия.</span>
+                    <span class="meta">Открыть мокап</span>
+                </a>
+            </div>
+            <a class="series-link" href="v3/index.html">Открыть галерею серии v3 →</a>
+        </section>
+    </main>
+
+    <footer>
+        Файлы не требуют интернета. Скопируйте папку <code>design/mockups_portable</code> на любой компьютер и откройте <code>index.html</code>.
+    </footer>
+</body>
+</html>
