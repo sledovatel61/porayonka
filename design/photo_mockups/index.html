@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Фото-мокапы вкладки «Контроли» — 10 направлений дизайна</title>
+<style>
+  :root{
+    --bg:#0b1120; --card:#15202e; --raised:#1e293b; --border:#334155;
+    --text:#f8fafc; --secondary:#94a3b8; --muted:#64748b; --accent:#3b82f6; --gold:#d4af37;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,sans-serif;padding:40px 32px 64px}
+  .wrap{max-width:1500px;margin:0 auto}
+  header{margin-bottom:34px}
+  h1{font-size:26px;font-weight:800;letter-spacing:.2px}
+  .sub{color:var(--secondary);margin-top:8px;font-size:14px;line-height:1.6;max-width:900px}
+  .sub a{color:var(--accent);text-decoration:none}
+  .sub a:hover{text-decoration:underline}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:22px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;
+        display:flex;flex-direction:column;transition:transform .15s ease,border-color .15s ease}
+  .card:hover{transform:translateY(-3px);border-color:var(--accent)}
+  .thumb{position:relative;aspect-ratio:16/9;background:#000;overflow:hidden;cursor:zoom-in}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s ease}
+  .card:hover .thumb img{transform:scale(1.035)}
+  .num{position:absolute;top:10px;left:10px;background:rgba(2,6,23,.72);border:1px solid rgba(148,163,184,.35);
+       color:#e2e8f0;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;backdrop-filter:blur(4px)}
+  .badge{position:absolute;top:10px;right:10px;background:rgba(2,6,23,.72);border:1px solid rgba(212,175,55,.5);
+         color:var(--gold);font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;letter-spacing:.4px}
+  .body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:8px;flex:1}
+  h2{font-size:16px;font-weight:700}
+  .char{color:var(--secondary);font-size:12.5px;line-height:1.55;flex:1}
+  .row{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+  .open{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-size:12.5px;font-weight:600;text-decoration:none}
+  .open:hover{text-decoration:underline}
+  .chip-tag{font-size:10.5px;color:var(--muted);background:var(--raised);border:1px solid var(--border);padding:2px 9px;border-radius:999px}
+  footer{margin-top:40px;color:var(--muted);font-size:12.5px;line-height:1.7;border-top:1px solid var(--border);padding-top:18px}
+  footer a{color:var(--secondary)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Фото-мокапы вкладки «Контроли» — 10 направлений дизайна</h1>
+    <div class="sub">
+      Полноэкранные PNG 1600×900, тёмная тема. Сгенерированы по
+      <b>реальным скринам приложения</b> (запуск Flet-приложения «Порайонка» с реальными данными,
+      скрины в <a href="ref/">ref/</a>). Для каждого варианта — стилевая карточка с hex-палитрой в
+      <a href="README.md">README.md</a>. Мокапы — эталоны стиля для последующей реализации в Flet
+      (перенос в <code>core/constants.py</code>).
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <a class="thumb" href="01_glass_dark.png" target="_blank"><img src="thumbs/01_glass_dark.png" alt="Glass Dark"><span class="num">01</span></a>
+      <div class="body">
+        <h2>Glass Dark</h2>
+        <div class="char">Глубокий синий фон, матовые стеклянные панели с тонкими светлыми кромками, синий акцент. «Дорогое тёмное стекло».</div>
+        <div class="row"><span class="chip-tag">с карточкой контроля</span><a class="open" href="01_glass_dark.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="02_neon_ops.png" target="_blank"><img src="thumbs/02_neon_ops.png" alt="Neon Ops"><span class="num">02</span></a>
+      <div class="body">
+        <h2>Neon Ops</h2>
+        <div class="char">Почти чёрный фон с сеткой, светящиеся неоновые статусы-индикаторы, «оперативный центр» с циановой подсветкой.</div>
+        <div class="row"><span class="chip-tag">оперативный центр</span><a class="open" href="02_neon_ops.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="03_premium_gov.png" target="_blank"><img src="thumbs/03_premium_gov.png" alt="Premium Gov"><span class="num">03</span></a>
+      <div class="body">
+        <h2>Premium Gov</h2>
+        <div class="char">Глубокий navy + золото/латунь, строгая сетка, солидный «государственный инструмент».</div>
+        <div class="row"><span class="chip-tag">с карточкой контроля</span><a class="open" href="03_premium_gov.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="04_minimal_light_dark.png" target="_blank"><img src="thumbs/04_minimal_light_dark.png" alt="Minimal Light-Dark"><span class="num">04</span></a>
+      <div class="body">
+        <h2>Minimal Light-Dark</h2>
+        <div class="char">«Светлая» тёмная тема: серо-графит, много воздуха, один акцент — индиго. Linear / Notion-эстетика.</div>
+        <div class="row"><span class="chip-tag">воздух и читаемость</span><a class="open" href="04_minimal_light_dark.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="05_emerald_command.png" target="_blank"><img src="thumbs/05_emerald_command.png" alt="Emerald Command"><span class="num">05</span></a>
+      <div class="body">
+        <h2>Emerald Command</h2>
+        <div class="char">Зелёно-чёрный пульт, изумрудные акценты, статусы — как лампы консоли управления.</div>
+        <div class="row"><span class="chip-tag">пульт управления</span><a class="open" href="05_emerald_command.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="06_aurora_gradient.png" target="_blank"><img src="thumbs/06_aurora_gradient.png" alt="Aurora Gradient"><span class="num">06</span></a>
+      <div class="body">
+        <h2>Aurora Gradient</h2>
+        <div class="char">Тёмная база + мягкие северные градиенты (сине-фиолетово-бирюзовые) на шапке и углах фона, чистая таблица.</div>
+        <div class="row"><span class="chip-tag">градиент только на шапке</span><a class="open" href="06_aurora_gradient.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="07_terminal_amber.png" target="_blank"><img src="thumbs/07_terminal_amber.png" alt="Terminal Amber"><span class="num">07</span></a>
+      <div class="body">
+        <h2>Terminal Amber</h2>
+        <div class="char">Ретро-терминал: моноширинные цифры и даты, янтарный текст на почти чёрном, плотная сетка.</div>
+        <div class="row"><span class="chip-tag">дата-денс / IDE</span><a class="open" href="07_terminal_amber.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="08_fluent_material.png" target="_blank"><img src="thumbs/08_fluent_material.png" alt="Fluent Material"><span class="num">08</span></a>
+      <div class="body">
+        <h2>Fluent Material</h2>
+        <div class="char">Современный Material 3 dark: округлые карточки, тональные поверхности, фиолетово-синий акцент.</div>
+        <div class="row"><span class="chip-tag">с карточкой контроля</span><a class="open" href="08_fluent_material.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="09_high_contrast_pro.png" target="_blank"><img src="thumbs/09_high_contrast_pro.png" alt="High Contrast Pro"><span class="num">09</span></a>
+      <div class="body">
+        <h2>High Contrast Pro</h2>
+        <div class="char">Максимальная читаемость: почти чёрный, крупный белый текст, яркие статусы, жирные границы, без пастели.</div>
+        <div class="row"><span class="chip-tag">для старых мониторов / Win7</span><a class="open" href="09_high_contrast_pro.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="thumb" href="10_soft_neumorph.png" target="_blank"><img src="thumbs/10_soft_neumorph.png" alt="Soft Neumorph Dark"><span class="num">10</span></a>
+      <div class="body">
+        <h2>Soft Neumorph Dark</h2>
+        <div class="char">Мягкие вдавленные/приподнятые поверхности одного тёмного оттенка, приглушённые акценты, тактильный вид.</div>
+        <div class="row"><span class="chip-tag">тактильный</span><a class="open" href="10_soft_neumorph.png" target="_blank">открыть полный →</a></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Состав экрана у всех вариантов одинаковый и соответствует реальному состоянию программы:
+    шапка с вкладками «Следственные отделы | Зональные | <b>Контроли</b>» и «Сохранено: 04.08.2026»,
+    заголовок «Контроли» + индикатор «Локально», кнопки «Добавить контроль / Импорт Excel / Экспорт Excel»,
+    чипы «Все 134 · Просрочено 2 · Сегодня 2 · Скоро 5 · В работе 114 · Исполнено 9»,
+    переключатель «Активные | Архив», поиск, таблица с мини-фильтрами и цветными статусами.
+    Реальные скрины приложения: <a href="ref/">ref/</a>. Стилевые карточки: <a href="README.md">README.md</a>.
+  </footer>
+</div>
+</body>
+</html>
