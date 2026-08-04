@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Мокапы v2 — Скины вкладки «Контроли»</title>
+<style>
+:root{--bg:#0b1120;--card:#15202e;--border:#334155;--text:#f8fafc;--secondary:#94a3b8;--accent:#3b82f6;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,Segoe UI,sans-serif;}
+body{background:var(--bg);color:var(--text);padding:40px 30px;line-height:1.5;}
+.container{max-width:1480px;margin:0 auto;}
+.header{text-align:center;margin-bottom:50px;}
+.header h1{font-size:32px;font-weight:700;margin-bottom:10px;}
+.header p{color:var(--secondary);font-size:16px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:24px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:transform .2s,box-shadow .2s;}
+.card:hover{transform:translateY(-4px);box-shadow:0 20px 25px -5px rgb(0 0 0 / .35);}
+.preview{height:180px;background:linear-gradient(#15202e,#0b1120);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border-bottom:1px solid var(--border);}
+.preview img{width:100%;height:100%;object-fit:cover;border:none;}
+.content{padding:20px;}
+.content h3{font-size:19px;margin-bottom:4px;}
+.content .tag{font-size:11px;padding:2px 8px;border-radius:999px;background:#1e293b;color:#64748b;display:inline-block;margin-bottom:10px;}
+.content p{color:var(--secondary);font-size:14px;line-height:1.45;}
+.actions{display:flex;gap:10px;margin-top:16px;}
+.btn{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:.1s;}
+.btn-primary{background:var(--accent);color:#fff;flex:1;}
+.btn-secondary{background:#1e293b;color:var(--text);border:1px solid var(--border);flex:1;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Мокапы v2 — Скины вкладки «Контроли»</h1>
+    <p>5 визуальных стилей с одинаковой структурой Excel-Pro · Flet-совместимые (сплошные цвета, границы, радиусы)</p>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <div class="preview">
+        <img src="01_midnight_gold.html" style="opacity:.12;filter:blur(6px);" alt="" />
+      </div>
+      <div class="content">
+        <h3>01 • Midnight Gold</h3>
+        <span class="tag">Глубокий тёмно-синий + золото</span>
+        <p>Градиент на шапке, золотые обводки, полупрозрачные заливки. Солидная «гос» роскошь с чёткими границами.</p>
+        <div class="actions">
+          <a href="01_midnight_gold.html" class="btn btn-primary">Открыть</a>
+          <a href="#" onclick="alert('Midnight Gold — статичная шапка с градиентом, золотые пилюли, полупрозрачные заливки #d4af3722');return false;" class="btn btn-secondary">Скины</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="preview">
+        <img src="02_emerald_ops.html" style="opacity:.12;filter:blur(6px);" alt="" />
+      </div>
+      <div class="content">
+        <h3>02 • Emerald Ops</h3>
+        <span class="tag">Зелёный подтон + изумрудный акцент</span>
+        <p>Оперативный пульт. Свежесть и хорошая читаемость. Неоновые зелёные границы на активных элементах.</p>
+        <div class="actions">
+          <a href="02_emerald_ops.html" class="btn btn-primary">Открыть</a>
+          <a href="#" onclick="alert('Emerald Ops — зелёный фон, изумрудный акцент, светящиеся обводки');return false;" class="btn btn-secondary">Скины</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="preview">
+        <img src="03_graphite_hc.html" style="opacity:.12;filter:blur(6px);" alt="" />
+      </div>
+      <div class="content">
+        <h3>03 • Graphite HC</h3>
+        <span class="tag">High Contrast · нулевая мыльность</span>
+        <p>Почти чёрный фон, белый текст, яркие статусные цвета. Радиус 4px, границы 2px, шрифты W_900.</p>
+        <div class="actions">
+          <a href="03_graphite_hc.html" class="btn btn-primary">Открыть</a>
+          <a href="#" onclick="alert('Graphite HC — максимальная читаемость, статусные пилюли с полной заливкой');return false;" class="btn btn-secondary">Скины</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="preview">
+        <img src="04_modern_saas.html" style="opacity:.12;filter:blur(6px);" alt="" />
+      </div>
+      <div class="content">
+        <h3>04 • Modern SaaS</h3>
+        <span class="tag">Zinc/slate + фиолетово-индиго</span>
+        <p>Нейтральная тёмная тема с воздухом, мягкими границами, аккуратной типографикой. Стиль Linear/Notion.</p>
+        <div class="actions">
+          <a href="04_modern_saas.html" class="btn btn-primary">Открыть</a>
+          <a href="#" onclick="alert('Modern SaaS — фиолетовый акцент, мягкие радиусы 14px, воздух');return false;" class="btn btn-secondary">Скины</a>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="preview">
+        <img src="05_amber_terminal.html" style="opacity:.12;filter:blur(6px);" alt="" />
+      </div>
+      <div class="content">
+        <h3>05 • Amber Terminal</h3>
+        <span class="tag">IDE-стиль · моноширинные цифры</span>
+        <p>Компактная таблица, янтарный акцент, моноширинный шрифт для чисел/дат. Рабочий инструмент.</p>
+        <div class="actions">
+          <a href="05_amber_terminal.html" class="btn btn-primary">Открыть</a>
+          <a href="#" onclick="alert('Amber Terminal — моноширинный шрифт, компактная сетка, янтарное свечение');return false;" class="btn btn-secondary">Скины</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>v2 — 05 Amber Terminal</title>
+<style>
+:root{
+  --bg:#0f0a02; --card:#1a1208; --raised:#120e06;
+  --border:#2a1f0a; --text:#f5e6c8; --secondary:#d4a860; --accent:#ffb000; --accent-dim:#ffb00022;
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Consolas','Courier New',system-ui,monospace;}
+body{background:var(--bg);color:var(--text);padding:24px 32px;font-size:13px;line-height:1.4;}
+.container{max-width:1600px;margin:0 auto;}
+.header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-radius:10px;margin-bottom:12px;border:1px solid var(--border);background:linear-gradient(90deg,#0f0a02 0%,#1a1208 60%,#ffb000 100%);}
+/* Gradient only on static large header. */
+h1{font-size:22px;font-weight:700;letter-spacing:.4px;color:#fff;}
+.sub{color:#d4a860;font-size:12px;}
+.chips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center;}
+.chip{padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--card);font-size:11px;color:var(--secondary);font-weight:700;}
+.chip b{color:#fff;margin-right:4px;}
+.chip.accent{border-color:var(--accent);background:var(--accent-dim);color:#fff;}
+.table-wrap{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--raised);}
+.table{width:100%;border-collapse:collapse;}
+.table th{padding:8px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#d4a860;border-bottom:1px solid var(--border);background:#0f0a02;font-weight:700;}
+.table td{padding:8px 8px;border-bottom:1px solid #2a1f0a;color:#f5e6c8;font-size:12px;vertical-align:middle;}
+.table tr:hover td{background:#1a1208;}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:4px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:700;font-size:11px;white-space:nowrap;font-family:'Consolas','Courier New',monospace;}
+.card-overlay{position:fixed;inset:0;background:#000000aa;display:flex;align-items:center;justify-content:center;z-index:50;}
+.card{width:820px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;color:#f5e6c8;font-family:'Consolas','Courier New',monospace;box-shadow:inset 0 0 0 1px #ffb00022;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px;background:#0f0a02;padding:10px;border-radius:8px;border:1px solid var(--border);}
+.cal-grid .d{padding:6px 4px;text-align:center;border-radius:6px;font-size:11px;color:#d4a860;font-weight:700;}
+.cal-grid .d.active{background:var(--accent);color:#0f0a02;font-weight:900;}
+.palette{position:fixed;top:24px;right:32px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;width:170px;box-shadow:inset 0 0 0 1px #ffb00022;}
+.swatch{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;color:#d4a860;font-weight:700;}
+.swatch .dot{width:14px;height:14px;border-radius:4px;border:1px solid #ffffff22;}
+.note{font-size:10px;color:#7a5e3d;margin-top:4px;}
+.btn-row{display:flex;gap:8px;margin-top:12px;}
+.btn{padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#0f0a02;font-weight:900;font-size:12px;cursor:pointer;font-family:'Consolas','Courier New',monospace;}
+.btn-secondary{background:var(--card);color:var(--accent);border-color:var(--border);}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Контроли — Amber Terminal</h1>
+    <div class="sub">Excel-Pro таблица · Дата-денс, моноширинные цифры, компактно</div>
+  </div>
+  <div class="chips">
+    <div class="chip">Все <b>134</b></div>
+    <div class="chip accent">Просрочено <b>2</b></div>
+    <div class="chip accent">Сегодня <b>2</b></div>
+    <div class="chip">Скоро <b>5</b></div>
+    <div class="chip">В работе <b>114</b></div>
+    <div class="chip">Исполнено <b>9</b></div>
+    <span style="margin-left:auto;color:#7a5e3d;font-size:11px;font-weight:700;">Активные | Архив</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>№</th><th>вх. №</th><th>Дата пост.</th><th>Инициатор</th><th>Содержание</th><th>Исполнители</th><th>За кем</th><th>Тип</th><th>Срок</th><th>Статус</th><th>Действия</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Иссоп-216-2083-25</td><td>14.03.2025</td><td>СУ</td><td>Распоряжение 24/216-р…</td><td>Ковалёв А.И.</td><td>Иванов С.П.</td><td>Разовый</td><td>01.08.2026</td><td><span class="pill">Просрочено</span></td><td>✏️ 🗑️</td></tr>
+        <tr><td>2</td><td>Вхсоп-9566-22</td><td>10.03.2025</td><td>Прокурор</td><td>УД № 120026 — проверка…</td><td>Мельникова О.В.</td><td>Петров Д.К.</td><td>Постоянный</td><td>10.08.2026</td><td><span class="pill" style="border-color:#fb923c;background:#fb923c22;color:#fb923c;">Сегодня</span></td><td>✏️ 🗑️</td></tr>
+        <tr><td>3</td><td>4108-26</td><td>05.03.2025</td><td>ГРОМ</td><td>Протокол осмотра 4108…</td><td>Сидоров Н.А.</td><td>Орлов Р.Т.</td><td>Разовый</td><td>15.08.2026</td><td><span class="pill" style="border-color:#f59e0b;background:#f59e0b22;color:#f59e0b;">Скоро</span></td><td>✏️ 🗑️</td></tr>
+        <tr><td>4</td><td>Иссоп-216-1017-26/дсп</td><td>12.03.2025</td><td>ДСП</td><td>Досудебное расследование…</td><td>Григорьев П.Р.</td><td>Козлов А.М.</td><td>Постоянный</td><td>20.08.2026</td><td><span class="pill" style="border-color:#10b981;background:#10b98122;color:#10b981;">В работе</span></td><td>✏️ 🗑️</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-overlay" onclick="this.style.display='none'">
+    <div class="card" onclick="event.stopPropagation()">
+      <h2 style="font-size:16px;font-weight:700;margin-bottom:12px;color:#fff;">Карточка контроля</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label style="font-size:10px;color:#d4a860;">Вх. №</label><p style="font-weight:700;color:#fff;">Иссоп-216-2083-25</p></div>
+        <div><label style="font-size:10px;color:#d4a860;">Инициатор</label><p>СУ</p></div>
+        <div><label style="font-size:10px;color:#d4a860;">Содержание</label><p>Распоряжение 24/216-р…</p></div>
+        <div><label style="font-size:10px;color:#d4a860;">Срок</label><p style="color:var(--accent);font-weight:900;">01.08.2026</p></div>
+      </div>
+      <div class="cal-grid">
+        <div class="d">Пн</div><div class="d">Вт</div><div class="d">Ср</div><div class="d">Чт</div><div class="d">Пт</div><div class="d">Сб</div><div class="d">Вс</div>
+        <div class="d"></div><div class="d"></div><div class="d"></div><div class="d"></div><div class="d"></div><div class="d">1</div><div class="d">2</div>
+        <div class="d">3</div><div class="d">4</div><div class="d">5</div><div class="d">6</div><div class="d">7</div><div class="d active">8</div><div class="d">9</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn">Сохранить</button><button class="btn btn-secondary">Отмена</button>
+      </div>
+    </div>
+  </div>
+  <div class="palette">
+    <strong style="font-size:11px;color:#fff;display:block;margin-bottom:8px;font-weight:700;">Палитра</strong>
+    <div class="swatch"><div class="dot" style="background:#0f0a02;"></div> <span>#0f0a02</span></div>
+    <div class="swatch"><div class="dot" style="background:#1a1208;"></div> <span>#1a1208</span></div>
+    <div class="swatch"><div class="dot" style="background:#ffb000;"></div> <span>#ffb000</span></div>
+    <div class="swatch"><div class="dot" style="background:#ffb00022;"></div> <span>#ffb00022 (fill)</span></div>
+    <div class="swatch"><div class="dot" style="background:#f5e6c8;"></div> <span>#f5e6c8</span></div>
+    <div class="note">Моноширинный шрифт для чисел, компактная таблица, янтарное свечение.</div>
+  </div>
+</div>
+</body>
+</html>
