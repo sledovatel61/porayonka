@@ -40,6 +40,8 @@ def format_date(d: Optional[date]) -> Optional[str]:
 def short_name(full: str) -> str:
     """Сокращённое ФИО: «Семисенко Иван Юрьевич» → «Семисенко И.Ю.».
 
+    Идемпотентен: уже-сокращённое «Потемкин С.А.» → «Потемкин С.А.»
+    (токены с точкой считаются готовыми инициалами и не режутся).
     Устойчив к неполным строкам: «Семисенко» → «Семисенко»,
     пустая строка → как есть.
     """
@@ -47,7 +49,12 @@ def short_name(full: str) -> str:
     if not parts:
         return full or ""
     surname = parts[0]
-    initials = "".join(p[0].upper() + "." for p in parts[1:] if p)
+    initials = ""
+    for p in parts[1:]:
+        if "." in p:
+            initials += p            # готовый инициал(ы): «С.», «С.А.»
+        else:
+            initials += p[0].upper() + "."
     if not initials:
         return surname
     return f"{surname} {initials}"
