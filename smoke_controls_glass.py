@@ -81,14 +81,14 @@ def main():
     # шапка таблицы построена (Bug C fix)
     header_rows = find(main_ct, ft.Container)
     # найдём header_row по высоте 34 и фону шапки
-    headers = [c for c in header_rows if c.height == 34 and c.bgcolor == "#0d1830"]
+    headers = [c for c in header_rows if c.height == 34 and c.bgcolor is None]
     assert headers, "header row not found"
     hr = headers[0]
     assert isinstance(hr.content, ft.Row) and len(hr.content.controls) >= 12, "header cells missing"
 
     # чипы-счётчики: 6 чипов + сегмент режима
     chips = [c for c in find(main_ct, ft.Container)
-             if c.height == 30 and c.border_radius == 15]
+             if c.height == 28 and c.border_radius == 14]
     assert len(chips) == 6, f"expected 6 status chips, got {len(chips)}"
 
     # нет DatePicker в overlay (БАГ F): только FilePicker'ы

@@ -6,6 +6,11 @@
 #   - у Container с border_radius рамка равномерная по толщине (все стороны 1 px),
 #     верхняя кромка светлее по ЦВЕТУ, не по толщине;
 #   - внутри скролл-колонки никаких animate/shadow/gradient/elevation-состояний.
+#
+# ВАЖНО (Flet 0.23.2 / Flutter): 8-значный hex читается как #AARRGGBB
+# (альфа ПЕРВАЯ). Здесь ВСЕ 8-значные цвета записаны в ARGB:
+#   #RRGGBBAA → #AARRGGBB  (например "#16213dcc" → "#cc16213d",
+#   "#ffffff1a" → "#1affffff"). Динамическая заливка: f"#22{color[1:]}".
 import flet as ft
 
 from core.controls_models import (
@@ -13,21 +18,21 @@ from core.controls_models import (
 )
 
 # ────────────────────────────────────────────────────────────────
-# Палитра Glass Dark
+# Палитра Glass Dark (все 8-значные — ARGB, alpha first!)
 # ────────────────────────────────────────────────────────────────
 GLASS = {
     "bg":            "#0a1024",   # фон вкладки
-    "surface":       "#16213dcc", # стеклянная поверхность (alpha ≈ 80%)
+    "surface":       "#cc16213d", # стеклянная поверхность (alpha CC ≈ 80%)
     "surface_solid": "#16213d",   # плотная поверхность (диалоги)
     "field":         "#0d1830",   # вдавленный тон полей
     "field_alt":     "#101c38",   # чуть светлее для списков-обёрток
-    "row_alt":       "#16213d66", # чередование строк таблицы (alpha ≈ 40%)
-    "border":        "#ffffff1a", # белый 10%
-    "border_soft":   "#ffffff0f",
-    "border_alt":    "#ffffff14",
-    "edge":          "#ffffff2e", # светлая кромка сверху панелей
-    "hover":         "#ffffff08", # hover строки таблицы
-    "hover_strong":  "#ffffff12", # hover кнопок/ячеек
+    "row_alt":       "#6616213d", # чередование строк таблицы (alpha 66 ≈ 40%)
+    "border":        "#1affffff", # белый 10% (alpha 1a)
+    "border_soft":   "#0fffffff", # белый ~6%
+    "border_alt":    "#14ffffff", # белый ~8%
+    "edge":          "#2effffff", # светлая кромка сверху панелей (alpha 2e)
+    "hover":         "#08ffffff", # hover строки таблицы
+    "hover_strong":  "#12ffffff", # hover кнопок/ячеек
     "text":          "#f2f5ff",   # основной текст
     "text_2":        "#93a3c7",   # вторичный текст
     "text_3":        "#5d6b8f",   # приглушённый текст / hint
@@ -35,8 +40,8 @@ GLASS = {
     "export_green":  "#2fd08b",   # зелёная кнопка экспорта
     "export_text":   "#04121f",   # тёмный текст на зелёном
     "danger":        "#ff5c6e",   # просрочено / опасное действие
-    "overlay":       "#04070fcc", # затемнение за карточкой
-    "header_bg":     "#0d1830",   # шапка таблицы
+    "overlay":       "#cc04070f", # затемнение за карточкой (alpha cc)
+    "divider":       "#1affffff", # разделитель строк таблицы
 }
 
 # Статусы в палитре скина (переопределяет STATUS_COLORS из моделей)
@@ -71,10 +76,12 @@ def glass_panel(
     border=None,
     alignment=None,
     on_click=None,
+    clip_behavior=None,
 ) -> ft.Container:
     """Стеклянная панель скина: полупрозрачный фон + кромка сверху.
 
     Без теней и градиентов — «стекло» в Flet 0.23.2 делается только так.
+    clip_behavior — обрезать контент по скруглению (для полотна таблицы).
     """
     return ft.Container(
         content=content,
@@ -86,18 +93,22 @@ def glass_panel(
         padding=padding,
         alignment=alignment,
         on_click=on_click,
+        clip_behavior=clip_behavior,
     )
 
 
 def status_pill(status_key: str, label: str, icon=None) -> ft.Container:
-    """Пилюля статуса: заливка <color>22 + рамка 1 px <color> + иконка."""
+    """Пилюля статуса: заливка <color>22 + рамка 1 px <color> + иконка.
+
+    Заливка в ARGB: f"#22{color[1:]}" = alpha 22 + RGB цвета статуса.
+    """
     color = GLASS_STATUS.get(status_key, GLASS["text_3"])
     return ft.Container(
         content=ft.Row(controls=[
             ft.Icon(icon, size=12, color=color),
             ft.Text(label, size=11, color=color, weight=ft.FontWeight.BOLD, no_wrap=True),
         ], spacing=3, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        bgcolor=f"{color}22",
+        bgcolor=f"#22{color[1:]}",
         border=ft.border.all(1, color),
         border_radius=12,
         padding=ft.padding.symmetric(horizontal=8, vertical=3),
@@ -154,11 +165,12 @@ def chip(
     count: int,
     on_click,
     selected: bool,
+    height: int = 28,
 ) -> ft.Container:
     """Чип-счётчик: цветная точка 8 px + подпись + число bold.
 
-    Активный чип — заливка <color>22 + рамка 1 px <color> (пилюля height 30, radius 15).
-    «Все» красится акцентом.
+    Активный чип — заливка <color>22 + рамка 1 px <color> (пилюля radius height/2).
+    «Все» красится акцентом. Заливка в ARGB: f"#22{color[1:]}".
     """
     color = GLASS["accent"] if key == "all" else GLASS_STATUS.get(key, GLASS["text_3"])
     return ft.Container(
@@ -169,11 +181,11 @@ def chip(
             ft.Text(str(count), size=12, color=GLASS["text"],
                     weight=ft.FontWeight.BOLD, no_wrap=True),
         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        height=30,
+        height=height,
         padding=ft.padding.symmetric(horizontal=12),
-        border_radius=15,
+        border_radius=height // 2,
         alignment=ft.alignment.center,
-        bgcolor=f"{color}22" if selected else "transparent",
+        bgcolor=f"#22{color[1:]}" if selected else "transparent",
         border=ft.border.all(1, color) if selected else ft.border.all(1, "transparent"),
         ink=True,
         on_click=on_click,

@@ -128,7 +128,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         "editing": False,
     }
 
-    rows_column = ft.Column(spacing=4, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+    rows_column = ft.Column(spacing=0, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+    # Единое полотно таблицы: стеклянный контейнер, строки внутри с разделителями
+    table_surface = glass_panel(
+        content=rows_column,
+        radius=12,
+        padding=ft.padding.symmetric(horizontal=0, vertical=0),
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+    )
     sync_label = ft.Text("Локально", size=12, color=GLASS["text_2"])
     sync_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=GLASS["text_3"])
 
@@ -154,9 +161,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _apply_filters()
 
     from_field = create_russian_date_field(
-        page, None, _set_from_iso, hint="С:", width=104, height=40)
+        page, None, _set_from_iso, hint="С:", width=104, height=36)
     to_field = create_russian_date_field(
-        page, None, _set_to_iso, hint="По:", width=104, height=40)
+        page, None, _set_to_iso, hint="По:", width=104, height=36)
 
     # ── Persistence / sync ──────────────────────────────────────
     def _persist(controls: List[Control], to_shared: bool = True):
@@ -306,7 +313,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         )
 
     def _action_icon(icon, color, tooltip, handler):
-        # 30×30 ghost-кнопка, hover #ffffff12 (без animate — только on_hover+update)
+        # 30×30 ghost-кнопка, hover #12ffffff (без animate — только on_hover+update)
         def _hover(e):
             btn.bgcolor = GLASS["hover_strong"] if e.data == "true" else "transparent"
             try:
@@ -324,7 +331,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         return btn
 
     # ── Row building ────────────────────────────────────────────
-    def _build_row(ctl: Control, num: int) -> ft.Container:
+    def _build_row(ctl: Control, num: int, is_last: bool = False) -> ft.Container:
         status = deadline_status(ctl, soon_days)
         color = GLASS_STATUS.get(status, GLASS["text_3"])
         content = ctl.content or ctl.incoming_number
@@ -391,11 +398,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 pass
 
+        # Строка лежит на общем полотне таблицы: без рамки по периметру,
+        # без радиуса и отступов; между строками — разделитель 1px снизу.
+        # Из акцентов — только статусная полоса слева и пилюля статуса.
         row = ft.Container(
             content=ft.Row(controls=row_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             height=_ROW_HEIGHT, bgcolor=base_bg,
-            border=ft.border.all(1, GLASS["border_soft"]), border_radius=8,
-            padding=ft.padding.symmetric(horizontal=4, vertical=4),
+            border=ft.border.only(bottom=ft.BorderSide(1, GLASS["divider"])) if not is_last else None,
             on_click=lambda e, c=ctl: _open_detail(c),
             on_hover=_row_hover,
         )
@@ -411,8 +420,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     ft.Icon(ft.icons.INBOX, size=18, color=GLASS["text_3"]),
                     ft.Text(label, size=13, color=GLASS["text_2"]),
                 ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                height=48, bgcolor=GLASS["surface"],
-                border=ft.border.all(1, GLASS["border"]), border_radius=10,
+                height=48, bgcolor="transparent",
                 padding=ft.padding.symmetric(horizontal=12, vertical=8),
             ))
             try:
@@ -420,8 +428,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 pass
             return
+        total = len(visible)
         for i, ctl in enumerate(visible, 1):
-            rows_column.controls.append(_build_row(ctl, i))
+            rows_column.controls.append(_build_row(ctl, i, is_last=(i == total)))
         try:
             rows_column.update()
         except Exception:
@@ -461,7 +470,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ft.Text(label, size=12, weight=ft.FontWeight.W_600,
                         color=GLASS["text"] if selected0 else GLASS["text_2"], no_wrap=True),
             ], spacing=5, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            height=28, padding=ft.padding.symmetric(horizontal=14), border_radius=13,
+            height=26, padding=ft.padding.symmetric(horizontal=12), border_radius=13,
             alignment=ft.alignment.center,
             bgcolor=GLASS["accent"] if selected0 else "transparent",
             ink=True, on_click=lambda e, m=mode: _set_mode(m),
@@ -475,8 +484,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _mk_mode_btn("archive", "Архив", ft.icons.ARCHIVE_OUTLINED),
         ], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
         bgcolor=GLASS["field"],
-        border=ft.border.all(1, GLASS["border_soft"]), border_radius=15,
-        padding=ft.padding.all(3),
+        border=ft.border.all(1, GLASS["border_soft"]), border_radius=13,
+        padding=ft.padding.all(2),
     )
 
     # ── Counters (чипы-счётчики) ────────────────────────────────
@@ -498,7 +507,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         for key, btn in counter_refs.items():
             selected = (state["f_status"] == key)
             color = GLASS["accent"] if key == "all" else GLASS_STATUS.get(key, GLASS["text_3"])
-            btn.bgcolor = f"{color}22" if selected else "transparent"
+            # ARGB-заливка: alpha 22 ПЕРВАЯ (Flet 0.23.2 / Flutter)
+            btn.bgcolor = f"#22{color[1:]}" if selected else "transparent"
             btn.border = ft.border.all(1, color) if selected else ft.border.all(1, "transparent")
             try:
                 row = btn.content
@@ -542,14 +552,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
             alignment=ft.MainAxisAlignment.START),
         radius=12,
-        padding=ft.padding.symmetric(horizontal=6, vertical=4),
+        padding=ft.padding.symmetric(horizontal=6, vertical=3),
     )
 
     # ── Filters ─────────────────────────────────────────────────
     def _mk_dd(hint, width, options, default="all"):
         return ft.Dropdown(
             hint_text=hint,
-            width=width, height=40, value=default,
+            width=width, height=36, value=default,
             options=options,
             border_radius=10, border_color=GLASS["border"],
             focused_border_color=GLASS["accent"],
@@ -568,7 +578,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         bgcolor=GLASS["field"], color=GLASS["text"],
         hint_style=ft.TextStyle(color=GLASS["text_3"], size=13),
         text_style=ft.TextStyle(size=13, color=GLASS["text"]),
-        width=400, height=40,
+        width=400, height=36,
         dense=True,
         content_padding=ft.padding.symmetric(horizontal=10, vertical=8),
     )
@@ -640,7 +650,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.Container(expand=True),
         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
         radius=12,
-        padding=ft.padding.symmetric(horizontal=8, vertical=5),
+        padding=ft.padding.symmetric(horizontal=8, vertical=4),
     )
     filter_row2 = glass_panel(
         content=ft.Row(controls=[
@@ -650,17 +660,17 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ghost_button("Сброс", _reset_filters, color=GLASS["accent"], size=13),
         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.START),
         radius=12,
-        padding=ft.padding.symmetric(horizontal=8, vertical=5),
+        padding=ft.padding.symmetric(horizontal=8, vertical=4),
     )
 
     # ── Header (fixed bug C) ────────────────────────────────────
     def _header_cell(text: str, width: int, key: str, center=False) -> ft.Container:
         active = (state["sort_key"] == key)
         arrow = "▲" if (active and not state["sort_reverse"]) else ("▼" if (active and state["sort_reverse"]) else "")
-        color = GLASS["accent"] if active else GLASS["text_2"]
+        # как на мокапе: UPPERCASE #93a3c7 size 11, без фона-плашки
         return ft.Container(
             content=ft.Text(f"{text.upper()} {arrow}".strip(), size=11, weight=ft.FontWeight.BOLD,
-                            color=color, no_wrap=True, tooltip="Сортировка"),
+                            color=GLASS["text_2"], no_wrap=True, tooltip="Сортировка"),
             width=width, padding=ft.padding.only(left=6, right=4),
             alignment=ft.alignment.center if center else ft.alignment.center_left,
             on_click=lambda e, k=key: _sort_by(k),
@@ -677,9 +687,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     header_row = ft.Container(
         content=ft.Row(controls=[], spacing=2, tight=True),
-        height=_HEADER_HEIGHT, bgcolor=GLASS["header_bg"],
-        border=ft.border.only(bottom=ft.BorderSide(1, GLASS["border"])),
-        border_radius=8, padding=ft.padding.symmetric(horizontal=4, vertical=2),
+        height=_HEADER_HEIGHT,
+        border=ft.border.only(bottom=ft.BorderSide(1, GLASS["divider"])),
+        padding=ft.padding.symmetric(horizontal=4, vertical=2),
     )
 
     def _rebuild_header():
@@ -2082,16 +2092,16 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     main_column = ft.Column(
         controls=[
             title_row,
-            ft.Container(height=8),
+            ft.Container(height=6),
             filter_row1,
-            ft.Container(height=8),
+            ft.Container(height=6),
             filter_row2,
-            ft.Container(height=8),
+            ft.Container(height=6),
             counters_row,
-            ft.Container(height=8),
+            ft.Container(height=6),
             header_row,
             ft.Container(height=2),
-            rows_column,
+            table_surface,
             ft.Container(height=30),
         ],
         spacing=0,
