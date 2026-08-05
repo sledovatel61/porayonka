@@ -589,7 +589,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         cont.bgcolor = orig
                     cont.update()
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
             return _hover
         row.on_hover = _make_hover(row, orig_bg)
         return row
@@ -606,7 +606,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 rows_column.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             return
         for i, ctl in enumerate(visible, 1):
             rows_column.controls.append(_build_row(ctl, i, i-1))
@@ -642,7 +642,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 btn.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
 
     def _refresh_counters():
         counts = _counts()
@@ -717,7 +717,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         ctl.color = "#ffffff" if sel else GLASS["text_secondary"]
                 btn.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
 
     def _mk_mode_btn(mode: str, label: str, icon) -> ft.Container:
         sel = state["mode"] == mode
@@ -914,7 +914,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 filter_cal_state["setter"](today.isoformat())
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         _close_filter_cal()
 
     def _rebuild_filter_cal():
@@ -950,7 +950,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             try:
                                 filter_cal_state["setter"](dd.isoformat())
                             except Exception:
-            traceback.print_exc()
+                                traceback.print_exc()
                         _close_filter_cal()
                     return _click
                 def _make_hover(cell, orig_bg, sel):
@@ -961,7 +961,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             cell.bgcolor = GLASS["hover_strong"] if e.data == "true" else orig_bg
                             cell.update()
                         except Exception:
-            traceback.print_exc()
+                            traceback.print_exc()
                     return _hover
                 cell = ft.Container(width=34, height=32, border_radius=8, bgcolor=bg, border=border, alignment=ft.alignment.center, content=txt, ink=True)
                 cell.on_click = _make_click(d)
@@ -1054,18 +1054,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             badge.update()
                             summary.update()
                         except Exception:
-            traceback.print_exc()
+                            traceback.print_exc()
                         if on_change_cb:
                             try:
                                 on_change_cb(list(selected))
                             except Exception:
-            traceback.print_exc()
+                                traceback.print_exc()
                     return _toggle
                 list_col.controls.append(ft.Checkbox(label=short_name(name), value=(name in selected), active_color=GLASS["accent"], label_style=ft.TextStyle(size=11 if compact else 12, color=GLASS["text"]), tooltip=name, on_change=_make_toggle(name), height=24 if compact else 28))
             try:
                 list_col.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         def _on_search_change(e):
             search_val["value"] = e.control.value or ""
             _rebuild_list()
@@ -1084,7 +1084,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 summary.update()
                 expand_btn.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             if expanded["value"]:
                 _rebuild_list()
         def _clear_all(e=None):
@@ -1096,12 +1096,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 badge.update()
                 summary.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             if on_change_cb:
                 try:
                     on_change_cb([])
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
             _rebuild_list()
         expand_btn = ft.IconButton(icon=ft.icons.EXPAND_MORE, icon_size=18, icon_color=GLASS["text_secondary"], on_click=_toggle_expand)
         header = ft.Row(controls=[ft.Text(title, size=12 if compact else 12, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(width=8), badge, ft.Container(expand=True), ft.TextButton("Очистить", on_click=_clear_all, style=ft.ButtonStyle(color=GLASS["overdue"])), expand_btn], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
@@ -1186,7 +1186,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 global_cal_state["setter"](today.isoformat())
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         _close_global_cal()
 
     def _rebuild_global_cal():
@@ -1222,7 +1222,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             try:
                                 global_cal_state["setter"](dd.isoformat())
                             except Exception:
-            traceback.print_exc()
+                                traceback.print_exc()
                         _close_global_cal()
                     return _click
                 def _make_hover(cell, orig_bg, sel):
@@ -1233,7 +1233,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             cell.bgcolor = GLASS["hover_strong"] if e.data == "true" else orig_bg
                             cell.update()
                         except Exception:
-            traceback.print_exc()
+                            traceback.print_exc()
                     return _hover
                 cell = ft.Container(width=34, height=32, border_radius=8, bgcolor=bg, border=border, alignment=ft.alignment.center, content=txt, ink=True)
                 cell.on_click = _make_click(d)
@@ -1313,7 +1313,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 receive_field_text.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         def _open_receive_cal(e=None):
             _open_global_cal(_set_receive, detail_state["receive_date"])
         receive_box.on_click = _open_receive_cal
@@ -1332,7 +1332,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 new_init_container.update()
                 new_init_field.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         def _add_initiator(e=None):
             name = (new_init_field.value or "").strip()
             if not name:
@@ -1352,7 +1352,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators]
                 initiator_filter_dd.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         add_init_btn = ft.IconButton(icon=ft.icons.ADD, icon_size=18, icon_color=GLASS["accent"], tooltip="Добавить нового", on_click=_show_new_init, width=36, height=36)
 
         content_field = _glass_textfield(value=ctl.content if ctl else "", hint="Содержание контроля…", multiline=True, min_lines=3, max_lines=5, expand=True)
@@ -1378,7 +1378,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 due_field_text.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             _refresh_cycle_hint()
         due_box.on_click = lambda e: _open_global_cal(_set_due, detail_state["due_date"])
 
@@ -1396,7 +1396,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 end_field_text.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             _refresh_cycle_hint()
         end_box.on_click = lambda e: _open_global_cal(_set_end, detail_state["end_date"])
 
@@ -1417,7 +1417,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 cycle_hint.value = "Следующие: " + " · ".join(d.strftime("%d.%m.%Y") for d in dates)
                 cycle_hint.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         def _on_type_change(e):
             is_per = (e.control.value == PERIODIC)
             period_dd.visible = is_per
@@ -1430,14 +1430,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 milestones_header.update()
                 milestones_col.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             _refresh_cycle_hint()
         def _on_period_change(e):
             custom_days_field.visible = (e.control.value == "custom")
             try:
                 custom_days_field.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             _refresh_cycle_hint()
         type_dd.on_change = _on_type_change
         period_dd.on_change = _on_period_change
@@ -1453,7 +1453,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 tasks_col.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
 
         def _build_single_task_card(t_ui: dict, idx: int) -> ft.Container:
             title_f = t_ui["title_field"]
@@ -1470,7 +1470,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 try:
                     txt.update()
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
             task_due_box.on_click = lambda e, s=_set_task_due: _open_global_cal(lambda iso: s(iso), t_ui["due_ref"]["value"])
 
             ass_container = _build_inline_multi(available_names, t_ui.get("assignees", []), f"Отв. {title_f.value[:10] or 'пункт'}", compact=True)
@@ -1529,7 +1529,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 milestones_col.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
 
         def _build_milestone_card(m_ui: dict) -> ft.Container:
             date_text = ft.Text(_display_date(m_ui["date_ref"]["value"]), size=12, color=GLASS["text"] if m_ui["date_ref"]["value"] else GLASS["text_muted"])
@@ -1544,7 +1544,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 try:
                     txt.update()
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
             date_box.on_click = lambda e, s=_set_m_date: _open_global_cal(lambda iso: s(iso), m_ui["date_ref"]["value"])
             note_f = _glass_textfield(value=m_ui["note"], hint="Точка (описание)", expand=True)
             note_f.height = 34
@@ -1589,7 +1589,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 attach_col.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
 
         def _open_attach(rel: str):
             import subprocess, sys, os
@@ -1613,19 +1613,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 try:
                     delete_attachment(detail_state["control_id"], rel, settings)
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
                 if rel in detail_state["attachments"]:
                     detail_state["attachments"].remove(rel)
                 _rebuild_attach()
                 try:
                     page.close(dlg)
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
             def _cancel(e=None):
                 try:
                     page.close(dlg)
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
             dlg = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Удаление вложения", size=14, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Text("Удалить файл вложения?", size=12, color=GLASS["text"]), actions=[ft.TextButton("Отмена", on_click=_cancel), ft.ElevatedButton("Удалить", bgcolor=GLASS["overdue"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
             page.open(dlg)
 
@@ -1648,7 +1648,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         from ui.toast import show_toast
                         show_toast(page, f"Файл > 20 МБ: {fobj.name}", icon=ft.icons.WARNING_AMBER)
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
                 rel = None
                 if settings.get("network_enabled"):
                     rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
@@ -1679,7 +1679,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     incoming_field.error_text = "Введите номер"
                     incoming_field.update()
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
                 return
             if not detail_state["receive_date"]:
                 return
@@ -1694,7 +1694,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     try:
                         ass = ui["_ass_container"]._get_selected()
                     except Exception:
-            traceback.print_exc()
+                        traceback.print_exc()
                 new_tasks.append(ControlTask(id=str(uuid4()), title=title, assignees=list(ass), due_date=ui["due_ref"]["value"], is_done=ui["is_done"], comment=ui.get("comment_field", ft.TextField()).value if "comment_field" in ui else ""))
             new_miles = []
             for ui in detail_state["milestones"]:
@@ -1767,7 +1767,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 try:
                     page.close(dlg)
                 except Exception:
-            traceback.print_exc()
+                    traceback.print_exc()
             dlg = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Переместить в архив", size=14, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Text(f"Переместить «{ctl.incoming_number}» в архив?", size=12, color=GLASS["text"]), actions=[ft.TextButton("Отмена", on_click=_cancel), ft.ElevatedButton("В архив", bgcolor=GLASS["accent"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
             page.open(dlg)
 
@@ -1906,7 +1906,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 page.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         _refresh_cycle_hint()
 
     # Actions
@@ -1982,7 +1982,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 page.close(dialog)
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         dialog = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Продлить срок", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Container(content=days_field, width=220), actions=[ft.TextButton("Отмена", on_click=_close), ft.ElevatedButton("Продлить", bgcolor=GLASS["accent"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
         page.open(dialog)
 
@@ -2002,7 +2002,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 page.close(dialog)
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         dialog = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Переместить в архив", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Text(f"Переместить «{ctl.incoming_number}» в архив?", size=13, color=GLASS["text"]), actions=[ft.TextButton("Отмена", on_click=_close), ft.ElevatedButton("В архив", bgcolor=GLASS["accent"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
         page.open(dialog)
 
@@ -2034,7 +2034,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 page.close(dialog)
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         dialog = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Удалить навсегда", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Text(f"Удалить «{ctl.incoming_number}» безвозвратно?", size=13, color=GLASS["text"]), actions=[ft.TextButton("Отмена", on_click=_close), ft.ElevatedButton("Удалить", bgcolor=GLASS["overdue"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
         page.open(dialog)
 
@@ -2113,7 +2113,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 page.close(dialog)
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
         dialog = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Row(controls=[ft.Icon(ft.icons.UPLOAD_FILE, size=20, color=GLASS["text"]), ft.Text("Импорт — предпросмотр", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"])], spacing=8, tight=True), content=ft.Container(width=560, content=ft.Column(controls=[summary, preview_list], spacing=8, tight=True)), actions=[ft.TextButton("Отмена", on_click=_close), ft.ElevatedButton("Импортировать", bgcolor=GLASS["accent"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
         page.open(dialog)
 
@@ -2132,7 +2132,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators]
                 initiator_filter_dd.update()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
             _update_sync_ui()
             _load_initial()
             _rebuild_table()
@@ -2220,7 +2220,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _rebuild_table()
                 _refresh_counters()
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
 
     def _poll_notifications():
         base = [c for c in _visible_base() if not c.done]
@@ -2240,7 +2240,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     parts.append(f"Скоро: {len(soon)}")
                 show_toast(page, " · ".join(parts), icon=ft.icons.NOTIFICATIONS_ACTIVE)
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
 
     def _on_page_resize(e=None):
         try:
@@ -2261,7 +2261,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             try:
                 _prev_resize(e)
             except Exception:
-            traceback.print_exc()
+                traceback.print_exc()
     try:
         page.on_resize = _combined_resize
     except Exception:
