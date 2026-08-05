@@ -60,7 +60,7 @@ def _stat_card(
         shadow=ft.BoxShadow(
             spread_radius=0,
             blur_radius=8,
-            color="#00000040",
+            color="#40000000",
             offset=ft.Offset(0, 2),
         ),
     )
@@ -187,7 +187,7 @@ def create_stats_bar(page: ft.Page, departments: List[Department]) -> ft.Row:
         shadow=ft.BoxShadow(
             spread_radius=0,
             blur_radius=8,
-            color="#00000040",
+            color="#40000000",
             offset=ft.Offset(0, 2),
         ),
     )

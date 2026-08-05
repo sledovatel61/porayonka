@@ -148,7 +148,7 @@ def create_summary_panel(
             shadow=ft.BoxShadow(
                 spread_radius=0,
                 blur_radius=6,
-                color="#00000040",
+                color="#40000000",
                 offset=ft.Offset(0, 1),
             ),
         )
@@ -239,7 +239,7 @@ def create_summary_panel(
         shadow=ft.BoxShadow(
             spread_radius=0,
             blur_radius=8,
-            color="#00000060",
+            color="#60000000",
             offset=ft.Offset(0, 2),
         ),
     )

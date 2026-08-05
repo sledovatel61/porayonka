@@ -34,7 +34,7 @@ def create_header(page: ft.Page, last_save: Optional[datetime]) -> ft.Container:
                 content=ft.Text("🏛", size=28),
                 width=52,
                 height=52,
-                bgcolor="#ffffff15",
+                bgcolor="#15ffffff",
                 border_radius=12,
                 alignment=ft.alignment.center,
             ),
@@ -87,7 +87,7 @@ def create_header(page: ft.Page, last_save: Optional[datetime]) -> ft.Container:
         shadow=ft.BoxShadow(
             spread_radius=0,
             blur_radius=16,
-            color="#00000060",
+            color="#60000000",
             offset=ft.Offset(0, 4),
         ),
     )

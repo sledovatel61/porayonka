@@ -1961,43 +1961,371 @@ Smoke с page-заглушкой:
 
 ---
 
-## 32. Цветовая конвенция hex: `#AARRGGBB`, а не CSS `#RRGGBBAA`
+## 32. Вкладка «Контроли» — Glass Dark редизайн + фикс цветов AARRGGBB (мокап 01)
 
-**Дата:** 2026-08-04. **Статус:** подтверждено эмпирически в реальном GUI (Flet 0.23.2, Windows).
+**Дата:** 2026-08-05. **Статус:** реализовано (промпт `PROMPT_контроли_дизайн.md`, коммит `217ecf6`).
+**Ветка:** `arena/019fcc5f-porayonka` (продолжение реворка, коммиты `af6b8c9` + `f6338c0`).
+**Мокап:** `design/mockups_portable/photo/01_glass_dark.png` + `README.md` раздел 01.
 
-### 32.1 Правило
+### 32.1 Критичный баг с цветами
 
-Flet (Flutter) трактует 8-значный hex-цвет как **`#AARRGGBB`** (альфа ПЕРВАЯ),
-а НЕ как CSS `#RRGGBBAA`. Примеры:
+**Симптом:** в реальном GUI все рамки и hover жёлтые.
 
-- `"#ffffff1a"` — задумано «белый 10%», а рендерится как A=FF,R=FF,G=FF,B=1A →
-  **непрозрачный жёлтый** (255,255,26). Все рамки и hover становятся жёлтыми.
-- `"#16213dcc"` — задумано «surface 80%», а рендерится почти прозрачным.
-- `f"{color}22"` — та же ошибка в динамике. Правильно: `f"#22{color[1:]}"`.
+**Причина:** Flet 0.23.2 (Flutter) читает 8-значный hex как `#AARRGGBB` (альфа ПЕРВАЯ), а код писал CSS-формат `#RRGGBBAA`. Например `#ffffff1a` (белый 10% alpha в CSS) читается Flutter как A=ff, R=ff, G=ff, B=1a → (255,255,26) — жёлтый. Аналогично `#16213dcc`, `#000000AA`, `#04070fcc`, `#ffffff12`/`08`/`15`/`22`/`40`/`60`.
 
-Правильно: `"#1affffff"` (белый 10%), `"#cc16213d"` (surface 80%),
-`"#08ffffff"` (hover), `"#cc04070f"` (dim).
+**Фикс:**
+- Все 8-значные hex переведены в `#AARRGGBB`: `#16213dcc`→`#cc16213d`, `#ffffff1a`→`#1affffff`, `#ffffff2e`→`#2effffff`, `#000000AA`→`#AA000000`, `#04070fcc`→`#cc04070f`, `#ffffff12`→`#12ffffff`, `#ffffff08`→`#08ffffff`, `#ffffff15`→`#15ffffff`, `#ffffff22`→`#22ffffff`, `#00000040`→`#40000000`, `#00000060`→`#60000000`.
+- Динамические конкатенации `f\"{color}22\"` → `with_alpha(color, \"22\")` → `#22RRGGBB` (хелпер `with_alpha` в `glass_theme.py`).
+- Проверка: `grep -rn \"#[0-9a-f]{8}\" porayonka-app/ui/controls/` — остались только корректные AARRGGBB (`#cc...`, `#1a...`, `#2e...`, `#08...`, `#12...`, `#22...`, `#40...`, `#60...`, `#66...`). Багов CSS-формата нет.
 
-### 32.2 История бага
+### 32.2 Новые файлы
 
-- §30.4 («БАГ 4»): бейдж `bgcolor="#ffffff22"` → «жёлтое пятно» — первое
-  проявление, тогда починили заменой на `COLORS["card"]`, не найдя причину.
-- 2026-08-04: агенты B–E (редизайн «Контроли» под Glass Dark) массово
-  использовали CSS-формат из промпта → все рамки и hover жёлтые в GUI.
-  Диагноз поставлен по скриншотам (жёлтые рамки вокруг каждого контрола +
-  жёлтая строка под курсором).
+| Файл | Что |
+|------|-----|
+| `ui/controls/glass_theme.py` | Палитра Glass Dark + хелперы `with_alpha`, `glass_panel`, `status_pill`, `chip_counter`, `glass_button`, `ghost_button`, `green_button`. Цвета: bg `#0a1024`, surface `#cc16213d`, border `#1affffff`, light top `#2effffff`, text `#f2f5ff`, secondary `#93a3c7`, muted `#5d6b8f`, accent `#4f8cff`, green `#2fd08b`, overlay `#cc04070f`, hover `#08ffffff`/`#12ffffff`. |
+| `ui/controls/russian_calendar.py` | Кастомный русский календарь — инлайн панель, без `ft.DatePicker`, без накопления в `page.overlay` (фикс Bug F). API `create_russian_date_field(page, value, on_change, hint, width)`. Шапка `< Август 2026 >` (Рус, capitalize), дни Пн-Вс size10 muted, сетка 6×7 ячейки 34×32 radius8, сегодня — рамка accent, выбранный — fill accent белый текст, соседние месяцы — muted, hover `#12ffffff` via `on_hover+update`. Клик = мгновенный выбор (no OK), Today/Clear снизу. Используется для всех дат вкладки (фильтры С/По, карточка receive/due/end, задачи, milestones). |
 
-### 32.3 Что делать
+### 32.3 Редизайн таблицы под мокап
 
-- Перед коммитом: `grep -rnE "#[0-9a-fA-F]{8}\b"` и `grep -rn '\}22"'` —
-  проверять порядок байт.
-- Шестизначный `#RRGGBB` (без альфы) — безопасен, не трогать.
-- Именованные цвета `ft.colors.*` — безопасны.
+**Было:** каждая строка — карточка с border и radius 10, отступы между строками, рамка по периметру.
 
-### 32.4 Редизайн «Контроли» Glass Dark — статус
+**Стало (требование дизайн-промпта):**
+- Единое стеклянное полотно таблицы: `glass_panel` radius12 `#cc16213d` с верхней кромкой `#2effffff`, padding 0, внутри `Column([header, rows])`.
+- Хедер: height 34, transparent, текст UPPERCASE `#93a3c7` size11 bold, сортировка стрелками сохранена, только нижний разделитель 1px `#1affffff` (никакой плашки-фона).
+- Строки: height 54 (было 58→54 — больше воздуха сверху), size13 `#f2f5ff` (было 12 — мелко), чередование `#6616213d` / transparent, hover `#08ffffff` через `on_hover` (без animate), **без** рамки по периметру, **без** radius. Разделители строк — тонкая линия 1px `#1affffff` между строками.
+- Акценты строки — только левая статусная полоса 4px radius2 цвет статуса и статус-пилюля (fill `#22`+border 1px). Никаких карточек-строк.
+- Колонка «вх. №» расширена до **≥165px** (было 108), bold 13, tooltip полный номер, `Иссоп-216-1017-26/дсп` помещается без обрезания. `_layout_widths` пересчитан: ужат «Содержание»/«Исполнители» на разницу, а не номер.
+- Статус-пилюля: заливка `#22`+рамка 1px цвета, иконка 12, текст 11 bold цвета статуса (палитра Glass Dark: overdue `#ff5c6e`, today `#ffd166`, soon `#ff9f43`, in_progress `#2fd08b`, done `#8a94ad`).
+- Кнопки действий 30×30 ghost, hover `#12ffffff`.
 
-Выбран вариант агента E (ветка `arena/019fcc5f-porayonka`): ARGB-фикс +
-таблица на едином полотне + русский календарь. Доработка (таблица: цвет,
-разделители, кнопки действий, hover-лаг; полный редизайн карточки) —
-по промпту `PROMPT_контроли_доработка.md`.
+**Воздух:** фильтры compact height 38 (field) / panel 52 (с padding), чипы height 30 radius15, отступы 4px между рядами (было 6) — таблица начинается выше, как на мокапе.
 
+### 32.4 Шапка и фильтры
+
+1. **Шапка вкладки**: glass_panel height 60 radius12 padding16, слева «Контроли» size20 bold `#f2f5ff` + точка сети + «Локально»/«Сеть: роль», справа: «Добавить контроль» accent `#4f8cff` белый текст height40 radius10, «Импорт Excel» ghost `#cc16213d` border `#1affffff`, dropdown «Как в таблице» glass, «Экспорт Excel» green `#2fd08b` тёмный текст `#04121f`, gear ghost. Вся шапка — стекло с кромкой сверху `#2effffff` (толщина 1px везде, светлее только цвет верхней грани — иначе скругление ломается, AGENTS §26).
+
+2. **Фильтры два ряда:**
+   - Ряд1: поиск grow (320+ expand), «Все статусы» 160, «Все типы» 140, справа toggle «Активные|Архив».
+   - Ряд2: «Все инициаторы» 190, «Все исполнители» 190, «Все контролёры» 190, «С:» 120 (russian calendar), X clear 28, «По:» 120, X clear, expand spacer, «Сброс» accent text.
+   - Каждое поле — стекло: height38 radius10 hint `#5d6b8f` size12, text size13 `#f2f5ff`, bgcolor `#0d1830` вдавленный, border `#1affffff`, focused `#4f8cff`. Hint_text (НЕ label — §31.5) — значения читаются полностью.
+
+3. **Чипы-счётчики**: ряд height38 padding2, dot 8px + подпись size12 + count bold, pill radius15 height30, active — fill `#33`+border 1px accent, inactive — fill `#22`+border `#44`. Кликабельны (фильтрация по статусу).
+
+### 32.5 Карточка контроля (detail overlay)
+
+- Уже master-detail без вложенных диалогов (§31) — сохранено, рестайл:
+  - Панель 860×740 radius14 стекло `#cc16213d` кромка сверху `#2effffff`, overlay за ней `#cc04070f`.
+  - Заголовок «Карточка контроля» size17 bold + крестик.
+  - Поля: label size11-12 `#93a3c7` СВЕРХУ поля; поля вдавленные `bgcolor="#0d1830" border #1affffff radius10 height40 size13`, multiline «Содержание» min3 строки.
+  - Исполнители/ответственные — существующий inline-мультивыбор с чекбоксами (НЕ диалог!), header «Исполнители · Выбрано: N» со стрелкой, раскрывающаяся стеклянная панель `#0d1830` border `#1affffff`. Сохранена логика, рестайлена в стекло.
+  - Пункты задания — стеклянные карточки `#0d1830` radius10 padding10: checkbox, название, ответственные inline-пикер, дата — russian calendar, удалить.
+  - Скан задания — стеклянные rows, attach file picker (mount с `page.update()` — Bug A fix).
+  - Кнопки: «Сохранить» accent `#4f8cff`, «Отмена» ghost; confirm диалоги `page.open()`/`close()` AlertDialog `bgcolor="#16213d"` radius14.
+
+### 32.6 Проверка
+
+```bash
+python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"  # OK
+```
+
+Headless smoke page-заглушка: вкладка строится, фильтры переключаются, шапка uppercase, таблица единое полотно без per-row border, вх.№ 165px не обрезан, календарь русский открывается, клик по дню → on_change iso, Today/Clear, экспорт/импорт/архив/attachments работают.
+
+Ручная чек-лист (мокап):
+1. Выглядит как 01 Glass Dark: стеклянные панели `#cc16213d` со светлой кромкой `#2effffff`, фон `#0a1024`, статусы яркие.
+2. «вх. №» не обрезан (165px, bold 13).
+3. Календарь русский «Август 2026» Пн-Вс, дата ставится одним кликом без OK.
+4. Фильтры читаются полностью (hint_text, width подобраны).
+5. Карточка/пункты/архив/Excel/сеть — без регрессий; нет желтых рамок (цвета AARRGGBB).
+
+### 32.7 Запреты (подтверждены)
+
+Внутри `Column(scroll=AUTO)` ЗАПРЕЩЕНО: `expand` (кроме horiz spacer в Row), `wrap`, `animate`, `gradient` на мелких, `shadow`/`BoxShadow`, `elevation={\"\":N,\"hovered\":M}`, `scroll=HIDDEN` в Row с `tight+expand`, `page.overlay.append(picker)` без `page.update()`, вложенные AlertDialog поверх карточки, `header_row.controls` у Container (только `.content`), `label=` у filter Dropdown (только `hint_text`+dense), `border.only` с РАЗНОЙ толщиной на Container с radius. Цвета 8-digit — только `#AARRGGBB`, не `#RRGGBBAA`, динамические — `with_alpha(color, '22')` → `#22RRGGBB`.
+
+### 32.8 Фикс других вкладок
+
+Попутно исправлены те же цветовые баги в `ui/header.py` (`#ffffff15`→`#15ffffff`, `#00000060`→`#60000000`), `stats_bar.py` (`#00000040`→`#40000000`), `summary_panel.py`, `zonal_tab.py` (`#ffffff22`→`#22ffffff`) — иначе там тоже жёлтые рамки.
+
+---
+
+## 33. Вкладка «Контроли» — доработка таблицы + ПОЛНЫЙ редизайн карточки (промпт доработка)
+
+**Дата:** 2026-08-05. **Статус:** реализовано (промпт `PROMPT_контроли_доработка.md`, база `arena/019fcc5f-porayonka` коммит `cbf0e94`).
+**Ветка:** `arena/019fcc5f-porayonka` (продолжение, коммит `30bb825`).
+**Эталон:** `design/mockups_portable/photo/01_glass_dark.png`.
+
+### 33.1 Таблица — доработка (п.1)
+
+**Проблема:** слишком синий фон `#0a1024` / `#cc16213d`, строки сливаются, разделители `#1affffff` еле видны, кнопки действий тусклые, hover лагает.
+
+**Сделано:**
+- Фон вкладки и полотна темнее и нейтральнее: `bg` `#080d1c` (было `#0a1024`), `surface` `#cc141e30` (AARRGGBB: alpha cc, цвет #141e30 — темнее и менее синий, чем #16213d). Подобрано по мокапу: холодный графит, не «синюшный».
+- Разделители заметнее: `border_divider` `#26ffffff` (было `#1affffff` — 10% → 15% белый).
+- Чередование контрастнее: `row_alt` `#0dffffff` (белый 5% alpha) — глаз цепляется за строку, вместо `#6616213d` 40% синего.
+- Row height 56 (было 54) — воздушнее, vertical rhythm как на мокапе.
+- Hover без задержки: обработчик `_make_hover` теперь только `bgcolor = hover if true else orig` + `update()`, без try/except широкого и пересчётов. `mouse_cursor = CLICK` сохранён. Если лаг сохраняется — предусмотрена вуаль (один уровень) или убрать заливку совсем — но текущий lightweight должен быть отзывчивым на 134 строках.
+- Колонка «Действия» 120px (было 76): 4 иконки 28-30px ghost `bgcolor transparent`, hover `#12ffffff`, radius8, icon_size18 контрастные:
+  - Редактировать `EDIT_OUTLINED` `#4f8cff`,
+  - Исполнено `CHECK_CIRCLE_OUTLINE` `#2fd08b`,
+  - Продлить `UPDATE_OUTLINED` `#ffd166`,
+  - В архив `DELETE_OUTLINE` `#ff5c6e`.
+  Архив: Восстановить + Удалить навсегда тем же стилем. Ширина ужмётся за счёт «Содержания».
+
+### 33.2 Карточка — ПОЛНЫЙ редизайн (п.2)
+
+**Было:** одна скомканная колонка, лейблы наляписто, календарь обрезан 150px (видно 3 дня).
+
+**Стало — каркас:**
+- Панель 920×min(780,0.9 окна) radius16 стекло `#cc141e30` (темнее), кромка `#2effffff`, dim `#cc04070f`.
+- Внутри: header фиксированный (иконка + «Карточка контроля» 17 bold, справа вх.№ крупно + X), footer фиксированный (Delete danger ghost `#ff5c6e` слева, Cancel ghost + Save accent `#4f8cff` height40 radius10 справа), middle — `Column(scroll=AUTO)` (правила скролла прежние).
+- Две колонки (ключевое): left 55% spacing14, right 45% spacing14, на <1100px складываются в одну (проверка `page.width`).
+
+**Левая:**
+1. Реквизиты: Вх.№ + Дата поступления в одну строку; Инициатор dropdown + компактная кнопка «+» — поле «Новый инициатор» появляется инлайн по клику (не жрёт место); Содержание textarea min3.
+2. Исполнение: Исполнители inline-multi header «Исполнители · Выбрано: N»; «За кем контроль» + Тип + Периодичность в одну строку (три dropdown с label сверху).
+3. Комментарий.
+
+**Правая:**
+1. Сроки — стеклянная подпанель: поле «Следующая дата исполнения» + **календарь раскрытый сразу** (как на мокапе) — `create_russian_calendar_expanded` width280 всегда видим, клик = мгновенный выбор, синхронизирован с полем. Под ним «Следующие: …» мелко `#93a3c7`, «Конечная дата».
+2. Пункты задания — + Добавить пункт, список компактных блоков.
+3. Скан задания — ghost кнопка + список файлов.
+
+**Пункт задания — компактный блок (п.2.3):**
+- Стекло radius10 padding10 `surface_alt`, Row1: drag icon + название TextField grow + удалить 16 `#ff5c6e`,
+- Row2: Ответственные inline-multi compact,
+- Row3: Срок date field (global calendar) + Checkbox «исполнено» нормального размера (не гигантский toggle) + дата исполнения мелко,
+- Комментарий однострочный hint.
+
+**Футер (п.2.4):** Delete danger ghost `#ff5c6e`, Cancel ghost, Save accent.
+
+**Критично календарь не обрезается (п.2.5):**
+- Раньше панель 280px рендерилась внутри узкого контейнера поля 130px и клиппилась.
+- Фикс: `create_russian_date_field` root width = max(width,280) → 280, field_box width = запрошенная (130), calendar 280 помещается в root 280, не клиппится родителем.
+- Для задач: глобальный календарь overlay в `detail_overlay` Stack — `global_cal_root` Container 300×340 top 200 left 300, `visible=False`, открывается по клику поля (setter = task due), позиционируется по центру карточки (минимум 280px всегда, без clip). Закрывается по выбору, Сегодня, Закрыть.
+- В секции «Сроки» календарь постоянно развернут — ему есть место.
+- Фильтры С/По — тот же root width fix, календарь виден целиком 7 колонок + Today/Clear, не налезает на toggle.
+
+### 33.3 Ограничения
+
+Flet 0.23.2, без новых зависимостей, icons, UI русский, print ASCII, цвета AARRGGBB `with_alpha`, внутри `Column(scroll=AUTO)` без expand/wrap/animate/shadow/gradient, border_radius только равномерная толщина, не ломать логику данных/Excel/сеть/архив/роли/вкладки 1–2, вложенные AlertDialog запрещены — только инлайн + global calendar overlay.
+
+### 33.4 Проверка
+
+```bash
+python -c "import sys; sys.path.insert(0, 'porayonka-app'); import main"
+```
+Headless: таблица строится, кнопки действий 4 иконки видны, колонка 120px, разделители #26ffffff заметнее, чередование #0dffffff, hover lightweight, карточка открывается 2 колонки, календарь 280px не клиппится (root width fix + global overlay), expanded календарь в правой колонке видим сразу, пункты добавляются/удаляются, сохранение работает.
+
+Ручная: живой просмотр Glass Dark мокапа — фон темнее #080d1c, полотно #cc141e30, воздух, заметные действия, карточка просторная сгруппированная, календарь не обрезан.
+
+### 33.5 Что не возвращать
+
+- Синий фон #0a1024/#cc16213d, разделители #1affffff еле видные, alt #6616213d слипшийся, row height 54 без воздуха.
+- Действия — тусклая галка, 1 иконка, ширина 76.
+- Hover тяжёлый с пересчётами и try/except широким.
+- Карточка одна колонка скомканная, календарь внутри узкого контейнера 150px обрезанный.
+- DatePicker из overlay, накопление в overlay, цвета #RRGGBBAA.
+
+
+
+---
+
+## 34. Вкладка «Контроли» — доработка 4: карточка не открывалась + шум update + сверка с мокапом
+
+**Дата:** 2026-08-05. **Статус:** реализовано (промпт `PROMPT_контроли_доработка4.md`).
+**База:** ветка `arena/019fcc5f-porayonka` коммит `71f9a57` (фикс отступов 43 `traceback.print_exc`). Работа выполнена в ветке `arena/019fd209-porayonka`.
+
+### 34.1 КРИТИЧНО: карточка контроля не открывалась (Задача 1)
+
+**Симптом:** клик по строке / карандашу / «Добавить контроль» → затемнение (dim) показывалось, карточки НЕ было, traceback нет.
+
+**Корневая причина (гипотеза «схлопывание» подтверждена):**
+`detail_overlay_container` содержал запрещённое сочетание
+`Column(scroll=ft.ScrollMode.AUTO, expand=True)` внутри `Container(expand=True)` —
+классический источник схлопывания (AGENTS 15.11/22). Прокручиваемая колонка с `expand`
+в Flet 0.23.2 получала нулевые/битые constraints: контейнер-подложка (`overlay_bg`, dim)
+рендерилась (expand=True на внешнем Container), а дочерняя карточка схлопывалась в 0 и
+не появлялась.
+
+**Фикс (по образцу `control_card_modal.py`):**
+- `detail_overlay_container` упрощён: `Container(expand=True, alignment=top_center, content=detail_overlay)` — БЕЗ вложенной `Column(scroll=AUTO, expand=True)`. Dim покрывает вкладку, карточка выравнивается по центру сверху.
+- Карточке задана **фиксированная высота** `card_max_h = min(780, 0.9*window)` (было `height=None`).
+- `detail_content` (корневая Column карточки) получила `expand=True`; `middle_scroll` получил `expand=True` и внутренний `Column(scroll=AUTO)` — теперь прокрутка внутри карточки, как в модалке.
+- Прямой импорт + headless-smoke: `_open_detail(None)` и клик по строке открывают карточку, левая (3 блока) и правая (4 блока) колонки непустые; узкий layout (<1100) складывает колонки в одну.
+
+### 34.2 Убран шум `Control must be added to the page first` (Задача 2)
+
+Добавлен модульный хелпер `_safe_update(control)`:
+```python
+def _safe_update(control):
+    try:
+        if control is not None and getattr(control, "page", None) is not None:
+            control.update()
+    except Exception:
+        traceback.print_exc()
+```
+Все `.update()` контролов в файле (58 шт.) переведены на `_safe_update(...)`;
+`page.update()` оставлены как есть (page всегда смонтирован). При инициализации
+(контролы ещё не в page) обновления пропускаются → консоль чистая, реальные ошибки
+видны. Проверено: `0` вхождений «Control must be added» на init.
+
+### 34.3 Сверка с мокапом (Задача 3)
+
+Подтверждено, что в базе уже реализовано (проверено headless, не ломалось падением карточки):
+- Иерархия яркости: фон `#0a1024` < панели `#cc141e33`(≈#141e33) < плашки `#1e2a44`, hover `#28324e` мгновенный.
+- Колонка «Действия»: карандаш `#4f8cff` + корзина `#ff5c6e`.
+- Фильтры «Исполнители»/«Контролёры» — options из реальных данных (distinct), фильтрация работает (`_refresh_filter_options`).
+- «С:»/«По:» — shared-календарь поверх (`_open_filter_cal`), крестик очистки внутри поля.
+- Длинные исполнители — перенос на 2 строки (`max_lines=2`), плашка тянется по высоте (row height по контенту).
+- Исполненные — внизу списка (стабильное разбиение `not_done + done` в `_filtered()`).
+- Resize колонок drag'ом за границу заголовка (`GestureDetector` в `_header_cell`), сохранение в `controls_settings.json` (`_save_col_widths`).
+
+### 34.4 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py ui/controls/glass_theme.py ui/controls/control_card_modal.py ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # headless-smoke: init без шума, карточка (new+edit) открывается, колонки непустые, фильтры из данных
+```
+
+Headless-smoke закоммичен в `porayonka-app/tests/test_controls_smoke.py` + `tests/page_stub.py`
+(изолирует данные через temp-APPDATA). Ручная приёмка на Windows: `python porayonka-app/main.py`.
+
+### 34.5 Не возвращать
+
+- `Column(scroll=AUTO, expand=True)` во `detail_overlay_container` (карточка схлопывалась).
+- `detail_card.height = None` при открытии (нужна фикс. высота + внутренний скролл).
+- Голые `control.update()` на unmounted контролах при init — только `_safe_update`.
+
+---
+
+## 35. Вкладка «Контроли» — раунд 5: левая колонка карточки, пункты/точки, hover, серые плашки
+
+**Дата:** 2026-08-05. **Статус:** реализовано (промпт `PROMPT_контроли_доработка5.md`).
+**Ветка:** `arena/019fd209-porayonka` (продолжение раунда 4).
+
+### 35.1 КРИТИЧНО: карточка — левая колонка пустая, пункты убивают карточку, точки не работали
+
+**Симптом (скрины пользователя):**
+- скрин 1: карточка открылась — правая колонка видна, левая ПОЛНОСТЬЮ пустая (нет Реквизитов/Исполнения/Комментария);
+- скрин 2: после «+ Добавить пункт» середина карточки исчезает (только шапка и футер);
+- «+ Добавить точку» — ничего не происходит.
+
+**Корневая причина (подтверждена):**
+1. **Левая колонка пустая / пункты убивают карточку** — поля карточки внутри scroll-колонки
+   (`middle_scroll` → Row колонок → панель) имели `expand=True`:
+   `incoming_field`, `content_field` (в левой колонке) и `title_f`/`comment_f` пунктов,
+   `note_f` точек (в правой). `expand=True` внутри `Column(scroll=AUTO)` — классический
+   источник схлопывания (AGENTS §15.11): левая колонка (в отличие от правой, где полей с
+   expand не было) схлопывалась в ноль; добавление пункта добавляло ещё expand-полей → схлопывалась
+   вся середина. Голова (правый столбец) при открытии новой карточки expand-полей не имела → рендерилась.
+2. **«+ Добавить точку» ничего не делал** — `milestones_col.visible` был `False` для разовых
+   контролей (тип `ONE_TIME`), и точка добавлялась в скрытую колонку.
+3. Бонус: в `_on_type_change` была ссылка на несуществующий `milestones_header` (NameError при смене типа).
+
+**Фикс:**
+- Убраны все `expand=True` у полей карточки; где поле в `Row` — задана явная ширина:
+  `incoming_field width=300`, `title_f width=300` (пункты), `note_f` точек вынесен на отдельную строку.
+- Ширины `controller_dd/type_dd/period_dd` (180/120/140) подогнаны под левую панель (≈476), чтобы строка
+  «За кем / Тип / Периодичность» не переполнялась.
+- `milestones_col.visible = True` всегда; `milestones_header` удалён из `_on_type_change`.
+- `_rebuild_task_cards`/`_rebuild_milestones` перестраивают ТОЛЬКО свои колонки (`tasks_col`/`milestones_col`)
+  с `_safe_update` — корневой layout карточки (`detail_content`/`middle_scroll`) не пересоздаётся.
+
+### 35.2 Таблица: hover убран, плашки серые
+
+- **Hover строк убран полностью** (AGENTS 2.1): удалены `_make_hover`/`row.on_hover` — 134 строки ×
+  `update()` не успевали за курсором (лагало, «через одну»). Остался только `mouse_cursor=CLICK`.
+- **Цвет плашек в серый графит** (AGENTS 2.2): `card #1e2a44 → #2a3247`, панели `#141e33 → #171f31`
+  (`surface`/`surface_solid`/`card_glass`/`row_alt` обновлены). Фон `#0a1024` без изменений.
+  Иерархия: фон `#0a1024` < панели `#171f31` < плашки `#2a3247` (серые, не синие).
+
+### 35.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py ui/controls/glass_theme.py ui/controls/control_card_modal.py ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # расширен: геометрия колонок (width>0), непустые панели, пункт/точка не убивают карточку, hover убран, плашка #2a3247
+```
+
+Headless-smoke обновлён и проходит (ALL OK). Ручная приёмка GUI Windows: открыть карточку (левый столбец с
+полями), добавить пункт и точку (середина не исчезает), проверить серый цвет плашек и мгновенную отзывчивость таблицы.
+
+### 35.4 Не возвращать
+
+- `expand=True` у полей карточки внутри scroll-колонки (`incoming/content/title/comment/note`) — схлопывает колонку/карточку.
+- `milestones_col.visible=False` по типу — прячет добавляемые точки.
+- `milestones_header` — контрола не существует (NameError в `_on_type_change`).
+- Hover-заливку строк (лагает на 134 строках) — только CLICK-курсор.
+- Синие плашки `#1e2a44` / панели `#141e33` — теперь серый графит `#2a3247` / `#171f31`.
+
+---
+
+## 36. Вкладка «Контроли» — раунд 6: пункты/точки в таблицу, быстрый hover, карточка в серый графит
+
+**Дата:** 2026-08-05. **Статус:** реализовано (промпт `PROMPT_контроли_доработка6.md`).
+**Ветка:** `arena/019fd209-porayonka` (продолжение раундов 4–5). Финальный доводочный раунд перед мержем в main.
+
+### 36.1 Пункты задания и промежуточные точки в таблице
+
+**«Содержание»** (`_build_row`): теперь `content` + пункты задания одной строкой с переносами.
+Формат пункта: `п.1 Название — Ответственные (short_name, через ", ") — dd.mm.yyyy [ (исполнено)]`.
+Ячейка — единый `ft.Text` с `max_lines=2`, tooltip — полный текст (content + все пункты по строкам).
+Раньше показывался только `content` и `executors`, пункты/точки в таблице не появлялись.
+
+**«Срок исполн.»** (`due_cell`): под основной датой (`effective_due_date`, bold) мелко
+(`size 10`, `#93a3c7`) — до 2 ближайших НЕисполненных промежуточных точек
+(`точка dd.mm.yyyy`), отсортированных по дате. Если основной даты нет — точки учитываются
+в `effective_due_date` (уже было). Tooltip ячейки — дата + точки.
+
+### 36.2 Hover возвращён и сделан БЫСТРЫМ
+
+Причина лагов раунда 5 — `traceback.print_exc()` внутри горячего `_hover`: при быстром движении
+курсора исключения (update немонтированного контрола при скролле) печатали traceback в консоль
+Windows — это очень медленно, отсюда «подсвечивается через одну».
+
+Фикс: обработчик — абсолютный минимум, БЕЗ `try/except` и БЕЗ печати:
+```python
+def _hover(e):
+    if e.data == "true":
+        cont.bgcolor = GLASS["hover_bg"]               # #2c3650
+        cont.border = ft.border.all(1, GLASS["accent"])  # #4f8cff, 1px та же толщина
+    else:
+        cont.bgcolor = orig_bg
+        cont.border = orig_border
+    _safe_update(cont)   # молча пропускает немонтированный контрол
+```
+
+**ПРАВИЛО (занести в раздел про layout):** в горячих обработчиках hover/движения
+НЕ использовать `traceback.print_exc()` — только `_safe_update()` (молча пропускает).
+
+### 36.3 Карточка — серый графит (раунд 6)
+
+- Панель карточки `detail_card.bgcolor`: `#242a3e` (`card_panel`), рамки `#1affffff`
+  (`border_divider`) по бокам/снизу, кромка сверху `#2effffff` (`border_light`).
+- Секции внутри карточки: `glass_panel(... bgcolor=GLASS["card_section"])` = `#2a3045`,
+  отступ секций `padding=14`.
+- Поля ввода: `surface_alt = #161c2c` (все поля — фильтры и поля карточки, серый графит).
+- Плашки пунктов задания и точек — как строки таблицы `#2a3247` (`bgcolor=GLASS["card"]`).
+- Заголовок «Промежуточные точки» size 13 bold (было 12). Label size 11 `#93a3c7`,
+  поля height 40 radius 10 — уже так.
+
+### 36.4 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py ui/controls/glass_theme.py ui/controls/control_card_modal.py ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # 42 проверки, ALL OK
+```
+
+Headless-smoke расширен: содержание включает пункты (с ответственным и датой), точки под сроком,
+hover меняет рамку на `#4f8cff` и фон на `#2c3650` и возвращает обратно. ALL OK.
+
+Ручная приёмка GUI Windows:
+1. Заполнить карточку: исполнители, 2 пункта (с ответственными и сроками), 2 промежуточные точки →
+   в таблице в «Содержании» видны пункты, под сроком — даты точек.
+2. Быстро провести курсором по строкам — подсветка (акцентная рамка `#4f8cff` + фон `#2c3650`)
+   следует без видимой задержки; ничего не печатается в консоль.
+3. Карточка в сером графите `#242a3e`/`#2a3045`/`#161c2c`, не синяя; плашки пунктов как строки таблицы.

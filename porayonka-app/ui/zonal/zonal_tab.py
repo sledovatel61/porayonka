@@ -1039,7 +1039,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 row.controls[0].color = fg                      # иконка
                 row.controls[1].color = fg                      # подпись
                 badge = row.controls[2]                         # счётчик
-                badge.bgcolor = ("#ffffff22" if selected else COLORS["card"])
+                badge.bgcolor = ("#22ffffff" if selected else COLORS["card"])
                 badge.content.color = fg
                 badge.content.value = str(_filter_count(v))
             except Exception:
@@ -1061,7 +1061,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             padding=ft.padding.symmetric(horizontal=6),
             border_radius=9,
             alignment=ft.alignment.center,
-            bgcolor="#ffffff22" if selected else COLORS["card"],
+            bgcolor="#22ffffff" if selected else COLORS["card"],
         )
         btn = ft.Container(
             content=ft.Row(
