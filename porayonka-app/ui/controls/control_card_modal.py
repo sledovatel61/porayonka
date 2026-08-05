@@ -1,14 +1,16 @@
 # ui/controls/control_card_modal.py
+# Карточка контроля (резервный путь; основной таб использует свой overlay).
 # Рефактор: inline-выбор исполнителей/ответственных без вложенных диалогов
-# Fix Bug B (вложенные модалки), Bug F (спам логов и overlay), Bug A (FilePicker mount)
+# (Fix Bug B), Fix Bug F (спам логов и overlay), Fix Bug A (FilePicker mount).
+# Скин «Glass Dark»: палитра — glass_theme.py, даты — russian_calendar.py.
+# Контракт сохранён: create_control_card_modal(...) -> ft.AlertDialog.
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Callable, List, Optional
 from uuid import uuid4
 
 import flet as ft
 
-from core.constants import COLORS
 from core.controls_models import (
     Control, ControlTask, ControlMilestone, ONE_TIME, PERIODIC,
     parse_date, short_name,
@@ -18,6 +20,8 @@ from core.controls_data import (
     copy_attachment_to_local, copy_attachment_to_shared,
     resolve_attachment, delete_attachment, ATTACHMENT_WARN_MB,
 )
+from .glass_theme import GLASS, glass_button, ghost_button
+from .russian_calendar import create_russian_date_field
 
 _PERIOD_LABELS = [
     ("daily", "Ежедневно", 1),
@@ -29,25 +33,18 @@ _PERIOD_LABELS = [
 ]
 _PERIOD_DAYS = {k: d for k, _, d in _PERIOD_LABELS}
 
-def _iso(v) -> Optional[str]:
-    try:
-        if v is None:
-            return None
-        if hasattr(v, "strftime"):
-            return v.strftime("%Y-%m-%d")
-        return str(v)
-    except Exception:
-        return None
 
 def _display(iso: Optional[str]) -> str:
     d = parse_date(iso)
-    return d.strftime("%d.%m.%Y") if d else "не указана"
+    return d.strftime("%d.%m.%Y") if d else ""
+
 
 def _period_key(days: int) -> str:
     for k, _, d in _PERIOD_LABELS:
         if d == days and k != "custom":
             return k
     return "custom"
+
 
 def _ensure_picker(page: ft.Page, attr: str, on_result):
     if not hasattr(page, attr):
@@ -65,30 +62,59 @@ def _ensure_picker(page: ft.Page, attr: str, on_result):
             pass
     return getattr(page, attr)
 
+
+def _glass_field(**kw):
+    opts = dict(
+        border_radius=10,
+        border_color=GLASS["border"],
+        focused_border_color=GLASS["accent"],
+        bgcolor=GLASS["field"],
+        color=GLASS["text"],
+        hint_style=ft.TextStyle(color=GLASS["text_3"], size=13),
+        text_style=ft.TextStyle(size=13, color=GLASS["text"]),
+    )
+    opts.update(kw)
+    return ft.TextField(**opts)
+
+
+def _glass_dd(**kw):
+    opts = dict(
+        border_radius=10,
+        border_color=GLASS["border"],
+        focused_border_color=GLASS["accent"],
+        bgcolor=GLASS["field"],
+        color=GLASS["text"],
+        hint_style=ft.TextStyle(color=GLASS["text_3"], size=13),
+        text_style=ft.TextStyle(size=13, color=GLASS["text"]),
+    )
+    opts.update(kw)
+    return ft.Dropdown(**opts)
+
+
 def _build_inline_multi(page: ft.Page, available: List[str], initial: List[str], title: str):
     selected = list(initial)
     expanded = {"value": False}
     search_val = {"value": ""}
 
-    badge = ft.Text(f"Выбрано: {len(selected)}", size=11, color=COLORS["text_secondary"])
+    badge = ft.Text(f"Выбрано: {len(selected)}", size=11, color=GLASS["text_2"])
     summary = ft.Text(", ".join(short_name(x) for x in selected) or "не выбрано",
-                      size=11, color=COLORS["text"], max_lines=2, overflow=ft.TextOverflow.ELLIPSIS,
+                      size=11, color=GLASS["text_2"], max_lines=2, overflow=ft.TextOverflow.ELLIPSIS,
                       tooltip=", ".join(selected))
 
     search_field = ft.TextField(
         hint_text=f"Поиск {title.lower()}…",
         prefix_icon=ft.icons.SEARCH,
         height=34, dense=True,
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        hint_style=ft.TextStyle(color=COLORS["text_muted"], size=11),
+        border_radius=8, border_color=GLASS["border"],
+        focused_border_color=GLASS["accent"],
+        bgcolor=GLASS["field"], color=GLASS["text"],
+        hint_style=ft.TextStyle(color=GLASS["text_3"], size=11),
         visible=False,
     )
     list_col = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, height=140, visible=False)
-    wrapper = ft.Container(content=list_col, border=ft.border.all(1, COLORS["border"]),
+    wrapper = ft.Container(content=list_col, border=ft.border.all(1, GLASS["border"]),
                            border_radius=8, padding=ft.padding.all(4),
-                           bgcolor=COLORS["primary_light"], visible=False)
+                           bgcolor=GLASS["field_alt"], visible=False)
 
     def _rebuild():
         q = search_val["value"].lower()
@@ -115,7 +141,7 @@ def _build_inline_multi(page: ft.Page, available: List[str], initial: List[str],
                 return _chg
             list_col.controls.append(
                 ft.Checkbox(label=short_name(name), value=name in selected,
-                            active_color=COLORS["btn_save"], label_style=ft.TextStyle(size=11, color=COLORS["text"]),
+                            active_color=GLASS["accent"], label_style=ft.TextStyle(size=11, color=GLASS["text"]),
                             tooltip=name, on_change=_mk(name), height=26)
             )
         try:
@@ -158,22 +184,25 @@ def _build_inline_multi(page: ft.Page, available: List[str], initial: List[str],
             pass
         _rebuild()
 
-    expand_btn = ft.IconButton(icon=ft.icons.EXPAND_MORE, icon_size=18, icon_color=COLORS["text_secondary"], on_click=_toggle)
+    expand_btn = ft.IconButton(icon=ft.icons.EXPAND_MORE, icon_size=18, icon_color=GLASS["text_2"], on_click=_toggle)
     header = ft.Row(controls=[
-        ft.Text(title, size=12, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+        ft.Text(title, size=12, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
         ft.Container(width=6), badge, ft.Container(expand=True),
-        ft.TextButton("Очистить", on_click=_clear, style=ft.ButtonStyle(color="#f87171")),
+        ft.TextButton(
+            content=ft.Text("Очистить", size=11, color=GLASS["danger"], no_wrap=True),
+            on_click=_clear, style=ft.ButtonStyle(padding=ft.padding.symmetric(horizontal=6))),
         expand_btn,
     ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
     _rebuild()
     cont = ft.Container(
         content=ft.Column(controls=[header, summary, search_field, wrapper], spacing=4, tight=True),
-        bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=8,
+        bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border"]), border_radius=10,
         padding=ft.padding.all(8),
     )
     cont._get_selected = lambda: list(selected)
     return cont
+
 
 def create_control_card_modal(
     page: ft.Page,
@@ -185,8 +214,7 @@ def create_control_card_modal(
     initiators: Optional[List[str]] = None,
     on_cancel: Optional[Callable[[], None]] = None,
 ) -> ft.AlertDialog:
-    # fix Bug F: no spam print, single creation log ASCII only
-    print("[CONTROL_MODAL] create card modal (rework inline)")
+    print("[CONTROL_MODAL] create card modal (glass dark)")
     settings = settings or {}
     is_edit = control is not None
     if initiators is None:
@@ -199,81 +227,27 @@ def create_control_card_modal(
     card_w = max(560, min(820, int(win_w * 0.62)))
     card_h = max(480, min(680, int((page.window.height or 860) * 0.78)))
 
-    # single DatePicker for modal (mount once)
-    _date_target = {"setter": None}
-    def _on_date_change(e):
-        s = _date_target["setter"]
-        if s is None:
-            return
-        iso = _iso(getattr(e.control, "value", None))
-        if iso:
-            try:
-                s(iso)
-            except Exception:
-                pass
-
-    date_picker_attr = "_control_card_date_picker"
-    if not hasattr(page, date_picker_attr):
-        dp = ft.DatePicker(first_date=datetime(2020,1,1), last_date=datetime(2035,12,31), on_change=_on_date_change)
-        page.overlay.append(dp)
-        setattr(page, date_picker_attr, dp)
-        try:
-            page.update()
-        except Exception:
-            pass
-    else:
-        try:
-            getattr(page, date_picker_attr).on_change = _on_date_change
-        except Exception:
-            pass
-        dp = getattr(page, date_picker_attr)
-
-    def _pick_date(setter):
-        _date_target["setter"] = setter
-        try:
-            dp.pick_date()
-        except Exception:
-            pass
-
     # fields
-    incoming_field = ft.TextField(
+    incoming_field = _glass_field(
         value=control.incoming_number if is_edit else "",
         hint_text="Входящий № ВХСОП *",
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-        dense=True, expand=True,
+        dense=True, expand=True, height=40,
     )
     receive_ref = {"value": control.receive_date if is_edit else date.today().isoformat()}
-    receive_field = ft.TextField(
-        value=_display(receive_ref["value"]),
-        hint_text="Дата поступления *",
-        read_only=True, width=150, dense=True,
-        border_radius=8, border_color=COLORS["border"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-    )
+
     def _set_receive(iso):
         receive_ref["value"] = iso
-        receive_field.value = _display(iso)
-        try:
-            receive_field.update()
-        except Exception:
-            pass
+    receive_composite = create_russian_date_field(
+        page, receive_ref["value"], _set_receive, hint="Дата поступления *", width=150, height=40)
 
-    init_dd = ft.Dropdown(
+    init_dd = _glass_dd(
         hint_text="Инициатор",
         value=control.initiator if (is_edit and control.initiator in initiators) else None,
         options=[ft.dropdown.Option(i) for i in initiators],
-        width=220, height=38,
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        dense=True,
+        width=220, height=40, dense=True,
     )
-    new_init_field = ft.TextField(hint_text="Новый инициатор", width=180, height=36, dense=True,
-                                  border_radius=8, border_color=COLORS["border"],
-                                  bgcolor=COLORS["card"], color=COLORS["text"])
+    new_init_field = _glass_field(hint_text="Новый инициатор", width=180, height=40, dense=True)
+
     def _add_init(e=None):
         name = (new_init_field.value or "").strip()
         if not name:
@@ -290,98 +264,67 @@ def create_control_card_modal(
             new_init_field.update()
         except Exception:
             pass
-    add_init_btn = ft.ElevatedButton("Добавить", height=36, bgcolor=COLORS["primary_light"], color=COLORS["btn_save"], on_click=_add_init)
+    add_init_btn = glass_button("Добавить", height=36, bgcolor=GLASS["field"],
+                                color=GLASS["accent"], radius=10, on_click=_add_init)
 
-    content_field = ft.TextField(
+    content_field = _glass_field(
         value=control.content if is_edit else "",
         hint_text="Содержание",
         multiline=True, min_lines=2, max_lines=4,
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
     )
 
     exec_picker = _build_inline_multi(page, available_names, list(control.executors) if is_edit else [], "Исполнители")
 
-    controller_dd = ft.Dropdown(
+    controller_dd = _glass_dd(
         hint_text="За кем контроль",
         value=control.controller if (is_edit and control.controller in available_names) else None,
         options=[ft.dropdown.Option(n, short_name(n)) for n in available_names],
-        width=180, height=38,
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        dense=True,
+        width=180, height=40, dense=True,
     )
 
-    type_dd = ft.Dropdown(
+    type_dd = _glass_dd(
         hint_text="Тип",
         value=control.control_type if is_edit else ONE_TIME,
         options=[ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")],
-        width=130, height=38,
-        border_radius=8, border_color=COLORS["border"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        dense=True,
+        width=130, height=40, dense=True,
     )
-    period_dd = ft.Dropdown(
+    period_dd = _glass_dd(
         hint_text="Периодичность",
         value=_period_key(control.period_days if is_edit else 7),
         options=[ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS],
-        width=170, height=38,
-        border_radius=8, border_color=COLORS["border"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        dense=True,
+        width=170, height=40, dense=True,
         visible=(control.control_type if is_edit else ONE_TIME) == PERIODIC,
     )
-    custom_days_field = ft.TextField(
+    custom_days_field = _glass_field(
         value=str(control.period_days) if is_edit else "7",
         hint_text="Интервал дней",
-        width=110, height=38, dense=True,
-        border_radius=8, border_color=COLORS["border"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
+        width=110, height=40, dense=True,
         visible=_period_key(control.period_days if is_edit else 7) == "custom",
     )
     due_ref = {"value": control.due_date if is_edit else None}
-    due_field = ft.TextField(
-        value=_display(due_ref["value"]),
-        hint_text="Следующая дата исполнения",
-        read_only=True, width=160, dense=True,
-        border_radius=8, border_color=COLORS["border"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-    )
+
     def _set_due(iso):
         due_ref["value"] = iso
-        due_field.value = _display(iso)
-        try:
-            due_field.update()
-        except Exception:
-            pass
+    due_composite = create_russian_date_field(
+        page, due_ref["value"], _set_due, hint="Следующая дата исполнения", width=170, height=40)
+
     end_ref = {"value": control.end_date if is_edit else None}
-    end_field = ft.TextField(
-        value=_display(end_ref["value"]),
-        hint_text="Конечная дата",
-        read_only=True, width=130, dense=True,
-        border_radius=8, border_color=COLORS["border"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-        visible=(control.control_type if is_edit else ONE_TIME) == PERIODIC,
-    )
+
     def _set_end(iso):
         end_ref["value"] = iso
-        end_field.value = _display(iso)
-        try:
-            end_field.update()
-        except Exception:
-            pass
+    end_composite = create_russian_date_field(
+        page, end_ref["value"], _set_end, hint="Конечная дата", width=142, height=40)
+    end_composite.visible = (control.control_type if is_edit else ONE_TIME) == PERIODIC
 
     def _on_type_change(e):
         is_per = (e.control.value == PERIODIC)
         period_dd.visible = is_per
-        end_field.visible = is_per
+        end_composite.visible = is_per
         milestones_header.visible = is_per
         milestones_col.visible = is_per
         try:
             period_dd.update()
-            end_field.update()
+            end_composite.update()
             milestones_header.update()
             milestones_col.update()
         except Exception:
@@ -396,12 +339,10 @@ def create_control_card_modal(
             pass
     period_dd.on_change = _on_period_change
 
-    comment_field = ft.TextField(
+    comment_field = _glass_field(
         value=control.comment if is_edit else "",
         hint_text="Комментарий",
         multiline=True, min_lines=1, max_lines=3,
-        border_radius=8, border_color=COLORS["border"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
     )
 
     # Tasks (simple inline, assignees via inline picker per task)
@@ -424,32 +365,24 @@ def create_control_card_modal(
         if ass_picker is None:
             ass_picker = _build_inline_multi(page, available_names, ui["assignees"], f"Отв. {title_f.value[:10] or 'пункт'}")
             ui["ass_picker"] = ass_picker
-        due_f = ft.TextField(value=_display(ui["due_ref"]["value"]), read_only=True, width=110, dense=True, height=34,
-                             border_radius=8, border_color=COLORS["border"], bgcolor=COLORS["card"], color=COLORS["text"])
-        def _set_t_due(iso, u=ui, tf=due_f):
+
+        def _set_t_due(iso, u=ui):
             u["due_ref"]["value"] = iso
-            tf.value = _display(iso)
-            try:
-                tf.update()
-            except Exception:
-                pass
+        due_composite = create_russian_date_field(
+            page, ui["due_ref"]["value"], _set_t_due, hint="Срок", width=118, height=34)
+
         return ft.Container(
             content=ft.Column(controls=[
                 ft.Row(controls=[
-                    ft.Icon(ft.icons.LIST_ALT, size=14, color=COLORS["text_muted"]),
+                    ft.Icon(ft.icons.LIST_ALT, size=14, color=GLASS["text_3"]),
                     title_f,
-                    ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color="#f87171",
+                    ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["danger"],
                                   on_click=lambda e, u=ui: _remove_task(u)),
                 ], spacing=6, tight=True),
                 ass_picker,
-                ft.Row(controls=[
-                    ft.Text("Срок:", size=10, color=COLORS["text_secondary"]),
-                    due_f,
-                    ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_size=14, icon_color=COLORS["btn_save"],
-                                  on_click=lambda e, s=_set_t_due: _pick_date(s)),
-                ], spacing=4, tight=True),
+                due_composite,
             ], spacing=4, tight=True),
-            bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=8, padding=ft.padding.all(8),
+            bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border_alt"]), border_radius=10, padding=ft.padding.all(8),
         )
 
     def _remove_task(ui):
@@ -459,9 +392,7 @@ def create_control_card_modal(
 
     def _add_task(e=None):
         new_ui = {
-            "title_field": ft.TextField(hint_text="Пункт (напр. п.1)", height=36, dense=True, expand=True,
-                                        border_radius=8, border_color=COLORS["border"],
-                                        bgcolor=COLORS["card"], color=COLORS["text"]),
+            "title_field": _glass_field(hint_text="Пункт (напр. п.1)", height=36, dense=True, expand=True),
             "assignees": [],
             "due_ref": {"value": None},
             "ass_picker": None,
@@ -472,9 +403,7 @@ def create_control_card_modal(
     if is_edit and control.tasks:
         for t in control.tasks:
             tasks_state.append({
-                "title_field": ft.TextField(value=t.title, hint_text="Пункт", height=36, dense=True, expand=True,
-                                            border_radius=8, border_color=COLORS["border"],
-                                            bgcolor=COLORS["card"], color=COLORS["text"]),
+                "title_field": _glass_field(value=t.title, hint_text="Пункт", height=36, dense=True, expand=True),
                 "assignees": list(t.assignees),
                 "due_ref": {"value": t.due_date},
                 "ass_picker": None,
@@ -488,31 +417,23 @@ def create_control_card_modal(
     def _rebuild_miles():
         milestones_col.controls.clear()
         for ui in miles_state:
-            date_f = ft.Text(_display(ui["date_ref"]["value"]), size=11, width=90)
-            def _mk_set(u, tf):
+            def _mk_set(u):
                 def _s(iso):
                     u["date_ref"]["value"] = iso
-                    tf.value = _display(iso)
-                    try:
-                        tf.update()
-                    except Exception:
-                        pass
                 return _s
-            note_f = ft.TextField(value=ui["note"], hint_text="Точка", height=34, dense=True, expand=True,
-                                  border_radius=8, border_color=COLORS["border"],
-                                  bgcolor=COLORS["card"], color=COLORS["text"],
+            date_composite = create_russian_date_field(
+                page, ui["date_ref"]["value"], _mk_set(ui), hint="Дата", width=118, height=34)
+            note_f = _glass_field(value=ui["note"], hint_text="Точка", height=34, dense=True, expand=True,
                                   on_change=lambda e, u=ui: u.update({"note": e.control.value or ""}))
             milestones_col.controls.append(
                 ft.Container(
                     content=ft.Row(controls=[
-                        date_f,
-                        ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_size=14, icon_color=COLORS["btn_save"],
-                                      on_click=lambda e, s=_mk_set(ui, date_f): _pick_date(s)),
+                        date_composite,
                         note_f,
-                        ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color="#f87171",
+                        ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["danger"],
                                       on_click=lambda e, u=ui: _remove_mile(u)),
                     ], spacing=4, tight=True),
-                    bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=8,
+                    bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border_alt"]), border_radius=10,
                     padding=ft.padding.all(6),
                 )
             )
@@ -546,14 +467,14 @@ def create_control_card_modal(
             attach_col.controls.append(
                 ft.Container(
                     content=ft.Row(controls=[
-                        ft.Icon(ft.icons.ATTACH_FILE, size=14, color=COLORS["btn_save"]),
-                        ft.Text(fn, size=11, expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=fn, color=COLORS["text"]),
-                        ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=14, icon_color=COLORS["btn_save"],
+                        ft.Icon(ft.icons.ATTACH_FILE, size=14, color=GLASS["accent"]),
+                        ft.Text(fn, size=11, expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=fn, color=GLASS["text"]),
+                        ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=14, icon_color=GLASS["accent"],
                                       on_click=lambda e, r=rel: _open_att(r)),
-                        ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=14, icon_color="#f87171",
+                        ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=14, icon_color=GLASS["danger"],
                                       on_click=lambda e, r=rel: _remove_att(r)),
                     ], spacing=4, tight=True),
-                    bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]), border_radius=8,
+                    bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border_alt"]), border_radius=10,
                     padding=ft.padding.all(6),
                 )
             )
@@ -592,18 +513,20 @@ def create_control_card_modal(
                 page.close(dlg)
             except Exception:
                 pass
+
         def _cancel(e=None):
             try:
                 page.close(dlg)
             except Exception:
                 pass
+
         dlg = ft.AlertDialog(
-            modal=True, bgcolor=COLORS["primary_light"],
-            title=ft.Text("Удаление вложения", size=14, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-            content=ft.Text("Удалить файл?", size=12, color=COLORS["text"]),
-            actions=[ft.TextButton("Отмена", on_click=_cancel),
-                     ft.ElevatedButton("Удалить", bgcolor="#dc2626", color="white", on_click=_confirm)],
-            shape=ft.RoundedRectangleBorder(radius=10),
+            modal=True, bgcolor=GLASS["surface_solid"],
+            title=ft.Text("Удаление вложения", size=14, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            content=ft.Text("Удалить файл?", size=12, color=GLASS["text"]),
+            actions=[ft.TextButton("Отмена", on_click=_cancel, style=ft.ButtonStyle(color=GLASS["text_2"])),
+                     ft.ElevatedButton("Удалить", bgcolor=GLASS["danger"], color="white", on_click=_confirm)],
+            shape=ft.RoundedRectangleBorder(radius=14),
         )
         page.open(dlg)
 
@@ -615,6 +538,13 @@ def create_control_card_modal(
             fpath = getattr(fobj, "path", None)
             if not fpath:
                 continue
+            try:
+                sz = os.path.getsize(fpath) / (1024 * 1024)
+                if sz > ATTACHMENT_WARN_MB:
+                    from ui.toast import show_toast
+                    show_toast(page, f"Файл > 20 МБ: {getattr(fobj, 'name', '')}", icon=ft.icons.WARNING_AMBER)
+            except Exception:
+                pass
             rel = None
             cid = control.id if is_edit else f"tmp_{uuid4()}"
             if settings.get("network_enabled"):
@@ -631,7 +561,7 @@ def create_control_card_modal(
         try:
             page._controls_attach_picker.pick_files(
                 dialog_title="Выбрать сканы",
-                allowed_extensions=["pdf","png","jpg","jpeg"],
+                allowed_extensions=["pdf", "png", "jpg", "jpeg"],
                 allow_multiple=True,
             )
         except Exception:
@@ -728,45 +658,38 @@ def create_control_card_modal(
             on_delete(control)
 
     milestones_header = ft.Row(controls=[
-        ft.Icon(ft.icons.TIMELINE, size=15, color=COLORS["text"]),
-        ft.Text("Промежуточные точки", size=12, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+        ft.Icon(ft.icons.TIMELINE, size=15, color=GLASS["text"]),
+        ft.Text("Промежуточные точки", size=12, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
         ft.Container(expand=True),
-        ft.ElevatedButton("+ Добавить точку", bgcolor=COLORS["primary_light"], color=COLORS["btn_save"], height=28, on_click=_add_mile),
+        glass_button("+ Добавить точку", height=28, bgcolor=GLASS["field"], color=GLASS["accent"],
+                     radius=10, on_click=_add_mile),
     ], spacing=6, tight=True, visible=(control.control_type if is_edit else ONE_TIME) == PERIODIC)
 
     tasks_header = ft.Row(controls=[
-        ft.Icon(ft.icons.FORMAT_LIST_BULLETED, size=16, color=COLORS["text"]),
-        ft.Text("Пункты задания", size=13, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+        ft.Icon(ft.icons.FORMAT_LIST_BULLETED, size=16, color=GLASS["text"]),
+        ft.Text("Пункты задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
         ft.Container(expand=True),
-        ft.ElevatedButton("+ Добавить пункт", bgcolor=COLORS["primary_light"], color=COLORS["btn_save"], height=30, on_click=_add_task),
+        glass_button("+ Добавить пункт", height=30, bgcolor=GLASS["field"], color=GLASS["accent"],
+                     radius=10, on_click=_add_task),
     ], spacing=6, tight=True)
 
     attach_header = ft.Row(controls=[
-        ft.Icon(ft.icons.ATTACH_FILE, size=15, color=COLORS["text"]),
-        ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+        ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]),
+        ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
         ft.Container(expand=True),
-        ft.ElevatedButton("Прикрепить файл", bgcolor=COLORS["primary_light"], color=COLORS["btn_save"], height=30,
-                          icon=ft.icons.ATTACH_FILE, on_click=_pick_attach),
+        glass_button("Прикрепить файл", icon=ft.icons.ATTACH_FILE, height=30, bgcolor=GLASS["field"],
+                     color=GLASS["accent"], radius=10, on_click=_pick_attach),
     ], spacing=6, tight=True)
 
     content_holder = ft.Container(
         width=card_w, height=card_h,
         content=ft.Column(controls=[
-            ft.Row(controls=[incoming_field, receive_field,
-                             ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
-                                           on_click=lambda e: _pick_date(lambda iso: _set_receive(iso)))],
-                   spacing=6, tight=True),
+            ft.Row(controls=[incoming_field, receive_composite], spacing=6, tight=True),
             ft.Row(controls=[init_dd, new_init_field, add_init_btn], spacing=6, tight=True),
             content_field,
             exec_picker,
             ft.Row(controls=[controller_dd, type_dd, period_dd, custom_days_field], spacing=6, tight=True),
-            ft.Row(controls=[due_field,
-                             ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
-                                           on_click=lambda e: _pick_date(lambda iso: _set_due(iso))),
-                             end_field,
-                             ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
-                                           on_click=lambda e: _pick_date(lambda iso: _set_end(iso)))],
-                   spacing=6, tight=True),
+            ft.Row(controls=[due_composite, end_composite], spacing=6, tight=True),
             comment_field,
             ft.Container(height=2),
             tasks_header,
@@ -778,29 +701,32 @@ def create_control_card_modal(
             attach_header,
             attach_col,
         ], spacing=8, scroll=ft.ScrollMode.AUTO, tight=True),
-        bgcolor=COLORS["primary_light"],
+        bgcolor=GLASS["surface_solid"],
     )
 
     actions = []
     if is_edit and on_delete:
-        actions.append(ft.ElevatedButton("Удалить", icon=ft.icons.DELETE_FOREVER, bgcolor="#dc2626", color="white", on_click=_delete))
+        actions.append(ft.ElevatedButton("Удалить", icon=ft.icons.DELETE_FOREVER, bgcolor=GLASS["danger"], color="white", on_click=_delete))
     actions.extend([
-        ft.TextButton("Отмена", on_click=_close, style=ft.ButtonStyle(color=COLORS["text_secondary"])),
-        ft.ElevatedButton("Сохранить", icon=ft.icons.SAVE, bgcolor=COLORS["btn_save"], color="white", on_click=_save),
+        ghost_button("Отмена", _close, color=GLASS["text_2"], size=13),
+        ft.ElevatedButton("Сохранить", icon=ft.icons.SAVE, bgcolor=GLASS["accent"], color="white", on_click=_save,
+                          style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10),
+                                               padding=ft.padding.symmetric(horizontal=18))),
     ])
 
     dlg = ft.AlertDialog(
         modal=True,
-        bgcolor=COLORS["primary_light"],
+        bgcolor=GLASS["surface_solid"],
         title=ft.Row(controls=[
-            ft.Icon(ft.icons.EDIT_DOCUMENT if is_edit else ft.icons.ADD_CIRCLE_OUTLINE, size=20, color="white"),
-            ft.Text("Карточка контроля" if is_edit else "Добавить контроль", size=15, weight=ft.FontWeight.BOLD, color="white", expand=True),
-            ft.IconButton(icon=ft.icons.CLOSE, icon_color="white", icon_size=18, on_click=_close),
+            ft.Icon(ft.icons.EDIT_DOCUMENT if is_edit else ft.icons.ADD_CIRCLE_OUTLINE, size=20, color=GLASS["accent"]),
+            ft.Text("Карточка контроля" if is_edit else "Добавить контроль", size=17, weight=ft.FontWeight.BOLD,
+                    color=GLASS["text"], expand=True),
+            ft.IconButton(icon=ft.icons.CLOSE, icon_color=GLASS["text_2"], icon_size=20, on_click=_close),
         ], spacing=8, tight=True),
         content=content_holder,
         actions=actions,
         actions_alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        shape=ft.RoundedRectangleBorder(radius=12),
+        shape=ft.RoundedRectangleBorder(radius=14),
     )
     dialog_ref["dlg"] = dlg
     return dlg
