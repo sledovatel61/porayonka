@@ -2196,3 +2196,66 @@ Headless-smoke закоммичен в `porayonka-app/tests/test_controls_smoke.
 - `Column(scroll=AUTO, expand=True)` во `detail_overlay_container` (карточка схлопывалась).
 - `detail_card.height = None` при открытии (нужна фикс. высота + внутренний скролл).
 - Голые `control.update()` на unmounted контролах при init — только `_safe_update`.
+
+---
+
+## 35. Вкладка «Контроли» — раунд 5: левая колонка карточки, пункты/точки, hover, серые плашки
+
+**Дата:** 2026-08-05. **Статус:** реализовано (промпт `PROMPT_контроли_доработка5.md`).
+**Ветка:** `arena/019fd209-porayonka` (продолжение раунда 4).
+
+### 35.1 КРИТИЧНО: карточка — левая колонка пустая, пункты убивают карточку, точки не работали
+
+**Симптом (скрины пользователя):**
+- скрин 1: карточка открылась — правая колонка видна, левая ПОЛНОСТЬЮ пустая (нет Реквизитов/Исполнения/Комментария);
+- скрин 2: после «+ Добавить пункт» середина карточки исчезает (только шапка и футер);
+- «+ Добавить точку» — ничего не происходит.
+
+**Корневая причина (подтверждена):**
+1. **Левая колонка пустая / пункты убивают карточку** — поля карточки внутри scroll-колонки
+   (`middle_scroll` → Row колонок → панель) имели `expand=True`:
+   `incoming_field`, `content_field` (в левой колонке) и `title_f`/`comment_f` пунктов,
+   `note_f` точек (в правой). `expand=True` внутри `Column(scroll=AUTO)` — классический
+   источник схлопывания (AGENTS §15.11): левая колонка (в отличие от правой, где полей с
+   expand не было) схлопывалась в ноль; добавление пункта добавляло ещё expand-полей → схлопывалась
+   вся середина. Голова (правый столбец) при открытии новой карточки expand-полей не имела → рендерилась.
+2. **«+ Добавить точку» ничего не делал** — `milestones_col.visible` был `False` для разовых
+   контролей (тип `ONE_TIME`), и точка добавлялась в скрытую колонку.
+3. Бонус: в `_on_type_change` была ссылка на несуществующий `milestones_header` (NameError при смене типа).
+
+**Фикс:**
+- Убраны все `expand=True` у полей карточки; где поле в `Row` — задана явная ширина:
+  `incoming_field width=300`, `title_f width=300` (пункты), `note_f` точек вынесен на отдельную строку.
+- Ширины `controller_dd/type_dd/period_dd` (180/120/140) подогнаны под левую панель (≈476), чтобы строка
+  «За кем / Тип / Периодичность» не переполнялась.
+- `milestones_col.visible = True` всегда; `milestones_header` удалён из `_on_type_change`.
+- `_rebuild_task_cards`/`_rebuild_milestones` перестраивают ТОЛЬКО свои колонки (`tasks_col`/`milestones_col`)
+  с `_safe_update` — корневой layout карточки (`detail_content`/`middle_scroll`) не пересоздаётся.
+
+### 35.2 Таблица: hover убран, плашки серые
+
+- **Hover строк убран полностью** (AGENTS 2.1): удалены `_make_hover`/`row.on_hover` — 134 строки ×
+  `update()` не успевали за курсором (лагало, «через одну»). Остался только `mouse_cursor=CLICK`.
+- **Цвет плашек в серый графит** (AGENTS 2.2): `card #1e2a44 → #2a3247`, панели `#141e33 → #171f31`
+  (`surface`/`surface_solid`/`card_glass`/`row_alt` обновлены). Фон `#0a1024` без изменений.
+  Иерархия: фон `#0a1024` < панели `#171f31` < плашки `#2a3247` (серые, не синие).
+
+### 35.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py ui/controls/glass_theme.py ui/controls/control_card_modal.py ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # расширен: геометрия колонок (width>0), непустые панели, пункт/точка не убивают карточку, hover убран, плашка #2a3247
+```
+
+Headless-smoke обновлён и проходит (ALL OK). Ручная приёмка GUI Windows: открыть карточку (левый столбец с
+полями), добавить пункт и точку (середина не исчезает), проверить серый цвет плашек и мгновенную отзывчивость таблицы.
+
+### 35.4 Не возвращать
+
+- `expand=True` у полей карточки внутри scroll-колонки (`incoming/content/title/comment/note`) — схлопывает колонку/карточку.
+- `milestones_col.visible=False` по типу — прячет добавляемые точки.
+- `milestones_header` — контрола не существует (NameError в `_on_type_change`).
+- Hover-заливку строк (лагает на 134 строках) — только CLICK-курсор.
+- Синие плашки `#1e2a44` / панели `#141e33` — теперь серый графит `#2a3247` / `#171f31`.

@@ -515,9 +515,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             NO_DATE: GLASS["text_muted"],
         }.get(status, GLASS["text_muted"])
 
-        # Bug 2 exact: плашка #1e2a44 (2 ступени светлее фона #0a1024), border #0dffffff, gap 6
-        orig_bg = GLASS["card"]
-
+        # Bug 2 exact: плашка #2a3247 (нейтральный графит, светлее фона #0a1024), border #0dffffff, gap 6
         content = ctl.content or ctl.incoming_number
         content_tooltip = ctl.content or ""
         if ctl.tasks:
@@ -576,12 +574,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.Row(controls=actions, spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
         ]
 
-        # Плашка строки: Bug 2 exact colors — #1e2a44, border #0dffffff or none, radius 10, gap 6
+        # Плашка строки: Bug 2 exact colors — #2a3247, border #0dffffff or none, radius 10, gap 6
         # Bug 2.4: height по контенту min 56, padding vertical 8, max_lines 2
+        # Раунд 5 (AGENTS 2.1): hover-заливку строк УБРАЛИ полностью — 134 строки x update()
+        # не успевали за курсором (лагало, срабатывало «через одну»). Остался только
+        # mouse_cursor=CLICK, таблица мгновенно отзывчивая.
         row = ft.Container(
             content=ft.Row(controls=row_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             # height None — по контенту, min 56 via padding
-            bgcolor=GLASS["card"],  # #1e2a44
+            bgcolor=GLASS["card"],  # #2a3247
             border=ft.border.all(1, GLASS["border"]),  # #0dffffff
             border_radius=10,
             padding=ft.padding.symmetric(horizontal=8, vertical=8),
@@ -589,20 +590,6 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ink=False,
         )
         row.mouse_cursor = ft.MouseCursor.CLICK
-
-        # Bug 3: hover единый #28324e, минимальный обработчик
-        def _make_hover(cont, orig):
-            def _hover(e):
-                try:
-                    if e.data == "true":
-                        cont.bgcolor = GLASS["hover"]  # #28324e
-                    else:
-                        cont.bgcolor = orig
-                    _safe_update(cont)
-                except Exception:
-                    traceback.print_exc()
-            return _hover
-        row.on_hover = _make_hover(row, orig_bg)
         return row
 
     def _rebuild_table():
@@ -1040,7 +1027,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         search_val = {"value": ""}
         badge = ft.Text(f"Выбрано: {len(selected)}", size=11, color=GLASS["text_secondary"])
         summary = ft.Text(", ".join(short_name(x) for x in selected) or "не выбрано", size=12, color=GLASS["text"], max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, tooltip=", ".join(selected))
-        search_field_ms = _glass_textfield(hint=f"Поиск {title.lower()}…", expand=True)
+        search_field_ms = _glass_textfield(hint=f"Поиск {title.lower()}…")
         search_field_ms.height = 34
         search_field_ms.visible = False
         list_col = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, height=140 if not compact else 120, visible=False)
@@ -1311,7 +1298,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         detail_state["milestones"] = []
 
         # Fields helpers
-        incoming_field = _glass_textfield(value=ctl.incoming_number if ctl else "", hint="Входящий № ВХСОП *", expand=True)
+        # Раунд 5: НЕ используем expand=True у полей карточки — внутри scroll-колонки
+        # (middle_scroll) это схлопывает левую колонку до нулевой высоты (AGENTS 15.11).
+        # Ширины задаём явные, где поле в Row.
+        incoming_field = _glass_textfield(value=ctl.incoming_number if ctl else "", hint="Входящий № ВХСОП *", width=300)
         receive_field_text = ft.Text(_display_date(detail_state["receive_date"]), size=13, color=GLASS["text"])
         receive_box = ft.Container(
             content=ft.Row(controls=[receive_field_text, ft.Container(expand=True), ft.Icon(ft.icons.CALENDAR_MONTH, size=18, color=GLASS["text_secondary"])], spacing=6, tight=True),
@@ -1366,12 +1356,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 traceback.print_exc()
         add_init_btn = ft.IconButton(icon=ft.icons.ADD, icon_size=18, icon_color=GLASS["accent"], tooltip="Добавить нового", on_click=_show_new_init, width=36, height=36)
 
-        content_field = _glass_textfield(value=ctl.content if ctl else "", hint="Содержание контроля…", multiline=True, min_lines=3, max_lines=5, expand=True)
+        content_field = _glass_textfield(value=ctl.content if ctl else "", hint="Содержание контроля…", multiline=True, min_lines=3, max_lines=5)
         exec_container = _build_inline_multi(available_names, list(ctl.executors) if ctl else [], "Исполнители")
 
-        controller_dd = _glass_dropdown("За кем контроль", 200, [ft.dropdown.Option(n, short_name(n)) for n in available_names], value=ctl.controller if (ctl and ctl.controller in available_names) else None)
-        type_dd = _glass_dropdown("Тип", 140, [ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")], value=ctl.control_type if ctl else ONE_TIME)
-        period_dd = _glass_dropdown("Периодичность", 170, [ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS], value=_period_key(ctl.period_days if ctl else 7))
+        # Раунд 5: ширины подогнаны под левую панель (500 - padding*2 ≈ 476), чтобы строка
+        # «За кем контроль / Тип / Периодичность» не переполнялась и не клипировалась.
+        controller_dd = _glass_dropdown("За кем контроль", 180, [ft.dropdown.Option(n, short_name(n)) for n in available_names], value=ctl.controller if (ctl and ctl.controller in available_names) else None)
+        type_dd = _glass_dropdown("Тип", 120, [ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")], value=ctl.control_type if ctl else ONE_TIME)
+        period_dd = _glass_dropdown("Периодичность", 140, [ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS], value=_period_key(ctl.period_days if ctl else 7))
         period_dd.visible = (ctl.control_type if ctl else ONE_TIME) == PERIODIC
         custom_days_field = _glass_textfield(value=str(ctl.period_days) if ctl else "7", hint="Интервал дней", width=110)
         custom_days_field.visible = _period_key(ctl.period_days if ctl else 7) == "custom"
@@ -1433,12 +1425,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             is_per = (e.control.value == PERIODIC)
             period_dd.visible = is_per
             end_box.visible = is_per
-            milestones_header.visible = is_per
-            milestones_col.visible = is_per
+            # Раунд 5: «Промежуточные точки» показываем всегда (секция добавлена всегда),
+            # а не прячем — иначе «+ Добавить точку» добавлял точку в скрытую колонку и
+            # «ничего не происходило». milestones_header удалён (нет такого контрола).
             try:
                 _safe_update(period_dd)
                 _safe_update(end_box)
-                _safe_update(milestones_header)
                 _safe_update(milestones_col)
             except Exception:
                 traceback.print_exc()
@@ -1490,7 +1482,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             # Checkbox for done - normal size checkbox
             is_done_check = ft.Checkbox(label="исполнено", value=t_ui["is_done"], active_color=GLASS["in_progress"], label_style=ft.TextStyle(size=11, color=GLASS["text_secondary"]), on_change=lambda e, ui=t_ui: ui.update({"is_done": bool(e.control.value)}), height=28)
 
-            comment_f = _glass_textfield(value=t_ui.get("comment",""), hint="Комментарий…", width=None, expand=True)
+            comment_f = _glass_textfield(value=t_ui.get("comment",""), hint="Комментарий…")
             comment_f.height = 32
             t_ui["comment_field"] = comment_f
 
@@ -1510,7 +1502,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _rebuild_task_cards()
         def _add_task(e=None):
             new_ui = {
-                "title_field": _glass_textfield(hint="Пункт (напр. п.1)", expand=True),
+                # Раунд 5: без expand=True (схлопывает scroll-колонку карточки), ширина
+                # заполняет правую панель в Row [иконка, поле, удалить].
+                "title_field": _glass_textfield(hint="Пункт (напр. п.1)", width=300),
                 "assignees": [],
                 "due_ref": {"value": None},
                 "is_done": False,
@@ -1522,7 +1516,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         if ctl and ctl.tasks:
             for t in ctl.tasks:
                 detail_state["tasks"].append({
-                    "title_field": _glass_textfield(value=t.title, hint="Пункт", expand=True),
+                    "title_field": _glass_textfield(value=t.title, hint="Пункт", width=300),
                     "assignees": list(t.assignees),
                     "due_ref": {"value": t.due_date},
                     "is_done": t.is_done,
@@ -1532,7 +1526,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         # Milestones
         milestones_col = ft.Column(spacing=8, tight=True)
-        milestones_col.visible = (ctl.control_type if ctl else ONE_TIME) == PERIODIC
+        milestones_col.visible = True  # Раунд 5: всегда видим, чтобы точки можно было добавлять
         def _rebuild_milestones():
             milestones_col.controls.clear()
             for m_ui in detail_state["milestones"]:
@@ -1557,12 +1551,16 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 except Exception:
                     traceback.print_exc()
             date_box.on_click = lambda e, s=_set_m_date: _open_global_cal(lambda iso: s(iso), m_ui["date_ref"]["value"])
-            note_f = _glass_textfield(value=m_ui["note"], hint="Точка (описание)", expand=True)
+            # Раунд 5: без expand=True; note_f на отдельной строке (не в тесном Row), тянется по ширине панели
+            note_f = _glass_textfield(value=m_ui["note"], hint="Точка (описание)")
             note_f.height = 34
             note_f.on_change = lambda e, ui=m_ui: ui.update({"note": e.control.value or ""})
             done_check = ft.Checkbox(label="готово", value=m_ui["is_done"], active_color=GLASS["in_progress"], label_style=ft.TextStyle(size=11, color=GLASS["text_secondary"]), on_change=lambda e, ui=m_ui: ui.update({"is_done": bool(e.control.value)}), height=28)
             return glass_panel(
-                content=ft.Row(controls=[date_box, note_f, done_check, ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"], on_click=lambda e, ui=m_ui: _remove_mile(ui))], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                content=ft.Column(controls=[
+                    ft.Row(controls=[date_box, done_check, ft.Container(expand=True), ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"], on_click=lambda e, ui=m_ui: _remove_mile(ui))], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    note_f,
+                ], spacing=6, tight=True),
                 radius=10, padding=ft.padding.all(8), bgcolor=GLASS["surface_alt"],
             )
 

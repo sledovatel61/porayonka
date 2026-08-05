@@ -14,12 +14,12 @@ def with_alpha(color_hex: str, alpha_hex: str) -> str:
 
 GLASS = {
     "bg": "#0a1024",                 # фон вкладки темно-синий (из README мокапа)
-    "surface": "#cc141e33",          # панели #141e33 с alpha cc
-    "surface_solid": "#141e33",
+    "surface": "#cc171f31",          # панели #171f31 (нейтральный графит, между фоном и плашками) с alpha cc
+    "surface_solid": "#171f31",
     "surface_alt": "#0d1830",
     "surface_alt2": "#101c36",
-    "card": "#1e2a44",               # плашка строки #1e2a44 — серо-синяя, на 2 ступени светлее фона
-    "card_glass": "#cc1e2a44",       # карточка контроля стекло #cc1e2a44
+    "card": "#2a3247",               # плашка строки #2a3247 — нейтрально-серый графит, заметно светлее фона, не синий
+    "card_glass": "#cc2a3247",       # карточка контроля стекло #cc2a3247
     "border": "#0dffffff",           # убрать или #0dffffff — отделение цветом
     "border_light": "#2effffff",
     "border_divider": "#1affffff",
@@ -37,9 +37,9 @@ GLASS = {
     "done": "#8a94ad",
     "completed": "#4f8cff",
     "overlay_bg": "#cc04070f",
-    "hover": "#28324e",              # единый hover #28324e на всех строках
+    "hover": "#28324e",              # hover (оставлен для календаря; на строках таблицы hover убран)
     "hover_strong": "#12ffffff",
-    "row_alt": "#1e2a44",
+    "row_alt": "#2a3247",
 }
 
 STATUS_COLORS = {
