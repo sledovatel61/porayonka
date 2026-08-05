@@ -14,6 +14,10 @@ from core.data import (
     save_departments,
     get_last_save_date,
 )
+try:
+    from core.zonal_data import save_zonal_collection
+except Exception:
+    save_zonal_collection = None
 from core.models import Department, Status
 from core.constants import COLORS
 
@@ -338,19 +342,25 @@ def main(page: ft.Page) -> None:
                 pass
             try:
                 save_departments(departments)
-                if hasattr(page, "_zonal_collection"):
+                if hasattr(page, "_zonal_collection") and save_zonal_collection is not None:
                     save_zonal_collection(page._zonal_collection)
                 update_header_save_date(page)
                 print("[MAIN] Data saved on window close")
             except Exception as ex:
                 print(f"[MAIN] Save on close error: {ex}")
             finally:
-                # Разрешаем закрытие и закрываем окно
-                page.window.prevent_close = False
-                page.window.close()
+                try:
+                    page.window.prevent_close = False
+                    page.window.close()
+                except Exception:
+                    pass
 
     page.window.prevent_close = True
-    page.on_window_event = _on_window_event
+    try:
+        page.window.on_event = _on_window_event
+    except Exception:
+        # fallback for older API — deprecated path
+        page.on_window_event = _on_window_event
 
 
 # ────────────────────────────────────────────────────────────────
