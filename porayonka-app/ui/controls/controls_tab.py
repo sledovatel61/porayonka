@@ -516,14 +516,27 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         }.get(status, GLASS["text_muted"])
 
         # Bug 2 exact: плашка #2a3247 (нейтральный графит, светлее фона #0a1024), border #0dffffff, gap 6
+        # Раунд 6: «Содержание» = content + пункты задания (п.1 Название — Ответственные — дата),
+        # перенос до 2 строк, tooltip — полный текст.
         content = ctl.content or ctl.incoming_number
-        content_tooltip = ctl.content or ""
+        content_lines = [content]
         if ctl.tasks:
-            task_txt = "; ".join(t.title for t in ctl.tasks if t.title)
-            if task_txt:
-                content_tooltip = (content_tooltip + "\n" + task_txt).strip()
+            for t in ctl.tasks:
+                line = (t.title or "").strip()
+                if not line:
+                    continue
+                ass = ", ".join(short_name(x) for x in t.assignees) if t.assignees else ""
+                if ass:
+                    line += " — " + ass
+                if t.due_date:
+                    line += " — " + _display_date(t.due_date)
+                if t.is_done:
+                    line += " (исполнено)"
+                content_lines.append(line)
+        content_text = "\n".join(content_lines)
+        content_tooltip = content_text
 
-        content_controls = [_cell(content, _W["content"] - (22 if ctl.attachments else 0), tooltip=content_tooltip, max_lines=2, color=GLASS["text"], size=13)]
+        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0), tooltip=content_tooltip, max_lines=2, color=GLASS["text"], size=13)]
         if ctl.attachments:
             content_controls.append(ft.Container(
                 content=ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=12, color=GLASS["accent"]), ft.Text(str(len(ctl.attachments)), size=10, color=GLASS["accent"], no_wrap=True)], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -551,6 +564,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         eff_due = effective_due_date(ctl)
         due_str = _display_date(eff_due.isoformat() if eff_due else ctl.due_date)
         due_color = color if status in (OVERDUE, TODAY, SOON) else GLASS["text"]
+        # Раунд 6: под основной датой — ближайшие неисполненные промежуточные точки (до 2)
+        due_tooltip = due_str
+        due_controls = [ft.Text(due_str, size=12, color=due_color, weight=ft.FontWeight.W_700, no_wrap=True)]
+        if ctl.milestones:
+            try:
+                pending = [m for m in ctl.milestones if not m.is_done and m.date]
+                pending.sort(key=lambda m: parse_date(m.date).toordinal() if parse_date(m.date) else 999999)
+            except Exception:
+                pending = [m for m in ctl.milestones if not m.is_done and m.date]
+            for m in pending[:2]:
+                mline = f"точка {_display_date(m.date)}"
+                due_controls.append(ft.Text(mline, size=10, color=GLASS["text_secondary"], no_wrap=False,
+                                            max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, tooltip=mline))
+                due_tooltip += "\n" + mline
+        due_cell = ft.Container(
+            content=ft.Column(controls=due_controls, spacing=2, tight=True, alignment=ft.MainAxisAlignment.CENTER),
+            width=_W["due"], padding=ft.padding.only(left=6, right=4),
+            alignment=ft.alignment.center_left,
+            tooltip=due_tooltip,
+        )
 
         row_controls = [
             ft.Container(width=_W["bar"], height=28, bgcolor=color, border_radius=2),
@@ -562,7 +595,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _cell(", ".join(short_name(x) for x in ctl.executors) or "—", _W["executors"], tooltip=", ".join(ctl.executors), color=GLASS["text"], size=12, max_lines=2),
             _cell(short_name(ctl.controller) if ctl.controller else "—", _W["controller"], tooltip=ctl.controller, color=GLASS["text"], size=12),
             type_cell,
-            _cell(due_str, _W["due"], bold=True, color=due_color, size=12),
+            due_cell,
             ft.Container(
                 content=ft.Row(controls=[
                     ft.Icon(STATUS_ICONS.get(status, ft.icons.REMOVE_CIRCLE_OUTLINE), size=12, color=color),
@@ -576,9 +609,6 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         # Плашка строки: Bug 2 exact colors — #2a3247, border #0dffffff or none, radius 10, gap 6
         # Bug 2.4: height по контенту min 56, padding vertical 8, max_lines 2
-        # Раунд 5 (AGENTS 2.1): hover-заливку строк УБРАЛИ полностью — 134 строки x update()
-        # не успевали за курсором (лагало, срабатывало «через одну»). Остался только
-        # mouse_cursor=CLICK, таблица мгновенно отзывчивая.
         row = ft.Container(
             content=ft.Row(controls=row_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             # height None — по контенту, min 56 via padding
@@ -590,6 +620,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ink=False,
         )
         row.mouse_cursor = ft.MouseCursor.CLICK
+
+        # Раунд 6: hover ВОЗВРАЩЁН и сделан БЫСТРЫМ. Причина лагов раунда 5 — traceback.print_exc()
+        # в горячем обработчике (печать traceback в консоль Windows очень медленная -> «через одну»).
+        # Теперь абсолютный минимум: рамка акцентная #4f8cff + фон чуть светлее #2c3650.
+        # БЕЗ try/except и БЕЗ traceback.print_exc() в этом обработчике (см. AGENTS).
+        def _make_hover(cont, orig_bg, orig_border):
+            def _hover(e):
+                if e.data == "true":
+                    cont.bgcolor = GLASS["hover_bg"]          # #2c3650
+                    cont.border = ft.border.all(1, GLASS["accent"])  # #4f8cff, 1px та же толщина
+                else:
+                    cont.bgcolor = orig_bg
+                    cont.border = orig_border
+                _safe_update(cont)  # молча пропускает немонтированный контрол
+            return _hover
+        row.on_hover = _make_hover(row, GLASS["card"], ft.border.all(1, GLASS["border"]))
         return row
 
     def _rebuild_table():
@@ -1246,12 +1292,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     _rebuild_global_cal()
 
-    # Detail card
+    # Detail card — раунд 6: серый графит #242a3e (не синий), рамки #1affffff, кромка сверху #2effffff
     detail_card = ft.Container(
         width=920,
         height=780,
-        bgcolor=GLASS["surface"],
-        border=ft.border.only(top=ft.BorderSide(1, GLASS["border_light"]), left=ft.BorderSide(1, GLASS["border"]), right=ft.BorderSide(1, GLASS["border"]), bottom=ft.BorderSide(1, GLASS["border"])),
+        bgcolor=GLASS["card_panel"],
+        border=ft.border.only(top=ft.BorderSide(1, GLASS["border_light"]), left=ft.BorderSide(1, GLASS["border_divider"]), right=ft.BorderSide(1, GLASS["border_divider"]), bottom=ft.BorderSide(1, GLASS["border_divider"])),
         border_radius=16,
         padding=ft.padding.all(16),
         content=ft.Column(controls=[ft.Text("Загрузка…")], scroll=ft.ScrollMode.AUTO, expand=True),
@@ -1493,7 +1539,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     ft.Row(controls=[task_due_box, is_done_check], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                     comment_f,
                 ], spacing=6, tight=True),
-                radius=10, padding=ft.padding.all(10), bgcolor=GLASS["surface_alt"],
+                radius=10, padding=ft.padding.all(10), bgcolor=GLASS["card"],  # раунд 6: как строка таблицы #2a3247
             )
 
         def _remove_task(ui):
@@ -1561,7 +1607,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     ft.Row(controls=[date_box, done_check, ft.Container(expand=True), ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"], on_click=lambda e, ui=m_ui: _remove_mile(ui))], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                     note_f,
                 ], spacing=6, tight=True),
-                radius=10, padding=ft.padding.all(8), bgcolor=GLASS["surface_alt"],
+                radius=10, padding=ft.padding.all(8), bgcolor=GLASS["card"],  # раунд 6: как строка таблицы #2a3247
             )
 
         def _remove_mile(ui):
@@ -1797,7 +1843,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _field_with_label("Содержание", content_field),
         ], spacing=12, tight=True)
 
-        left_col.controls.append(glass_panel(content=rekv_content, radius=12, padding=ft.padding.all(12), bgcolor=with_alpha(GLASS["surface_solid"], "99")))
+        # Раунд 6: секции карточки — серый графит #2a3045, отступ 14
+        left_col.controls.append(glass_panel(content=rekv_content, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Section Исполнение
 
@@ -1809,10 +1856,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _field_with_label("Периодичность", ft.Column(controls=[period_dd, custom_days_field], spacing=4, tight=True)),
             ], spacing=12, tight=True),
         ], spacing=12, tight=True)
-        left_col.controls.append(glass_panel(content=ft.Column(controls=[ft.Text("Исполнение", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ispol_content], spacing=8, tight=True), radius=12, padding=ft.padding.all(12)))
+        left_col.controls.append(glass_panel(content=ft.Column(controls=[ft.Text("Исполнение", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ispol_content], spacing=8, tight=True), radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Comment
-        left_col.controls.append(glass_panel(content=_field_with_label("Комментарий", comment_field), radius=12, padding=ft.padding.all(12)))
+        left_col.controls.append(glass_panel(content=_field_with_label("Комментарий", comment_field), radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Right column - Bug 8 fix: no expand
         right_col = ft.Column(spacing=14, tight=True)
@@ -1824,29 +1871,29 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             cycle_hint,
             _field_with_label("Конечная дата", end_box),
         ], spacing=8, tight=True)
-        right_col.controls.append(glass_panel(content=sroki_content, radius=12, padding=ft.padding.all(12)))
+        right_col.controls.append(glass_panel(content=sroki_content, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Pункты задания
         tasks_section = ft.Column(controls=[
             ft.Row(controls=[ft.Icon(ft.icons.FORMAT_LIST_BULLETED, size=16, color=GLASS["text"]), ft.Text("Пункты задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("+ Добавить пункт", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add_task)], spacing=6, tight=True),
             tasks_col,
         ], spacing=8, tight=True)
-        right_col.controls.append(glass_panel(content=tasks_section, radius=12, padding=ft.padding.all(12)))
+        right_col.controls.append(glass_panel(content=tasks_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Milestones
         if (ctl.control_type if ctl else ONE_TIME) == PERIODIC or True:
             miles_section = ft.Column(controls=[
-                ft.Row(controls=[ft.Icon(ft.icons.TIMELINE, size=15, color=GLASS["text"]), ft.Text("Промежуточные точки", size=12, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("+ Добавить точку", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=28, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add_mile)], spacing=6, tight=True),
+                ft.Row(controls=[ft.Icon(ft.icons.TIMELINE, size=15, color=GLASS["text"]), ft.Text("Промежуточные точки", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("+ Добавить точку", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=28, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add_mile)], spacing=6, tight=True),
                 milestones_col,
             ], spacing=8, tight=True)
-            right_col.controls.append(glass_panel(content=miles_section, radius=12, padding=ft.padding.all(12)))
+            right_col.controls.append(glass_panel(content=miles_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Scan
         scan_section = ft.Column(controls=[
             ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("Прикрепить файл", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), icon=ft.icons.ATTACH_FILE, on_click=_pick_attach)], spacing=6, tight=True),
             attach_col,
         ], spacing=8, tight=True)
-        right_col.controls.append(glass_panel(content=scan_section, radius=12, padding=ft.padding.all(12)))
+        right_col.controls.append(glass_panel(content=scan_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Decide layout based on page width
         # Bug 8 fix: no expand inside scroll, fixed widths

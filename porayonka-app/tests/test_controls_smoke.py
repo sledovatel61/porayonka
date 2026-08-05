@@ -76,8 +76,12 @@ def _seed_controls():
             "due_date": "2026-07-25", "end_date": None,
             "done": False, "done_date": None, "comment": "",
             "tasks": [{"id": "t1", "title": "п.1 Запросить материалы", "assignees": ["Семисенко Иван Юрьевич"],
-                       "due_date": "2026-07-24", "is_done": False, "done_date": None, "comment": ""}],
-            "milestones": [], "attachments": [], "archived": False, "archived_at": None, "archive_reason": "",
+                       "due_date": "2026-07-24", "is_done": False, "done_date": None, "comment": ""},
+                      {"id": "t2", "title": "п.2 Доложить", "assignees": ["Потемкин Сергей Анатольевич"],
+                       "due_date": "2026-07-25", "is_done": False, "done_date": None, "comment": ""}],
+            "milestones": [{"id": "m1", "date": "2026-07-23", "note": "точка1", "is_done": False},
+                           {"id": "m2", "date": "2026-07-24", "note": "точка2", "is_done": True}],
+            "attachments": [], "archived": False, "archived_at": None, "archive_reason": "",
             "created_at": "2026-07-20T10:00:00", "updated_at": "2026-07-20T10:00:00",
         },
         {
@@ -287,7 +291,7 @@ def main():
             check("точка добавлена (поле точки в правой колонке)", len(fields) >= 1,
                   f"{len(fields)} полей")
 
-    # ── 7. Hover строки УБРАН (нет on_hover), курсор CLICK остался ──
+    # ── 7. Hover строки ВЕРНУТ и БЫСТРЫЙ (раунд 6): on_hover меняет рамку на #4f8cff и фон #2c3650 ──
     page, tab, _ = build()
     allc = walk(tab)
     rows = [c for c in allc if isinstance(c, ft.Container)
@@ -295,9 +299,30 @@ def main():
     check("в таблице есть строки", len(rows) >= 1, f"{len(rows)} строк")
     if rows:
         with_hover = [r for r in rows if getattr(r, "on_hover", None) is not None]
-        check("у строк УБРАН on_hover", len(with_hover) == 0, f"{len(with_hover)} с hover")
+        check("у строк ЕСТЬ on_hover (раунд 6)", len(with_hover) == len(rows), f"{len(with_hover)}/{len(rows)}")
         cur = {getattr(r, "mouse_cursor", None) for r in rows}
         check("курсор CLICK остался", ft.MouseCursor.CLICK in cur)
+        # вызвать on_hover(true) -> border accent #4f8cff, bgcolor hover_bg #2c3650
+        r = rows[0]
+        try:
+            r.on_hover(type("E", (), {"data": "true"})())
+            b = getattr(r, "border", None)
+            hover_bg_ok = getattr(r, "bgcolor", None) == "#2c3650"
+            accent_border = False
+            if b is not None:
+                # border.all: bottom side contains the accent color
+                try:
+                    accent_border = getattr(b, "bottom", None) is not None and getattr(b.bottom, "color", None) == "#4f8cff"
+                except Exception:
+                    accent_border = False
+            check("hover: фон #2c3650", hover_bg_ok, f"bg={r.bgcolor}")
+            check("hover: рамка #4f8cff", accent_border)
+            # вернуть обратно
+            r.on_hover(type("E", (), {"data": "false"})())
+            check("hover off: фон вернулся #2a3247", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
+        except Exception:
+            traceback.print_exc()
+            check("hover вызов без исключения", False)
 
     # ── 8. плашка строки — серый графит ──
     page, tab, _ = build()
@@ -308,6 +333,32 @@ def main():
     if rows:
         bgs = {getattr(r, "bgcolor", None) for r in rows}
         check("плашка строки = #2a3247 (серый графит)", bgs == {TILE_BG}, f"bg={bgs}")
+
+    # ── 9а. «Содержание» включает пункты задания (раунд 6) ──
+    page, tab, _ = build()
+    allc = walk(tab)
+    rows = [c for c in allc if isinstance(c, ft.Container)
+            and getattr(c, "bgcolor", None) == TILE_BG and getattr(c, "on_click", None)]
+    if rows:
+        # внутри первой строки есть Text с "п.2 Доложить" (пункт из содержания)
+        content_texts = [t.value for t in walk(rows[0]) if isinstance(t, ft.Text) and t.value]
+        joined = " ".join(str(x) for x in content_texts)
+        check("в содержании строки есть пункты задания", "п.1 Запросить материалы" in joined,
+              "пункты видны")
+        # пункт с датой и ответственным: "п.1 Запросить материалы — Семисенко И.Ю. — 24.07.2026"
+        check("пункт содержит ответственного", "Семисенко И." in joined)
+        check("пункт содержит дату", "24.07.2026" in joined)
+
+    # ── 9б. Промежуточные точки под сроком (раунд 6) ──
+    page, tab, _ = build()
+    allc = walk(tab)
+    rows = [c for c in allc if isinstance(c, ft.Container)
+            and getattr(c, "bgcolor", None) == TILE_BG and getattr(c, "on_click", None)]
+    if rows:
+        due_texts = [t.value for t in walk(rows[0]) if isinstance(t, ft.Text) and t.value]
+        joined = " ".join(str(x) for x in due_texts)
+        check("под сроком видна неисполненная точка", "точка 23.07.2026" in joined,
+              "точка 1 под сроком")
 
     # ── 9. фильтры исполнителей/контролёров из реальных данных ──
     page, tab, _ = build()
