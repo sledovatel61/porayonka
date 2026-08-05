@@ -2126,3 +2126,73 @@ Headless: таблица строится, кнопки действий 4 ик�
 - DatePicker из overlay, накопление в overlay, цвета #RRGGBBAA.
 
 
+
+---
+
+## 34. Вкладка «Контроли» — доработка 4: карточка не открывалась + шум update + сверка с мокапом
+
+**Дата:** 2026-08-05. **Статус:** реализовано (промпт `PROMPT_контроли_доработка4.md`).
+**База:** ветка `arena/019fcc5f-porayonka` коммит `71f9a57` (фикс отступов 43 `traceback.print_exc`). Работа выполнена в ветке `arena/019fd209-porayonka`.
+
+### 34.1 КРИТИЧНО: карточка контроля не открывалась (Задача 1)
+
+**Симптом:** клик по строке / карандашу / «Добавить контроль» → затемнение (dim) показывалось, карточки НЕ было, traceback нет.
+
+**Корневая причина (гипотеза «схлопывание» подтверждена):**
+`detail_overlay_container` содержал запрещённое сочетание
+`Column(scroll=ft.ScrollMode.AUTO, expand=True)` внутри `Container(expand=True)` —
+классический источник схлопывания (AGENTS 15.11/22). Прокручиваемая колонка с `expand`
+в Flet 0.23.2 получала нулевые/битые constraints: контейнер-подложка (`overlay_bg`, dim)
+рендерилась (expand=True на внешнем Container), а дочерняя карточка схлопывалась в 0 и
+не появлялась.
+
+**Фикс (по образцу `control_card_modal.py`):**
+- `detail_overlay_container` упрощён: `Container(expand=True, alignment=top_center, content=detail_overlay)` — БЕЗ вложенной `Column(scroll=AUTO, expand=True)`. Dim покрывает вкладку, карточка выравнивается по центру сверху.
+- Карточке задана **фиксированная высота** `card_max_h = min(780, 0.9*window)` (было `height=None`).
+- `detail_content` (корневая Column карточки) получила `expand=True`; `middle_scroll` получил `expand=True` и внутренний `Column(scroll=AUTO)` — теперь прокрутка внутри карточки, как в модалке.
+- Прямой импорт + headless-smoke: `_open_detail(None)` и клик по строке открывают карточку, левая (3 блока) и правая (4 блока) колонки непустые; узкий layout (<1100) складывает колонки в одну.
+
+### 34.2 Убран шум `Control must be added to the page first` (Задача 2)
+
+Добавлен модульный хелпер `_safe_update(control)`:
+```python
+def _safe_update(control):
+    try:
+        if control is not None and getattr(control, "page", None) is not None:
+            control.update()
+    except Exception:
+        traceback.print_exc()
+```
+Все `.update()` контролов в файле (58 шт.) переведены на `_safe_update(...)`;
+`page.update()` оставлены как есть (page всегда смонтирован). При инициализации
+(контролы ещё не в page) обновления пропускаются → консоль чистая, реальные ошибки
+видны. Проверено: `0` вхождений «Control must be added» на init.
+
+### 34.3 Сверка с мокапом (Задача 3)
+
+Подтверждено, что в базе уже реализовано (проверено headless, не ломалось падением карточки):
+- Иерархия яркости: фон `#0a1024` < панели `#cc141e33`(≈#141e33) < плашки `#1e2a44`, hover `#28324e` мгновенный.
+- Колонка «Действия»: карандаш `#4f8cff` + корзина `#ff5c6e`.
+- Фильтры «Исполнители»/«Контролёры» — options из реальных данных (distinct), фильтрация работает (`_refresh_filter_options`).
+- «С:»/«По:» — shared-календарь поверх (`_open_filter_cal`), крестик очистки внутри поля.
+- Длинные исполнители — перенос на 2 строки (`max_lines=2`), плашка тянется по высоте (row height по контенту).
+- Исполненные — внизу списка (стабильное разбиение `not_done + done` в `_filtered()`).
+- Resize колонок drag'ом за границу заголовка (`GestureDetector` в `_header_cell`), сохранение в `controls_settings.json` (`_save_col_widths`).
+
+### 34.4 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py ui/controls/glass_theme.py ui/controls/control_card_modal.py ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # headless-smoke: init без шума, карточка (new+edit) открывается, колонки непустые, фильтры из данных
+```
+
+Headless-smoke закоммичен в `porayonka-app/tests/test_controls_smoke.py` + `tests/page_stub.py`
+(изолирует данные через temp-APPDATA). Ручная приёмка на Windows: `python porayonka-app/main.py`.
+
+### 34.5 Не возвращать
+
+- `Column(scroll=AUTO, expand=True)` во `detail_overlay_container` (карточка схлопывалась).
+- `detail_card.height = None` при открытии (нужна фикс. высота + внутренний скролл).
+- Голые `control.update()` на unmounted контролах при init — только `_safe_update`.

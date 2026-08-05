@@ -42,6 +42,17 @@ STATUS_ICONS = {
     NO_DATE: ft.icons.REMOVE_CIRCLE_OUTLINE,
 }
 
+def _safe_update(control):
+    """Вызвать control.update() только если контрол смонтирован в page.
+    Убирает шум 'AssertionError: Control must be added to the page first.'
+    при инициализации, когда контролы ещё не добавлены в дерево page."""
+    try:
+        if control is not None and getattr(control, "page", None) is not None:
+            control.update()
+    except Exception:
+        traceback.print_exc()
+
+
 _FIXED = {
     "bar": 4,
     "num": 36,
@@ -262,8 +273,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             if state["last_sync"]:
                 sync_label.value += f" · {state['last_sync'].strftime('%H:%M:%S')}"
         try:
-            sync_label.update()
-            sync_dot.update()
+            _safe_update(sync_label)
+            _safe_update(sync_dot)
         except Exception:
             traceback.print_exc()
 
@@ -443,7 +454,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     cont.bgcolor = with_alpha(GLASS["accent"], "44")
                 else:
                     cont.bgcolor = "transparent"
-                cont.update()
+                _safe_update(cont)
             except Exception:
                 traceback.print_exc()
 
@@ -487,7 +498,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         ]
         header_row.content = ft.Row(controls=controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         try:
-            header_row.update()
+            _safe_update(header_row)
         except Exception:
             traceback.print_exc()
 
@@ -587,7 +598,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         cont.bgcolor = GLASS["hover"]  # #28324e
                     else:
                         cont.bgcolor = orig
-                    cont.update()
+                    _safe_update(cont)
                 except Exception:
                     traceback.print_exc()
             return _hover
@@ -604,7 +615,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 height=48, padding=ft.padding.symmetric(horizontal=12, vertical=8),
             ))
             try:
-                rows_column.update()
+                _safe_update(rows_column)
             except Exception:
                 traceback.print_exc()
             return
@@ -612,7 +623,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             rows_column.controls.append(_build_row(ctl, i, i-1))
             # Bug 2: gap 6px между плашками, без разделителей-линий — промежуток реализуем spacing колонки
         try:
-            rows_column.update()
+            _safe_update(rows_column)
         except Exception:
             traceback.print_exc()
 
@@ -640,7 +651,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             btn.bgcolor = bg
             btn.border = border
             try:
-                btn.update()
+                _safe_update(btn)
             except Exception:
                 traceback.print_exc()
 
@@ -665,9 +676,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             controller_filter_dd.options = [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in real_controllers]
             initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in real_initiators]
             try:
-                executor_filter_dd.update()
-                controller_filter_dd.update()
-                initiator_filter_dd.update()
+                _safe_update(executor_filter_dd)
+                _safe_update(controller_filter_dd)
+                _safe_update(initiator_filter_dd)
             except Exception:
                 traceback.print_exc()
         except Exception:
@@ -715,7 +726,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         ctl.color = "#ffffff" if sel else GLASS["text_secondary"]
                     elif isinstance(ctl, ft.Icon):
                         ctl.color = "#ffffff" if sel else GLASS["text_secondary"]
-                btn.update()
+                _safe_update(btn)
             except Exception:
                 traceback.print_exc()
 
@@ -785,8 +796,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             filter_from_text.color = GLASS["text_secondary"]
             filter_from_clear.visible = False
         try:
-            filter_from_text.update()
-            filter_from_clear.update()
+            _safe_update(filter_from_text)
+            _safe_update(filter_from_clear)
         except Exception:
             traceback.print_exc()
 
@@ -802,8 +813,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             filter_to_text.color = GLASS["text_secondary"]
             filter_to_clear.visible = False
         try:
-            filter_to_text.update()
-            filter_to_clear.update()
+            _safe_update(filter_to_text)
+            _safe_update(filter_to_clear)
         except Exception:
             traceback.print_exc()
 
@@ -863,7 +874,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         filter_cal_root.visible = False
         filter_cal_state["visible"] = False
         try:
-            filter_cal_root.update()
+            _safe_update(filter_cal_root)
         except Exception:
             traceback.print_exc()
 
@@ -887,7 +898,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         filter_cal_root.visible = True
         filter_cal_state["visible"] = True
         try:
-            filter_cal_root.update()
+            _safe_update(filter_cal_root)
         except Exception:
             traceback.print_exc()
 
@@ -959,7 +970,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             return
                         try:
                             cell.bgcolor = GLASS["hover_strong"] if e.data == "true" else orig_bg
-                            cell.update()
+                            _safe_update(cell)
                         except Exception:
                             traceback.print_exc()
                     return _hover
@@ -969,8 +980,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 row.controls.append(cell)
             filter_cal_grid.controls.append(row)
         try:
-            filter_cal_grid.update()
-            filter_cal_header.update()
+            _safe_update(filter_cal_grid)
+            _safe_update(filter_cal_header)
         except Exception:
             traceback.print_exc()
 
@@ -1051,8 +1062,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         summary.value = ", ".join(short_name(x) for x in selected) or "не выбрано"
                         summary.tooltip = ", ".join(selected)
                         try:
-                            badge.update()
-                            summary.update()
+                            _safe_update(badge)
+                            _safe_update(summary)
                         except Exception:
                             traceback.print_exc()
                         if on_change_cb:
@@ -1063,7 +1074,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     return _toggle
                 list_col.controls.append(ft.Checkbox(label=short_name(name), value=(name in selected), active_color=GLASS["accent"], label_style=ft.TextStyle(size=11 if compact else 12, color=GLASS["text"]), tooltip=name, on_change=_make_toggle(name), height=24 if compact else 28))
             try:
-                list_col.update()
+                _safe_update(list_col)
             except Exception:
                 traceback.print_exc()
         def _on_search_change(e):
@@ -1079,10 +1090,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             summary.visible = not expanded["value"]
             expand_btn.icon = ft.icons.EXPAND_LESS if expanded["value"] else ft.icons.EXPAND_MORE
             try:
-                search_field_ms.update()
-                list_wrapper.update()
-                summary.update()
-                expand_btn.update()
+                _safe_update(search_field_ms)
+                _safe_update(list_wrapper)
+                _safe_update(summary)
+                _safe_update(expand_btn)
             except Exception:
                 traceback.print_exc()
             if expanded["value"]:
@@ -1093,8 +1104,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             summary.value = "не выбрано"
             summary.tooltip = None
             try:
-                badge.update()
-                summary.update()
+                _safe_update(badge)
+                _safe_update(summary)
             except Exception:
                 traceback.print_exc()
             if on_change_cb:
@@ -1137,7 +1148,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         global_cal_root.visible = False
         global_cal_state["visible"] = False
         try:
-            global_cal_root.update()
+            _safe_update(global_cal_root)
         except Exception:
             traceback.print_exc()
 
@@ -1159,7 +1170,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         global_cal_root.visible = True
         global_cal_state["visible"] = True
         try:
-            global_cal_root.update()
+            _safe_update(global_cal_root)
         except Exception:
             traceback.print_exc()
 
@@ -1231,7 +1242,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             return
                         try:
                             cell.bgcolor = GLASS["hover_strong"] if e.data == "true" else orig_bg
-                            cell.update()
+                            _safe_update(cell)
                         except Exception:
                             traceback.print_exc()
                     return _hover
@@ -1241,8 +1252,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 row.controls.append(cell)
             global_cal_grid.controls.append(row)
         try:
-            global_cal_grid.update()
-            global_cal_header.update()
+            _safe_update(global_cal_grid)
+            _safe_update(global_cal_header)
         except Exception:
             traceback.print_exc()
 
@@ -1264,18 +1275,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         controls=[detail_card, global_cal_root],
     )
 
-    # Bug 12: outer container scrollable to handle tall content, height by content, no infinite empty
+    # Overlay container: dim background covering the whole tab, card centred at top.
+    # NB: NO inner Column(scroll=AUTO, expand=True) — that combination collapses to zero
+    # height in Flet 0.23.2 (AGENTS 15.11/22) and was the reason the card did not render
+    # while the dim background still showed. The card itself has a fixed height and
+    # scrolls internally (like control_card_modal).
     detail_overlay_container = ft.Container(
         visible=False,
         bgcolor=GLASS["overlay_bg"],
         expand=True,
         padding=ft.padding.all(12),
-        content=ft.Column(
-            controls=[ft.Container(content=detail_overlay, alignment=ft.alignment.top_center)],
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
+        alignment=ft.alignment.top_center,
+        content=detail_overlay,
     )
 
     def _hide_detail(e=None):
@@ -1283,7 +1294,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         state["editing"] = False
         _close_global_cal()
         try:
-            detail_overlay_container.update()
+            _safe_update(detail_overlay_container)
         except Exception:
             traceback.print_exc()
 
@@ -1311,7 +1322,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             detail_state["receive_date"] = iso
             receive_field_text.value = _display_date(iso)
             try:
-                receive_field_text.update()
+                _safe_update(receive_field_text)
             except Exception:
                 traceback.print_exc()
         def _open_receive_cal(e=None):
@@ -1329,8 +1340,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             new_init_container.visible = not new_init_container.visible
             new_init_field.visible = new_init_container.visible
             try:
-                new_init_container.update()
-                new_init_field.update()
+                _safe_update(new_init_container)
+                _safe_update(new_init_field)
             except Exception:
                 traceback.print_exc()
         def _add_initiator(e=None):
@@ -1347,10 +1358,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             new_init_container.visible = False
             new_init_field.visible = False
             try:
-                init_dd.update()
-                new_init_container.update()
+                _safe_update(init_dd)
+                _safe_update(new_init_container)
                 initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators]
-                initiator_filter_dd.update()
+                _safe_update(initiator_filter_dd)
             except Exception:
                 traceback.print_exc()
         add_init_btn = ft.IconButton(icon=ft.icons.ADD, icon_size=18, icon_color=GLASS["accent"], tooltip="Добавить нового", on_click=_show_new_init, width=36, height=36)
@@ -1376,7 +1387,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             detail_state["due_date"] = iso
             due_field_text.value = _display_date(iso)
             try:
-                due_field_text.update()
+                _safe_update(due_field_text)
             except Exception:
                 traceback.print_exc()
             _refresh_cycle_hint()
@@ -1394,7 +1405,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             detail_state["end_date"] = iso
             end_field_text.value = _display_date(iso)
             try:
-                end_field_text.update()
+                _safe_update(end_field_text)
             except Exception:
                 traceback.print_exc()
             _refresh_cycle_hint()
@@ -1415,7 +1426,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 days = _period_days_val()
                 dates = [base + timedelta(days=days*i) for i in range(1,4)]
                 cycle_hint.value = "Следующие: " + " · ".join(d.strftime("%d.%m.%Y") for d in dates)
-                cycle_hint.update()
+                _safe_update(cycle_hint)
             except Exception:
                 traceback.print_exc()
         def _on_type_change(e):
@@ -1425,17 +1436,17 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             milestones_header.visible = is_per
             milestones_col.visible = is_per
             try:
-                period_dd.update()
-                end_box.update()
-                milestones_header.update()
-                milestones_col.update()
+                _safe_update(period_dd)
+                _safe_update(end_box)
+                _safe_update(milestones_header)
+                _safe_update(milestones_col)
             except Exception:
                 traceback.print_exc()
             _refresh_cycle_hint()
         def _on_period_change(e):
             custom_days_field.visible = (e.control.value == "custom")
             try:
-                custom_days_field.update()
+                _safe_update(custom_days_field)
             except Exception:
                 traceback.print_exc()
             _refresh_cycle_hint()
@@ -1451,7 +1462,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             for idx, t_ui in enumerate(detail_state["tasks"]):
                 tasks_col.controls.append(_build_single_task_card(t_ui, idx))
             try:
-                tasks_col.update()
+                _safe_update(tasks_col)
             except Exception:
                 traceback.print_exc()
 
@@ -1468,7 +1479,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ui["due_ref"]["value"] = iso
                 txt.value = _display_date(iso)
                 try:
-                    txt.update()
+                    _safe_update(txt)
                 except Exception:
                     traceback.print_exc()
             task_due_box.on_click = lambda e, s=_set_task_due: _open_global_cal(lambda iso: s(iso), t_ui["due_ref"]["value"])
@@ -1527,7 +1538,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             for m_ui in detail_state["milestones"]:
                 milestones_col.controls.append(_build_milestone_card(m_ui))
             try:
-                milestones_col.update()
+                _safe_update(milestones_col)
             except Exception:
                 traceback.print_exc()
 
@@ -1542,7 +1553,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ui["date_ref"]["value"] = iso
                 txt.value = _display_date(iso)
                 try:
-                    txt.update()
+                    _safe_update(txt)
                 except Exception:
                     traceback.print_exc()
             date_box.on_click = lambda e, s=_set_m_date: _open_global_cal(lambda iso: s(iso), m_ui["date_ref"]["value"])
@@ -1587,7 +1598,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     )
                 )
             try:
-                attach_col.update()
+                _safe_update(attach_col)
             except Exception:
                 traceback.print_exc()
 
@@ -1677,7 +1688,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             if not inc:
                 try:
                     incoming_field.error_text = "Введите номер"
-                    incoming_field.update()
+                    _safe_update(incoming_field)
                 except Exception:
                     traceback.print_exc()
                 return
@@ -1855,11 +1866,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ft.Container(content=right_col, width=374, alignment=ft.alignment.top_left),
             ], spacing=14, tight=True, vertical_alignment=ft.CrossAxisAlignment.START)
 
-        # Bug 12 fix: height by content, no infinite empty space, max 780
-        # middle_scroll tight, not expand, scroll only when content exceeds max
+        # Middle scroll: bounded by the card's fixed height (via expand in the bounded
+        # card Column), so its inner scroll column scrolls internally instead of growing
+        # unbounded / collapsing. Matches the control_card_modal pattern.
         middle_scroll = ft.Container(
             content=ft.Column(controls=[middle_content], spacing=0, tight=True, scroll=ft.ScrollMode.AUTO),
-            # No expand, height by content
+            expand=True,
         )
 
         # Header and footer fixed
@@ -1886,22 +1898,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             border=ft.border.only(top=ft.BorderSide(1, GLASS["border_divider"])),
         )
 
-        # Root column tight, height by content, no expand
-        detail_content = ft.Column(controls=[header, middle_scroll, footer], spacing=0, tight=True)
+        # Root column fills the fixed-height card; middle_scroll (expand=True) takes the
+        # remaining space between header and footer and scrolls internally.
+        detail_content = ft.Column(controls=[header, middle_scroll, footer], spacing=0, tight=True, expand=True)
 
         detail_card.content = detail_content
-        # Bug 12: height by content, max min(780,0.9*window), no empty after last block
         try:
             win_h = page.window.height or 860
         except Exception:
             win_h = 860
         card_max_h = min(780, int(win_h * 0.9))
         detail_card.width = 920
-        detail_card.height = None  # auto by content to avoid empty after last block
-        # detail_overlay_container will be scrollable to handle tall content (max height via window)
+        detail_card.height = card_max_h
         detail_overlay_container.visible = True
         try:
-            detail_overlay_container.update()
+            _safe_update(detail_overlay_container)
         except Exception:
             try:
                 page.update()
@@ -2130,7 +2141,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             initiators.extend(get_initiators(settings))
             try:
                 initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators]
-                initiator_filter_dd.update()
+                _safe_update(initiator_filter_dd)
             except Exception:
                 traceback.print_exc()
             _update_sync_ui()
