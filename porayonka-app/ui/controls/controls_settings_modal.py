@@ -141,6 +141,67 @@ def create_controls_settings_modal(
 
     _rebuild_init_list()
 
+    # ── Раунд 8: справочник людей (доп. ФИО для фильтров исполнителей/контролёров) ──
+    people_list = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=110)
+    people_field = ft.TextField(
+        label="Доп. ФИО (исполнитель/контролёр)",
+        label_style=ft.TextStyle(color=COLORS["text_secondary"]),
+        border_radius=8, border_color=COLORS["border"],
+        focused_border_color=COLORS["btn_save"],
+        bgcolor=COLORS["card"], color=COLORS["text"],
+        hint_style=ft.TextStyle(color=COLORS["text_muted"]),
+        expand=True, height=36,
+    )
+
+    def _rebuild_people_list():
+        people_list.controls.clear()
+        cur = list(settings.get("extra_people", []) or [])
+        if not cur:
+            people_list.controls.append(ft.Text("Нет доп. ФИО — фильтр использует криминалистов и контролёров",
+                                                size=11, color=COLORS["text_muted"]))
+        for name in cur:
+            people_list.controls.append(
+                ft.Container(
+                    content=ft.Row(controls=[
+                        ft.Icon(ft.icons.PERSON_OUTLINE, size=14, color=COLORS["text_secondary"]),
+                        ft.Text(name, size=12, color=COLORS["text"], expand=True,
+                                no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=name),
+                        ft.IconButton(icon=ft.icons.CLOSE, icon_size=14, icon_color="#f87171",
+                                      tooltip="Удалить",
+                                      on_click=lambda e, n=name: _remove_person(n)),
+                    ], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                       alignment=ft.MainAxisAlignment.START, tight=True),
+                    bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
+                    border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                )
+            )
+        try:
+            people_list.update()
+        except Exception:
+            pass
+
+    def _add_person(e=None):
+        name = people_field.value.strip()
+        if not name:
+            return
+        cur = list(settings.get("extra_people", []) or [])
+        if not any(name.casefold() == x.strip().casefold() for x in cur):
+            cur.append(name)
+        settings["extra_people"] = cur
+        people_field.value = ""
+        try:
+            people_field.update()
+        except Exception:
+            pass
+        _rebuild_people_list()
+
+    def _remove_person(name):
+        cur = list(settings.get("extra_people", []) or [])
+        settings["extra_people"] = [x for x in cur if x.strip().casefold() != name.strip().casefold()]
+        _rebuild_people_list()
+
+    _rebuild_people_list()
+
     def _close(e=None):
         dialog.open = False
         page.update()
@@ -160,6 +221,7 @@ def create_controls_settings_modal(
             "custom_initiators": list(settings.get("custom_initiators", []) or []),
             "notify_sound": bool(sound_check.value),
             "notify_log": settings.get("notify_log") or {},
+            "extra_people": list(settings.get("extra_people", []) or []),
         })
         on_apply(merged)
         dialog.open = False
@@ -214,6 +276,24 @@ def create_controls_settings_modal(
                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                alignment=ft.MainAxisAlignment.START),
                         init_list,
+                    ], spacing=8, tight=True),
+                    bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
+                    border_radius=10, padding=ft.padding.all(10),
+                ),
+                ft.Container(
+                    content=ft.Column(controls=[
+                        ft.Text("Справочник людей (доп. исполнители/контролёры)", size=12,
+                                weight=ft.FontWeight.BOLD, color=COLORS["text"]),
+                        ft.Row(controls=[people_field,
+                                          ft.ElevatedButton("Добавить",
+                                                            bgcolor=COLORS["btn_save"],
+                                                            color=COLORS["text_light"],
+                                                            height=36,
+                                                            on_click=_add_person)],
+                               spacing=6, tight=True,
+                               vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                               alignment=ft.MainAxisAlignment.START),
+                        people_list,
                     ], spacing=8, tight=True),
                     bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
                     border_radius=10, padding=ft.padding.all(10),

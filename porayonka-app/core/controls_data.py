@@ -26,6 +26,7 @@ DEFAULT_SETTINGS = {
     "custom_initiators": [],     # список пользовательских инициаторов (v2)
     "notify_log": {},            # журнал уведомлений: {"<control_id>:<status>": "YYYY-MM-DD"}
     "notify_sound": True,        # звук уведомлений (winsound.MessageBeep)
+    "extra_people": [],          # раунд 8: доп. ФИО в канонический справочник людей (редактируется в настройках)
 }
 
 # Максимальный размер вложения, при котором показывается предупреждение
@@ -263,18 +264,47 @@ def get_criminalists_only() -> List[str]:
     return sorted(names, key=lambda n: (n.split()[0].casefold() if n.strip() else "", n.casefold()))
 
 
-def get_controller_names() -> List[str]:
-    """Канонический список контролёров: криминалисты + дефолтные контролёры
-    (Потемкин С.А., Чашин Э.А.), без дублей по фамилии. Отсортирован по фамилии."""
+def get_controller_names(settings: Optional[dict] = None) -> List[str]:
+    """Канонический список людей для фильтров «Исполнители»/«Контролёры»:
+    криминалисты + дефолтные контролёры + доп. ФИО из настроек (`extra_people`),
+    без дублей по фамилии. Отсортирован по фамилии."""
+    extra = []
+    if settings:
+        extra = list(settings.get("extra_people", []) or [])
     out = []
     seen = set()
-    for n in get_criminalists_only() + list(DEFAULT_CONTROLLERS):
+    for n in get_criminalists_only() + list(DEFAULT_CONTROLLERS) + extra:
         surname = (n.strip().split()[0] if n.strip() else "").casefold()
         if not surname or surname in seen:
             continue
         seen.add(surname)
         out.append(n)
     return out
+
+
+def add_extra_person(settings: dict, name: str) -> bool:
+    """Добавить ФИО в справочник людей (`extra_people`). True, если добавлено."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    cur = list(settings.get("extra_people", []) or [])
+    if any(name.casefold() == x.strip().casefold() for x in cur):
+        return False
+    cur.append(name)
+    settings["extra_people"] = cur
+    save_settings(settings)
+    return True
+
+
+def remove_extra_person(settings: dict, name: str) -> bool:
+    """Убрать ФИО из справочника людей. True, если удалено."""
+    cur = list(settings.get("extra_people", []) or [])
+    nxt = [x for x in cur if x.strip().casefold() != (name or "").strip().casefold()]
+    if len(nxt) == len(cur):
+        return False
+    settings["extra_people"] = nxt
+    save_settings(settings)
+    return True
 
 
 # ────────────────────────────────────────────────
@@ -291,6 +321,11 @@ def _initiator_tokens(raw: str) -> List[str]:
     return [t for t in s.split() if t]
 
 
+# Известные канонические инициаторы (для разбиения склеек и приоритета)
+_KNOWN_INITIATOR_ROOTS = ["гук", "су", "ск", "пск", "гсу", "окрим", "мвд", "следственный комитет",
+                          "гук юфо", "гук ск", "гук рф", "ск рф", "следком"]
+
+
 def canonical_initiator_group(raw: str) -> str:
     """Каноническая «группа» инициатора (нижний регистр, токены через пробел).
 
@@ -298,28 +333,48 @@ def canonical_initiator_group(raw: str) -> str:
       «ГУК С.», «ГУК СК», «ГУК С.Т.С.А.С.И.Ю.» → «гук»;
       «СУ/СК», «СУ СК» → «су»;
       «ГУК ЮФО» остаётся «гук юфо» (не схлопывается в «гук»).
+    Склейки нескольких инициаторов («ГУК СК ГУК ЮФО», «ГСУ ГУК») разбиваются
+    на составляющие: возвращается список канонов через запятую (это значение
+    используется в опциях фильтра как отдельные пункты).
     Значения, не похожие ни на один известный шаблон, возвращаются как есть
     (нормализованные) — они становятся собственными канонами фильтра.
     """
     rt = _initiator_tokens(raw)
     if not rt:
         return ""
-    first = rt[0]
-    tail = rt[1:]
-    # «ГУК …»: хвост из одиночных букв/шумовых токенов → «гук»
-    if first == "гук":
-        if not tail:
-            return "гук"
-        if all(len(t) == 1 or t in _INITIATOR_NOISE for t in tail):
-            return "гук"
-        return " ".join(rt)
-    # «СУ/СК», «СУ СК» → «су»
-    if first == "су" and all(t in ("ск", "с") for t in tail):
-        return "су"
-    # общее правило: первый токен + хвост из одиночных букв → первый токен
-    if tail and all(len(t) == 1 for t in tail):
-        return first
-    return " ".join(rt)
+
+    def _canon_one(tokens: List[str]) -> str:
+        first = tokens[0]
+        tail = tokens[1:]
+        if first == "гук":
+            if not tail:
+                return "гук"
+            if all(len(t) == 1 or t in _INITIATOR_NOISE for t in tail):
+                return "гук"
+            # «гук юфо» / «гук ск» — составной, но осмысленный канон
+            return " ".join(tokens)
+        if first == "су" and all(t in ("ск", "с") for t in tail):
+            return "су"
+        if tail and all(len(t) == 1 for t in tail):
+            return first
+        return " ".join(tokens)
+
+    # Разбиение склейки: ищем в списке токенов позиции, где начинается
+    # известный корень инициатора (длина >= 2, чтобы не резать «ГУК С.»).
+    groups = []
+    cur = []
+    for t in rt:
+        if cur and t in ("гук", "су", "пск", "гсу", "окрим", "мвд") and len(t) >= 2:
+            groups.append(_canon_one(cur))
+            cur = [t]
+        else:
+            cur.append(t)
+    if cur:
+        groups.append(_canon_one(cur))
+    if len(groups) > 1:
+        # «ГСУ ГУК» → «гсу,гук»; «ГУК СК ГУК ЮФО» → «гук,гук юфо»
+        return ",".join(dict.fromkeys(groups))
+    return groups[0] if groups else ""
 
 
 def initiator_filter_options(raw_values) -> List[str]:
@@ -327,16 +382,20 @@ def initiator_filter_options(raw_values) -> List[str]:
 
     Принимает все исходные значения (дефолтные + custom + distinct из данных),
     кластеризует их в группы и возвращает display-форму (upper).
+    Склейки разбиваются на отдельные каноны («ГУК СК ГУК ЮФО» → «ГУК», «ГУК ЮФО»).
     """
     groups = {}
     for v in raw_values or []:
         g = canonical_initiator_group(v)
         if not g:
             continue
-        # display: «гук юфо» → «ГУК ЮФО»
-        display = " ".join(t.upper() for t in g.split())
-        if display not in groups:
-            groups[display] = True
+        for part in g.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            display = " ".join(t.upper() for t in part.split())
+            if display not in groups:
+                groups[display] = True
     return sorted(groups.keys())
 
 

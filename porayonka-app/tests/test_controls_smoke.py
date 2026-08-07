@@ -45,6 +45,14 @@
     теперь возвращает все ключи — раньше col_widths терялся);
   * hover: bgcolor-only, рамка статична, без исключений.
 
+Раунд 8 (PROMPT_контроли_доработка8.md):
+  * справочник людей: extra_people в настройках (добавить/удалить), новые ФИО
+    (Макаренко и т.п.) попадают в фильтр «Исполнители», а не в «Прочие»;
+  * инициаторы: склейки «ГУК СК ГУК ЮФО», «ГСУ ГУК» разбиваются на отдельные каноны;
+  * resize: drag-хэндлы на всех 11 границах колонок + видимые разделители
+    в заголовке (#26ffffff) и строках (#12ffffff);
+  * hover: отдельный лёгкий слой внутри строки (update только его bgcolor).
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -437,29 +445,30 @@ def main():
             and getattr(c, "bgcolor", None) == TILE_BG and getattr(c, "on_click", None)]
     check("в таблице есть строки", len(rows) >= 1, f"{len(rows)} строк")
     if rows:
-        with_hover = [r for r in rows if getattr(r, "on_hover", None) is not None]
-        check("у строк ЕСТЬ on_hover (раунд 6)", len(with_hover) == len(rows), f"{len(with_hover)}/{len(rows)}")
         cur = {getattr(r, "mouse_cursor", None) for r in rows}
         check("курсор CLICK остался", ft.MouseCursor.CLICK in cur)
-        # Раунд 7 (задача 6): hover меняет ТОЛЬКО bgcolor (рамка статичная) —
-        # минимальный payload для мгновенной реакции на быстром движении курсора.
+        # Раунд 8 (задача 4): hover — отдельный лёгкий слой внутри строки
+        # (обновляется только его bgcolor; у самой строки on_hover нет).
         r = rows[0]
-        base_border = getattr(r, "border", None)
-        try:
-            r.on_hover(type("E", (), {"data": "true"})())
-            check("hover: фон #2c3650", getattr(r, "bgcolor", None) == "#2c3650", f"bg={r.bgcolor}")
-            check("hover: рамка НЕ меняется (bgcolor-only)",
-                  getattr(r, "border", None) is base_border, "border статична")
-            # повторный enter с тем же состоянием — без исключений
-            r.on_hover(type("E", (), {"data": "true"})())
-            check("hover: повторный enter без исключений",
-                  getattr(r, "bgcolor", None) == "#2c3650")
-            # вернуть обратно
-            r.on_hover(type("E", (), {"data": "false"})())
-            check("hover off: фон вернулся #2a3247", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
-        except Exception:
-            traceback.print_exc()
-            check("hover вызов без исключения", False)
+        layers = [c for c in walk(r) if isinstance(c, ft.Container)
+                  and getattr(c, "on_hover", None) is not None]
+        check("hover: внутри строки есть слой с on_hover", len(layers) >= 1, f"{len(layers)}")
+        if layers:
+            hl = layers[0]
+            try:
+                hl.on_hover(type("E", (), {"data": "true"})())
+                check("hover: фон слоя #2c3650", getattr(hl, "bgcolor", None) == "#2c3650", f"bg={hl.bgcolor}")
+                # повторный enter с тем же состоянием — без исключений
+                hl.on_hover(type("E", (), {"data": "true"})())
+                check("hover: повторный enter без исключений",
+                      getattr(hl, "bgcolor", None) == "#2c3650")
+                # выход
+                hl.on_hover(type("E", (), {"data": "false"})())
+                check("hover off: фон слоя прозрачный",
+                      getattr(hl, "bgcolor", None) == "transparent", f"bg={hl.bgcolor}")
+            except Exception:
+                traceback.print_exc()
+                check("hover вызов без исключения", False)
 
     # ── 8. плашка строки — серый графит ──
     page, tab, _ = build()
@@ -954,6 +963,97 @@ def main():
     check("delete_all: у роли user кнопка скрыта",
           not any(isinstance(c, ft.ElevatedButton) and getattr(c, "text", None) == "Удалить все"
                   and getattr(c, "visible", True) for c in walk(tab)))
+
+    # ── 21. Раунд 8, задача 1: справочник людей (extra_people) ──
+    from core.controls_data import add_extra_person, remove_extra_person
+    st8 = {"network_enabled": False, "network_role": "admin", "network_user": "",
+           "network_shared_path": "", "notify_log": {}, "notify_sound": True}
+    save_settings(st8)
+    check("people: add_extra_person добавляет", add_extra_person(st8, "Макаренко Роман Андреевич") is True)
+    check("people: дубль не добавляется", add_extra_person(st8, "макаренко роман андреевич") is False)
+    check("people: сохранено в настройки",
+          "Макаренко Роман Андреевич" in (load_settings().get("extra_people") or []))
+    _seed_raw([
+        _ctrl("m1", "М-1", executors=["Макаренко Р.А."]),
+        _ctrl("m2", "М-2", executors=["Посторонний А.А."]),
+    ])
+    page, tab, _ = build()
+    ex = _find_dd(tab, "Все исполнители")
+    check("people: Макаренко есть в опциях фильтра",
+          ex is not None and "Макаренко Роман Андреевич" in [o.key for o in (ex.options or [])])
+    check("people: фильтр по Макаренко находит его контроль",
+          _set_filter(tab, "Все исполнители", "Макаренко Роман Андреевич"))
+    vis = _visible_texts(tab)
+    check("people: контроль Макаренко виден, посторонний скрыт",
+          "М-1" in vis and "М-2" not in vis, f"видно: {sorted(vis)}")
+    check("people: «Прочие» не содержит Макаренко",
+          _set_filter(tab, "Все исполнители", FILTER_OTHER))
+    vis = _visible_texts(tab)
+    check("people: «Прочие» — только посторонний", "М-2" in vis and "М-1" not in vis)
+    check("people: remove_extra_person удаляет",
+          remove_extra_person(load_settings(), "Макаренко Роман Андреевич") is True)
+
+    # ── 22. Раунд 8, задача 2: склейки инициаторов ──
+    check("initiator: «ГУК СК ГУК ЮФО» разбивается на «гук,гук юфо»",
+          canonical_initiator_group("ГУК СК ГУК ЮФО") == "гук,гук юфо")
+    check("initiator: «ГСУ ГУК» разбивается на «гсу,гук»",
+          canonical_initiator_group("ГСУ ГУК") == "гсу,гук")
+    opts8 = initiator_filter_options(["ГУК СК ГУК ЮФО", "ГСУ ГУК", "СУ", "ОКРИМ"])
+    check("initiator: опции без склеек — отдельные каноны",
+          "ГУК" in opts8 and "ГУК ЮФО" in opts8 and "ГСУ" in opts8 and "СУ" in opts8,
+          f"{opts8}")
+    check("initiator: «ГУК СК, ГУК ЮФО» (с запятой) тоже разбивается",
+          canonical_initiator_group("ГУК СК, ГУК ЮФО") == "гук,гук юфо")
+
+    # ── 23. Раунд 8, задача 3: resize на ВСЕХ границах + видимые разделители ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("r8", "Р-8", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    gds = [c for c in walk(tab) if isinstance(c, ft.GestureDetector)
+           and getattr(c, "on_horizontal_drag_update", None) is not None]
+    check("resize: drag-хэндлы на ВСЕХ 11 границах колонок", len(gds) == 11, f"{len(gds)}")
+    # разделители в заголовке (1px, цвет #26ffffff)
+    seps = [c for c in walk(tab) if isinstance(c, ft.Container)
+            and getattr(c, "width", None) == 1 and getattr(c, "bgcolor", None) == "#26ffffff"]
+    check("resize: видимые разделители в заголовке", len(seps) >= 10, f"{len(seps)}")
+    # разделители в строках (#12ffffff)
+    seps_r = [c for c in walk(tab) if isinstance(c, ft.Container)
+              and getattr(c, "width", None) == 1 and getattr(c, "bgcolor", None) == "#12ffffff"]
+    check("resize: разделители в строках таблицы", len(seps_r) >= 8, f"{len(seps_r)}")
+    # drag по «Содержание» (индекс 5) сохраняет ширину
+    g5 = gds[4]  # граница после «Содержание» (0-индекс: №, вх, дата, инициатор, содержание)
+    E = type("E", (), {})
+    _invoke_event_handler(g5.on_horizontal_drag_start, E())
+    _invoke_event_handler(g5.on_horizontal_drag_update, type("E", (), {"delta_x": 30})())
+    _invoke_event_handler(g5.on_horizontal_drag_end, E())
+    saved = load_settings().get("col_widths") or {}
+    check("resize: drag «Содержания» сохранил ширину", len(saved) > 0, f"{saved}")
+
+    # ── 24. Раунд 8, задача 4: hover-слой (отдельный лёгкий контрол) ──
+    page, tab, _ = build()
+    rows8 = _visible_rows(tab)
+    check("hover8: строки есть", len(rows8) >= 1)
+    if rows8:
+        layers = [c for c in walk(rows8[0]) if isinstance(c, ft.Container)
+                  and getattr(c, "on_hover", None) is not None]
+        check("hover8: в строке есть hover-слой", len(layers) >= 1, f"{len(layers)}")
+        if layers:
+            hl = layers[0]
+            hl.on_hover(type("E", (), {"data": "true"})())
+            check("hover8: слой подсветился", getattr(hl, "bgcolor", None) == "#2c3650")
+            # «быстрый прогон» по 3 строкам: enter/leave без исключений
+            ok = True
+            for r8 in rows8[:3]:
+                for l8 in [c for c in walk(r8) if isinstance(c, ft.Container)
+                           and getattr(c, "on_hover", None) is not None]:
+                    try:
+                        l8.on_hover(type("E", (), {"data": "true"})())
+                        l8.on_hover(type("E", (), {"data": "false"})())
+                    except Exception:
+                        ok = False
+            check("hover8: быстрый прогон по 3 строкам без исключений", ok)
 
     print()
     if FAILURES:
