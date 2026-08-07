@@ -12,6 +12,15 @@
   * плашка строки — серый графит #2a3247 (не #1e2a44);
   * фильтры исполнителей/контролёров из реальных данных (distinct).
 
+Сетевая часть (PROMPT_контроли_сеть.md):
+  * merge_controls: union по id, конфликт — новый updated_at, порядок стабилен;
+  * два инстанса через одну общую папку (админ пишет → пользователь читает);
+  * антиспам-журнал уведомлений (_should_notify) + round-trip notify_log/notify_sound;
+  * офлайн→онлайн: запись при недоступном shared = False, локальный файл жив,
+    merge не теряет локальную правку;
+  * вкладка при network_enabled грузит данные из shared и показывает «Сеть: админ»;
+  * подрезка журнала: записи старше 30 дней удаляются.
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -31,7 +40,13 @@ os.environ["APPDATA"] = _TEST_APPDATA
 
 import flet as ft  # noqa: E402
 from page_stub import PageStub  # noqa: E402
-from core.controls_data import get_controls_file  # noqa: E402
+from core.controls_data import (  # noqa: E402
+    get_controls_file, load_controls, save_controls,
+    load_settings, save_settings,
+    read_shared_controls, write_shared_controls, get_shared_mtime,
+    merge_controls, _should_notify, prune_notify_log,
+)
+from core.controls_models import Control, OVERDUE, TODAY  # noqa: E402
 from ui.controls.controls_tab import create_controls_tab  # noqa: E402
 
 # Раунд 5: плашка строки — серый графит (было #1e2a44)
@@ -380,6 +395,110 @@ def main():
         opts = [o.key for o in (ct.options or [])]
         check("контролёры из реальных данных (distinct)", "Потемкин С.А." in opts,
               f"{len(opts)-1} опций")
+
+    # ── 10. merge_controls: union по id, конфликт, порядок (задача 1) ──
+    def _mk(id_, updated, **kw):
+        return Control(id=id_, updated_at=updated, incoming_number=kw.get("incoming_number", id_),
+                       **{k: v for k, v in kw.items() if k != "incoming_number"})
+
+    local = [_mk("a", "2026-08-01T10:00:00"), _mk("b", "2026-08-01T10:00:00"), _mk("c", "2026-08-01T10:00:00")]
+    shared = [_mk("b", "2026-08-02T10:00:00"), _mk("d", "2026-08-02T10:00:00")]
+    merged = merge_controls(local, shared)
+    check("merge: union по id (a,b,c,d)", {c.id for c in merged} == {"a", "b", "c", "d"},
+          f"{[c.id for c in merged]}")
+    b = next((c for c in merged if c.id == "b"), None)
+    check("merge: конфликт — побеждает новый updated_at",
+          b is not None and b.updated_at == "2026-08-02T10:00:00")
+    check("merge: порядок local + новые из shared в конец",
+          [c.id for c in merged] == ["a", "b", "c", "d"])
+    merged2 = merge_controls([_mk("a", "2026-08-01T10:00:00"), _mk("x", "2026-08-03T10:00:00")], shared)
+    check("merge: локальный новый контроль не теряется", "x" in {c.id for c in merged2})
+    # пустое/битое updated_at — старее валидного
+    m3 = merge_controls([_mk("a", "")], [_mk("a", "2026-08-01T10:00:00")])
+    check("merge: пустое updated_at старее валидного",
+          m3 and m3[0].updated_at == "2026-08-01T10:00:00")
+    m4 = merge_controls([_mk("a", "garbage")], [_mk("a", "2026-08-01T10:00:00")])
+    check("merge: битое updated_at старее валидного",
+          m4 and m4[0].updated_at == "2026-08-01T10:00:00")
+    # контроль только в shared — сохраняется в конец
+    m5 = merge_controls([_mk("a", "2026-08-01T10:00:00")], [_mk("z", "2026-08-01T10:00:00")])
+    check("merge: контроль только в shared сохраняется", [c.id for c in m5] == ["a", "z"])
+
+    # ── 11. два инстанса через ОДНУ общую папку (админ → пользователь) ──
+    shared_dir = tempfile.mkdtemp(prefix="porayonka_shared_")
+    admin_settings = {"network_enabled": True, "network_shared_path": os.path.join(shared_dir, "controls.json")}
+    user_settings = dict(admin_settings)
+    check("два инстанса: до записи shared пуст", read_shared_controls(user_settings) == [])
+    m0 = get_shared_mtime(user_settings)
+    check("два инстанса: mtime до записи None", m0 is None)
+    ok = write_shared_controls([_mk("n1", "2026-08-05T10:00:00", incoming_number="ВХСОП-1")], admin_settings)
+    check("два инстанса: админ записал в shared", ok is True)
+    got = read_shared_controls(user_settings)
+    check("два инстанса: пользователь прочитал данные", len(got) == 1 and got[0].id == "n1")
+    m1 = get_shared_mtime(user_settings)
+    check("два инстанса: mtime изменилось", m1 is not None and m1 != m0)
+
+    # ── 12. журнал уведомлений: антиспам (задача 2) ──
+    nlog = {}
+    check("notify: new — первый раз уведомляет", _should_notify(nlog, "c1", "new", "2026-08-05") is True)
+    nlog["c1:new"] = "2026-08-05"
+    check("notify: new — повтор не уведомляет", _should_notify(nlog, "c1", "new", "2026-08-05") is False)
+    check("notify: new — на следующий день тоже нет", _should_notify(nlog, "c1", "new", "2026-08-06") is False)
+    check("notify: overdue — первый раз уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is True)
+    nlog["c1:overdue"] = "2026-08-05"
+    check("notify: overdue — в тот же день нет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is False)
+    check("notify: overdue — на следующий день уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-06") is True)
+    # round-trip журнала через настройки
+    save_settings({"notify_log": {"c1:new": "2026-08-05"}, "notify_sound": False})
+    loaded = load_settings()
+    check("settings: notify_log сохраняется в controls_settings.json",
+          (loaded.get("notify_log") or {}).get("c1:new") == "2026-08-05")
+    check("settings: notify_sound сохраняется", loaded.get("notify_sound") is False)
+
+    # ── 13. офлайн→онлайн: локальная правка не теряется (задача 4) ──
+    off_dir = tempfile.mkdtemp(prefix="porayonka_off_")
+    block = os.path.join(off_dir, "block")
+    with open(block, "w", encoding="utf-8") as f:
+        f.write("x")
+    off_settings = {"network_enabled": True, "network_shared_path": os.path.join(block, "controls.json")}
+    ok_off = write_shared_controls([_mk("off1", "2026-08-01T10:00:00")], off_settings)
+    check("offline: запись при недоступном shared = False", ok_off is False)
+    check("offline: get_shared_mtime None", get_shared_mtime(off_settings) is None)
+    save_controls([_mk("off1", "2026-08-01T10:00:00", incoming_number="ВХСОП-9")])
+    loc = load_controls()
+    check("offline: локальный controls.json сохранён", any(c.id == "off1" for c in loc))
+    # «сеть вернулась»: блокирующий файл убран, админ успел записать свою (старую) версию
+    os.remove(block)
+    ok_back = write_shared_controls([_mk("off1", "2026-07-30T10:00:00", incoming_number="ВХСОП-9")], off_settings)
+    check("offline->online: shared снова доступен", ok_back is True)
+    merged_off = merge_controls(loc, read_shared_controls(off_settings))
+    check("offline->online: merge не теряет локальную правку",
+          any(c.id == "off1" and c.updated_at == "2026-08-01T10:00:00" for c in merged_off))
+
+    # ── 14а. вкладка при network_enabled грузит shared и показывает индикатор ──
+    net_dir = tempfile.mkdtemp(prefix="porayonka_net_tab_")
+    net_path = os.path.join(net_dir, "controls.json")
+    write_shared_controls([_mk("net1", "2026-08-05T10:00:00", incoming_number="ВХСОП-NET")],
+                          {"network_enabled": True, "network_shared_path": net_path})
+    save_settings({"network_enabled": True, "network_role": "admin",
+                   "network_shared_path": net_path, "notify_log": {}, "notify_sound": True})
+    page2, tab2, _ = build()
+    texts2 = " ".join(str(t.value) for t in walk(tab2) if isinstance(t, ft.Text) and t.value)
+    check("tab: network_enabled — контроль из shared в таблице", "ВХСОП-NET" in texts2)
+    check("tab: индикатор «Сеть: админ»", "Сеть: админ" in texts2)
+
+    # ── 14. подрезка журнала старше 30 дней (задача 2) ──
+    plog = {
+        "c1:new": "2026-07-01",      # 35 дней до 2026-08-05 — подрезать
+        "c2:overdue": "2026-07-31",  # 5 дней — оставить
+        "c3:today": "2026-08-05",    # сегодня — оставить
+        "c4:soon": "bad-date",       # битое значение — подрезать
+    }
+    prune_notify_log(plog, today="2026-08-05")
+    check("prune: записи старше 30 дней удалены", "c1:new" not in plog)
+    check("prune: свежие записи остались",
+          "c2:overdue" in plog and "c3:today" in plog)
+    check("prune: битые значения удалены", "c4:soon" not in plog)
 
     print()
     if FAILURES:

@@ -24,6 +24,12 @@ def create_controls_settings_modal(
         bgcolor=COLORS["card"], color=COLORS["text"],
         keyboard_type=ft.KeyboardType.NUMBER, width=220,
     )
+    sound_check = ft.Checkbox(
+        label="Звук уведомлений",
+        value=bool(settings.get("notify_sound", True)),
+        active_color=COLORS["received"],
+        label_style=ft.TextStyle(size=12, color=COLORS["text"]),
+    )
 
     net_switch = ft.Switch(
         value=bool(settings.get("network_enabled")),
@@ -61,7 +67,7 @@ def create_controls_settings_modal(
         focused_border_color=COLORS["btn_save"],
         bgcolor=COLORS["card"], color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-        expand=True,
+        width=556,
     )
     hint_text = ft.Text(
         "Синхронизация: общий JSON + обновление раз в ~20 сек. "
@@ -152,6 +158,8 @@ def create_controls_settings_modal(
             "network_user": user_dd.value or "",
             "network_shared_path": (path_field.value or "").strip(),
             "custom_initiators": list(settings.get("custom_initiators", []) or []),
+            "notify_sound": bool(sound_check.value),
+            "notify_log": settings.get("notify_log") or {},
         })
         on_apply(merged)
         dialog.open = False
@@ -167,12 +175,14 @@ def create_controls_settings_modal(
         ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         content=ft.Container(
             width=600,
+            height=460,
             content=ft.Column(controls=[
                 ft.Container(
                     content=ft.Column(controls=[
                         ft.Text("Уведомления", size=12, weight=ft.FontWeight.BOLD,
                                 color=COLORS["text"]),
                         soon_field,
+                        sound_check,
                     ], spacing=6, tight=True),
                     bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
                     border_radius=10, padding=ft.padding.all(10),
@@ -208,7 +218,7 @@ def create_controls_settings_modal(
                     bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
                     border_radius=10, padding=ft.padding.all(10),
                 ),
-            ], spacing=10, tight=True),
+            ], spacing=10, scroll=ft.ScrollMode.AUTO),
         ),
         actions=[
             ft.TextButton("Отмена", on_click=_close),

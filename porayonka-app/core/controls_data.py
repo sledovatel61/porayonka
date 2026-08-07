@@ -3,9 +3,9 @@
 import json
 import os
 import shutil
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .controls_models import Control, short_name
 
@@ -24,6 +24,8 @@ DEFAULT_SETTINGS = {
     "network_user": "",          # имя пользователя (по-фамильно), из списка криминалистов
     "network_shared_path": "",   # путь к общей папке/файлу
     "custom_initiators": [],     # список пользовательских инициаторов (v2)
+    "notify_log": {},            # журнал уведомлений: {"<control_id>:<status>": "YYYY-MM-DD"}
+    "notify_sound": True,        # звук уведомлений (winsound.MessageBeep)
 }
 
 # Максимальный размер вложения, при котором показывается предупреждение
@@ -151,6 +153,11 @@ def load_settings() -> dict:
 def save_settings(settings: dict) -> None:
     merged = dict(DEFAULT_SETTINGS)
     merged.update(settings or {})
+    # журнал уведомлений: при сохранении подрезать записи старше 30 дней
+    try:
+        prune_notify_log(merged.setdefault("notify_log", {}))
+    except Exception as e:
+        print(f"[CONTROLS_DATA] notify log prune error: {e}")
     file_path = get_settings_file()
     try:
         with open(file_path, "w", encoding="utf-8") as f:
@@ -158,6 +165,47 @@ def save_settings(settings: dict) -> None:
     except OSError as e:
         print(f"[CONTROLS_DATA] Oshibka sohraneniya settings: {e}")
         raise
+
+
+# ────────────────────────────────────────────────
+# ЖУРНАЛ УВЕДОМЛЕНИЙ (антиспам)
+# ────────────────────────────────────────────────
+
+def _should_notify(log: dict, control_id: str, status: str, today: str) -> bool:
+    """Надо ли уведомлять сейчас (по антиспам-журналу `notify_log`).
+
+    - status == "new": один раз вообще (ключ `<control_id>:new`);
+    - остальные статусы: не чаще одного раза в день на контроль на статус
+      (ключ `<control_id>:<status>`, значение — дата последнего уведомления).
+    """
+    last = (log or {}).get(f"{control_id}:{status}")
+    if status == "new":
+        return last is None
+    return last != today
+
+
+def prune_notify_log(log: dict, today: Optional[str] = None, days: int = 30) -> dict:
+    """Удалить записи журнала уведомлений старше `days` дней.
+
+    Мутирует и возвращает `log`. Битые/неразбираемые значения тоже подрезаются.
+    """
+    if not log:
+        return log
+    try:
+        base = date.fromisoformat(today) if today else date.today()
+        limit = base - timedelta(days=days)
+    except (ValueError, TypeError):
+        return log
+    for key in [k for k in log.keys()]:
+        val = (log.get(key) or "").strip()
+        try:
+            d = date.fromisoformat(val)
+        except (ValueError, TypeError):
+            del log[key]
+            continue
+        if d < limit:
+            del log[key]
+    return log
 
 
 def add_custom_initiator(settings: dict, name: str) -> None:
@@ -376,6 +424,48 @@ def _shared_dir(settings: dict) -> Optional[Path]:
 # ────────────────────────────────────────────────
 # СЕТЕВАЯ СИНХРОНИЗАЦИЯ (SHARED JSON + POLLING)
 # ────────────────────────────────────────────────
+
+def _updated_sort_key(control: Control) -> tuple:
+    """Ключ сравнения updated_at: валидная ISO-строка новее пустого/битого значения."""
+    raw = (control.updated_at or "").strip()
+    if not raw:
+        return (0, "", "")
+    try:
+        return (1, datetime.fromisoformat(raw).timestamp(), raw)
+    except (ValueError, TypeError):
+        return (1, -1, raw)
+
+
+def merge_controls(local: List[Control], shared: List[Control]) -> List[Control]:
+    """Union по id. При конфликте версий одного контроля побеждает более новый updated_at.
+    Контроль, есть только на одной стороне, — сохраняется.
+    Порядок результата: порядок local, новые из shared — в конец (порядок стабилен для UI).
+
+    Сравнение updated_at: ISO-строки сравнимы лексикографически (нормализуются через
+    datetime); пустое/битое значение считается старее.
+
+    Оговорка: контроль, удалённый «навсегда» локально (delete_forever), но живой в
+    shared, воскреснет при merge. Приемлемо — физическое удаление редкая ручная
+    операция админа; tombstones не вводим.
+    """
+    by_id: Dict[str, Control] = {}
+    for c in local:
+        by_id[c.id] = c
+    for c in shared:
+        cur = by_id.get(c.id)
+        if cur is None or _updated_sort_key(c) > _updated_sort_key(cur):
+            by_id[c.id] = c
+    result: List[Control] = []
+    seen = set()
+    for c in local:
+        if c.id in by_id:
+            result.append(by_id[c.id])
+            seen.add(c.id)
+    for c in shared:
+        if c.id not in seen:
+            result.append(by_id[c.id])
+    return result
+
 
 def _parse_shared_path(settings: dict) -> Optional[Path]:
     """Путь к общему файлу. Принимает путь к файлу или к папке."""

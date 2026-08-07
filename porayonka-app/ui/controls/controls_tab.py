@@ -27,6 +27,7 @@ from core.controls_data import (
     copy_attachment_to_local, copy_attachment_to_shared,
     resolve_attachment, delete_attachment, ATTACHMENT_WARN_MB,
     add_custom_initiator,
+    merge_controls, _should_notify,
 )
 from core.controls_exporter import ControlsExcelExporter, import_from_excel
 from .glass_theme import GLASS, with_alpha, glass_panel
@@ -51,6 +52,15 @@ def _safe_update(control):
             control.update()
     except Exception:
         traceback.print_exc()
+
+
+def _play_notify_sound():
+    """Системный звук уведомления (winsound, stdlib). Не Windows / нет схемы — молча."""
+    try:
+        import winsound
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+    except Exception:
+        pass
 
 
 _FIXED = {
@@ -188,6 +198,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         "last_sync": None,
         "network_ok": False,
         "editing": False,
+        "pending_shared": None,          # {controls, mtime} — сетевые изменения при открытой карточке
+        "pending_dialog_shown": False,   # диалог «Данные изменились» показан (1 раз на открытие карточки)
+        "known_ids": set(),              # снимок id для персональных уведомлений (задача 2)
+        "my_status_map": {},             # id -> deadline_status для моих контролей (задача 2)
+        "known_attachments": {},         # id -> tuple(attachments) для синка вложений (задача 5)
     }
 
     rows_column = ft.Column(spacing=6, tight=True)  # Bug 2: gap 6px между плашками
@@ -229,6 +244,20 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         save_controls(controls)
         state["last_sync"] = datetime.now()
         if settings.get("network_enabled") and to_shared:
+            # Задача 1: если кто-то писал в shared, пока мы работали — merge перед записью
+            try:
+                cur_mtime = get_shared_mtime(settings)
+            except Exception:
+                cur_mtime = None
+            if cur_mtime is not None and cur_mtime != state["shared_mtime"]:
+                shared = read_shared_controls(settings)
+                if shared:
+                    merged = merge_controls(controls, shared)
+                    print(f"[CONTROLS_TAB] merge: {len(shared)} controls from shared")
+                    controls = merged
+                    state["controls"] = merged
+                    state["pending_shared"] = None  # сетевые изменения уже применены
+                    _sync_attachments(merged)
             ok = write_shared_controls(controls, settings)
             state["network_ok"] = bool(ok)
             try:
@@ -238,57 +267,107 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _update_sync_ui()
         _refresh_filter_options()
 
+    def _sync_attachments(controls: List[Control]):
+        """Задача 5: подтянуть вложения из shared только для новых/изменившихся списков."""
+        try:
+            ids = {c.id for c in controls}
+            for cid in [k for k in state["known_attachments"] if k not in ids]:
+                del state["known_attachments"][cid]
+            for c in controls:
+                atts = tuple(c.attachments or [])
+                if not atts:
+                    continue
+                if state["known_attachments"].get(c.id) == atts:
+                    continue
+                try:
+                    sync_attachments_from_shared(c.id, c.attachments, settings)
+                except Exception:
+                    print("[CONTROLS_TAB] attachment sync error")
+                state["known_attachments"][c.id] = atts
+        except Exception:
+            traceback.print_exc()
+
     def _load_initial():
+        state["known_attachments"] = {}
         if settings.get("network_enabled"):
             shared = read_shared_controls(settings)
             if shared:
                 state["controls"] = shared
                 state["network_ok"] = True
             else:
+                # shared пуст/не существует — грузим локальные и засеваем shared
                 state["controls"] = load_controls()
-                state["network_ok"] = False
+                try:
+                    ok = write_shared_controls(state["controls"], settings)
+                    state["network_ok"] = bool(ok)
+                    if ok:
+                        print(f"[CONTROLS_TAB] seeded shared with {len(state['controls'])} controls")
+                except Exception:
+                    state["network_ok"] = False
             try:
                 state["shared_mtime"] = get_shared_mtime(settings)
             except Exception:
                 traceback.print_exc()
-            for c in state["controls"]:
-                try:
-                    sync_attachments_from_shared(c.id, c.attachments, settings)
-                except Exception:
-                    traceback.print_exc()
+            _sync_attachments(state["controls"])
         else:
             state["controls"] = load_controls()
+        # снимки для персональных уведомлений (задача 2): текущие контроли считаем «известными»
+        state["known_ids"] = {c.id for c in state["controls"]}
+        state["my_status_map"] = {c.id: deadline_status(c, soon_days) for c in state["controls"]}
         _update_sync_ui()
         _refresh_filter_options()
 
     def _update_sync_ui():
+        # Задача 4: три состояния — «Локально» / «Сеть: роль» / «Сеть: нет связи»
         net = settings.get("network_enabled")
         if not net:
             sync_label.value = "Локально"
             sync_dot.bgcolor = GLASS["text_muted"]
-        else:
+        elif state["network_ok"]:
             role = "админ" if network_role == "admin" else "пользователь"
             sync_label.value = f"Сеть: {role}"
-            sync_dot.bgcolor = GLASS["in_progress"] if state["network_ok"] else GLASS["overdue"]
+            sync_dot.bgcolor = GLASS["in_progress"]
             if state["last_sync"]:
                 sync_label.value += f" · {state['last_sync'].strftime('%H:%M:%S')}"
+        else:
+            sync_label.value = "Сеть: нет связи"
+            sync_dot.bgcolor = GLASS["overdue"]
         try:
             _safe_update(sync_label)
             _safe_update(sync_dot)
         except Exception:
             traceback.print_exc()
 
+    def _mine(c: Control) -> bool:
+        """Контроль пользователя: он исполнитель или ответственный по пункту.
+        Совпадение — точное или по фамилии (подстрока, без учёта регистра),
+        т.к. в данных имена в разных форматах: полное ФИО, «Фамилия И.О.», с суффиксами."""
+        if not network_user:
+            return False
+        if network_user in c.executors:
+            return True
+        for t in c.tasks:
+            if network_user in t.assignees:
+                return True
+        parts = network_user.strip().split()
+        if not parts:
+            return False
+        surname = parts[0].lower()
+        if len(surname) < 3:
+            return False
+        for e in c.executors:
+            if surname in (e or "").lower():
+                return True
+        for t in c.tasks:
+            for a in t.assignees:
+                if surname in (a or "").lower():
+                    return True
+        return False
+
     def _visible_base() -> List[Control]:
         lst = state["controls"]
         if network_role == "user" and network_user:
-            def mine(c: Control) -> bool:
-                if network_user in c.executors:
-                    return True
-                for t in c.tasks:
-                    if network_user in t.assignees:
-                        return True
-                return False
-            lst = [c for c in lst if mine(c)]
+            lst = [c for c in lst if _mine(c)]
         if state["mode"] == "archive":
             lst = [c for c in lst if c.archived]
         else:
@@ -1322,10 +1401,39 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         content=detail_overlay,
     )
 
+    def _apply_pending_on_close():
+        """Задача 3: при закрытии карточки применить накопленные сетевые изменения (merge)."""
+        pending = state["pending_shared"]
+        state["pending_shared"] = None
+        try:
+            if pending is None:
+                return
+            merged = merge_controls(state["controls"], pending["controls"])
+            state["controls"] = merged
+            state["shared_mtime"] = pending["mtime"]
+            state["last_sync"] = datetime.now()
+            state["network_ok"] = True
+            _sync_attachments(merged)
+            _persist(state["controls"])
+            _rebuild_table()
+            _refresh_counters()
+        except Exception:
+            traceback.print_exc()
+
     def _hide_detail(e=None):
         detail_overlay_container.visible = False
         state["editing"] = False
         _close_global_cal()
+        if state["pending_shared"] is not None:
+            _apply_pending_on_close()
+        else:
+            # фон мог поменяться из-за «сети вернулась» при открытой карточке — перестроим
+            try:
+                _rebuild_table()
+                _refresh_counters()
+            except Exception:
+                traceback.print_exc()
+        state["pending_dialog_shown"] = False
         try:
             _safe_update(detail_overlay_container)
         except Exception:
@@ -1334,6 +1442,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _open_detail(ctl: Optional[Control]):
         is_new = ctl is None
         state["editing"] = True
+        state["pending_dialog_shown"] = False
         detail_state["is_new"] = is_new
         detail_state["control_id"] = ctl.id if ctl else str(uuid4())
         detail_state["receive_date"] = (ctl.receive_date if ctl else date.today().isoformat())
@@ -2177,11 +2286,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _open_settings(e=None):
         from .controls_settings_modal import create_controls_settings_modal
         def on_apply_inner(new_settings):
-            nonlocal soon_days
+            nonlocal soon_days, network_role, network_user
             settings.clear()
             settings.update(new_settings)
             save_settings(new_settings)
             soon_days = int(new_settings.get("soon_days", 3) or 3)
+            network_role = new_settings.get("network_role", "admin") or "admin"
+            network_user = new_settings.get("network_user", "") or ""
             initiators.clear()
             initiators.extend(get_initiators(settings))
             try:
@@ -2253,6 +2364,118 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _poll_notifications()
             except Exception as e:
                 print(f"[CONTROLS_TAB] notify error: {e}")
+            try:
+                _check_my_notifications()
+            except Exception as e:
+                print(f"[CONTROLS_TAB] my notify error: {e}")
+
+    def _notify_user(message: str):
+        """Персональное уведомление: звук + toast (вызовы из фонового потока — в try/except)."""
+        if settings.get("notify_sound", True):
+            try:
+                _play_notify_sound()
+            except Exception:
+                pass
+        try:
+            from ui.toast import show_toast
+            show_toast(page, message, icon=ft.icons.NOTIFICATIONS_ACTIVE)
+        except Exception:
+            print("[CONTROLS_TAB] my notification toast error")
+
+    def _show_shared_conflict_dialog():
+        """Задача 3: диалог «Данные на сервере изменились» (1 раз на открытие карточки)."""
+        def _update(e=None):
+            try:
+                page.close(dlg)
+            except Exception:
+                traceback.print_exc()
+            _hide_detail()  # закрыть карточку без сохранения + применить pending_shared
+            try:
+                from ui.toast import show_toast
+                show_toast(page, "Данные обновлены из сети", icon=ft.icons.CLOUD_SYNC)
+            except Exception:
+                traceback.print_exc()
+        def _later(e=None):
+            try:
+                page.close(dlg)
+            except Exception:
+                traceback.print_exc()
+        dlg = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Text("Данные на сервере изменились", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            content=ft.Text("Обновить сейчас? Открытая карточка будет закрыта без сохранения.",
+                            size=12, color=GLASS["text"]),
+            actions=[
+                ft.TextButton("Позже", on_click=_later, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+                ft.ElevatedButton("Обновить", bgcolor=GLASS["accent"], color="#ffffff", on_click=_update),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        try:
+            page.open(dlg)
+        except Exception:
+            print("[CONTROLS_TAB] conflict dialog error")
+
+    def _apply_shared_update(shared: List[Control], mtime: float, toast: bool = True):
+        """Подхват сетевых изменений без открытой карточки (replace + ненавязчивый toast)."""
+        state["controls"] = shared
+        state["shared_mtime"] = mtime
+        state["last_sync"] = datetime.now()
+        state["network_ok"] = True
+        _sync_attachments(shared)
+        try:
+            _update_sync_ui()
+            _rebuild_table()
+            _refresh_counters()
+        except Exception:
+            traceback.print_exc()
+        if toast:
+            try:
+                from ui.toast import show_toast
+                show_toast(page, "Данные обновлены из сети", icon=ft.icons.CLOUD_SYNC)
+            except Exception:
+                print("[CONTROLS_TAB] update toast error")
+
+    def _on_network_back(mtime: float):
+        """Задача 4: сеть вернулась после офлайна — merge (НЕ подмена), локальные правки дороже."""
+        try:
+            shared = read_shared_controls(settings)
+        except Exception:
+            shared = []
+        if not shared:
+            state["shared_mtime"] = mtime
+            state["network_ok"] = True
+            try:
+                _update_sync_ui()
+            except Exception:
+                traceback.print_exc()
+            return
+        merged = merge_controls(state["controls"], shared)
+        print(f"[CONTROLS_TAB] merge: {len(shared)} controls from shared")
+        state["controls"] = merged
+        state["shared_mtime"] = mtime
+        state["last_sync"] = datetime.now()
+        state["network_ok"] = True
+        # отдать свои офлайн-правки обратно в shared
+        try:
+            write_shared_controls(merged, settings)
+        except Exception:
+            print("[CONTROLS_TAB] write shared error after reconnect")
+        _sync_attachments(merged)
+        if not state["editing"]:
+            try:
+                _update_sync_ui()
+                _rebuild_table()
+                _refresh_counters()
+            except Exception:
+                traceback.print_exc()
+        try:
+            from ui.toast import show_toast
+            show_toast(page, "Сеть восстановлена, данные синхронизированы", icon=ft.icons.CLOUD_SYNC)
+        except Exception:
+            print("[CONTROLS_TAB] network back toast error")
 
     def _poll_network():
         if not settings.get("network_enabled"):
@@ -2261,22 +2484,80 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             mtime = get_shared_mtime(settings)
         except Exception:
             mtime = None
-        if mtime is None or mtime == state["shared_mtime"]:
+        if mtime is None:
+            # Задача 4: shared недоступен — красный индикатор
+            if state["network_ok"]:
+                state["network_ok"] = False
+                try:
+                    _update_sync_ui()
+                except Exception:
+                    traceback.print_exc()
+            return
+        if not state["network_ok"]:
+            # сеть вернулась после офлайна
+            try:
+                _on_network_back(mtime)
+            except Exception:
+                traceback.print_exc()
+            return
+        if mtime == state["shared_mtime"]:
             return
         shared = read_shared_controls(settings)
         if not shared:
             return
-        state["controls"] = shared
-        state["shared_mtime"] = mtime
-        state["last_sync"] = datetime.now()
-        state["network_ok"] = True
-        if not state["editing"]:
-            try:
-                _update_sync_ui()
-                _rebuild_table()
-                _refresh_counters()
-            except Exception:
-                traceback.print_exc()
+        if state["editing"]:
+            # Задача 3: карточка открыта — не трогаем state, копим в pending_shared
+            state["pending_shared"] = {"controls": shared, "mtime": mtime}
+            if not state["pending_dialog_shown"]:
+                state["pending_dialog_shown"] = True
+                try:
+                    _show_shared_conflict_dialog()
+                except Exception:
+                    traceback.print_exc()
+            return
+        _apply_shared_update(shared, mtime)
+
+    def _check_my_notifications():
+        """Задача 2: персональные уведомления исполнителю (a — новый контроль, b — срок)."""
+        if not settings.get("network_enabled"):
+            return
+        if network_role != "user" or not network_user:
+            return
+        try:
+            today = date.today().isoformat()
+            log = dict(settings.get("notify_log") or {})
+            known = set(state["known_ids"] or set())
+            changed = False
+            # (a) новый контроль для меня
+            for c in state["controls"]:
+                if c.id in known:
+                    continue
+                if _mine(c) and _should_notify(log, c.id, "new", today):
+                    log[f"{c.id}:new"] = today
+                    changed = True
+                    _notify_user(f"Новый контроль для вас: вх.№ {c.incoming_number or c.id}")
+            # (b) срок по моему контролю (статус изменился + антиспам-журнал)
+            status_map = dict(state["my_status_map"] or {})
+            for c in state["controls"]:
+                if not _mine(c) or c.done:
+                    status_map.pop(c.id, None)
+                    continue
+                st = deadline_status(c, soon_days)
+                prev = status_map.get(c.id)
+                if prev != st and st in (OVERDUE, TODAY, SOON):
+                    if _should_notify(log, c.id, st, today):
+                        label = {OVERDUE: "просрочен", TODAY: "сегодня", SOON: "скоро"}.get(st, st)
+                        log[f"{c.id}:{st}"] = today
+                        changed = True
+                        _notify_user(f"Срок по контролю вх.№ {c.incoming_number or c.id}: {label}")
+                status_map[c.id] = st
+            state["known_ids"] = {c.id for c in state["controls"]}
+            state["my_status_map"] = status_map
+            if changed:
+                settings["notify_log"] = log
+                save_settings(settings)
+        except Exception:
+            traceback.print_exc()
 
     def _poll_notifications():
         base = [c for c in _visible_base() if not c.done]
@@ -2313,7 +2594,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     _prev_resize = getattr(page, "on_resize", None)
     def _combined_resize(e=None):
         _on_page_resize(e)
-        if _prev_resize is not None and _prev_resize is not _combined_resize:
+        # page.on_resize в Flet 0.23.2 возвращает EventHandler, а не функцию — не вызываем напрямую
+        if _prev_resize is not None and callable(_prev_resize) and _prev_resize is not _combined_resize:
             try:
                 _prev_resize(e)
             except Exception:
