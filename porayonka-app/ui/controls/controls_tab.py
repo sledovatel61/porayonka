@@ -180,11 +180,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     settings = load_settings()
     soon_days = int(settings.get("soon_days", 3) or 3)
     available_names = get_criminalist_names()
-    # Раунд 7 (задача 1): фильтр «Исполнители» использует ПОЛНЫЙ канонический
-    # справочник людей — криминалисты + дефолтные контролёры (Потемкин С.А.,
-    # Чашин Э.А. и т.п. в данных стоят исполнителями и не должны попадать в «Прочие»).
-    executor_canonical = get_controller_names()
-    controller_canonical = get_controller_names()     # криминалисты + Потемкин/Чашин (фильтр «Контролёры»)
+    # Раунд 7-8 (задачи 1/1): фильтры «Исполнители»/«Контролёры» используют ПОЛНЫЙ
+    # канонический справочник людей — криминалисты + дефолтные контролёры +
+    # доп. ФИО из настроек (`extra_people`, редактируется в модалке настроек).
+    executor_canonical = get_controller_names(settings)
+    controller_canonical = get_controller_names(settings)
     initiators = get_initiators(settings)
     network_user = settings.get("network_user", "") or ""
     network_role = settings.get("network_role", "admin")
@@ -492,14 +492,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Text part
         text_cont = ft.Container(
             content=ft.Text(lbl, size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True, tooltip="Сортировка"),
-            width=max(20, width-10),
+            width=max(20, width-12),
             padding=ft.padding.only(left=6, right=4),
             alignment=ft.alignment.center if center else ft.alignment.center_left,
             on_click=lambda e, k=key: _sort_by(k),
         )
-        # Drag handle: тянем ПРАВУЮ границу колонки. В update-фазе меняем ширину
-        # контейнера заголовка напрямую (без пересоздания header — иначе drag
-        # обрывается), по завершении — rebuild таблицы + сохранение в настройки.
+        # Раунд 8 (задача 3): у КАЖДОЙ колонки есть хэндл на правой границе.
+        # В update-фазе меняем ширину живого контейнера (без пересоздания header),
+        # по завершении — rebuild таблицы + сохранение. Разделитель 1px + хэндл 7px.
         def _make_drag(k):
             def _on_drag_start(e):
                 pass
@@ -534,7 +534,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     if refs is not None:
                         cell, tcont = refs
                         cell.width = _W[k]
-                        tcont.width = max(20, _W[k] - 10)
+                        tcont.width = max(20, _W[k] - 12)
                         _safe_update(cell)
                 except Exception:
                     traceback.print_exc()
@@ -549,37 +549,37 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             return _on_drag_start, _on_drag_update, _on_drag_end
 
         _ds, _du, _de = _make_drag(key)
+        # Видимый разделитель (1px) + зона захвата (7px) + hover-подсветка #4f8cff
+        sep_bar = ft.Container(width=1, height=30, bgcolor="#26ffffff")
         drag_handle = ft.GestureDetector(
             mouse_cursor=ft.MouseCursor.RESIZE_LEFT_RIGHT,
             on_horizontal_drag_start=_ds,
             on_horizontal_drag_update=_du,
             on_horizontal_drag_end=_de,
             content=ft.Container(
-                width=8,
+                width=7,
                 height=34,
                 bgcolor="transparent",
                 border_radius=2,
             ),
         )
-        # Hover highlight for handle
         def _on_hover(e):
             try:
                 cont = e.control.content
                 if e.data == "true":
-                    cont.bgcolor = with_alpha(GLASS["accent"], "44")
+                    cont.bgcolor = with_alpha(GLASS["accent"], "55")
                 else:
                     cont.bgcolor = "transparent"
                 _safe_update(cont)
             except Exception:
                 traceback.print_exc()
-
         drag_handle.on_hover = _on_hover
 
-        # Combine text + handle in Row tight
+        # Combine: [текст, разделитель, хэндл] — ширина контейнера = width
         cell = ft.Container(
             width=width,
             content=ft.Row(
-                controls=[text_cont, drag_handle],
+                controls=[text_cont, sep_bar, drag_handle],
                 spacing=0,
                 tight=True,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -599,18 +599,20 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _rebuild_header():
         is_archive = state["mode"] == "archive"
+        # Раунд 8: ВСЕ колонки — через _header_cell (drag-хэндл + разделитель),
+        # включая «Содержание», «Исполнители», «За кем», «Статус», «Действия».
         controls = [
             ft.Container(width=_W["bar"]),
             _header_cell("№", _W["num"], "num", center=True),
             _header_cell("вх. №", _W["incoming"], "incoming"),
             _header_cell("Дата пост.", _W["receive"], "receive"),
             _header_cell("Инициатор", _W["initiator"], "initiator"),
-            ft.Container(width=_W["content"], padding=ft.padding.only(left=6, right=4), content=ft.Text("СОДЕРЖАНИЕ", size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
-            ft.Container(width=_W["executors"], padding=ft.padding.only(left=6, right=4), content=ft.Text("ИСПОЛНИТЕЛИ", size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
-            ft.Container(width=_W["controller"], padding=ft.padding.only(left=6, right=4), content=ft.Text("ЗА КЕМ", size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
+            _header_cell("Содержание", _W["content"], "content"),
+            _header_cell("Исполнители", _W["executors"], "executors"),
+            _header_cell("За кем", _W["controller"], "controller"),
             _header_cell("Причина" if is_archive else "Тип", _W["type"], "type"),
             _header_cell("Срок исполн.", _W["due"], "due"),
-            ft.Container(width=_W["status"], padding=ft.padding.only(left=6, right=4), content=ft.Text("СТАТУС", size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True)),
+            _header_cell("Статус", _W["status"], "status"),
             _header_cell("Действия", _W["actions"], "actions", center=True),
         ]
         header_row.content = ft.Row(controls=controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
@@ -653,7 +655,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         content_text = "\n".join(content_lines)
         content_tooltip = content_text
 
-        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0), tooltip=content_tooltip, max_lines=2, color=GLASS["text"], size=13)]
+        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=2, color=GLASS["text"], size=13)]
         if ctl.attachments:
             content_controls.append(ft.Container(
                 content=ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=12, color=GLASS["accent"]), ft.Text(str(len(ctl.attachments)), size=10, color=GLASS["accent"], no_wrap=True)], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -702,17 +704,28 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             tooltip=due_tooltip,
         )
 
+        # Раунд 8 (задача 3): видимые вертикальные разделители между колонками строк
+        _vsep = ft.Container(width=1, height=24, bgcolor="#12ffffff")
         row_controls = [
             ft.Container(width=_W["bar"], height=28, bgcolor=color, border_radius=2),
             _cell(str(num), _W["num"], center=True, color=GLASS["text_secondary"], size=12),
+            _vsep,
             _cell(ctl.incoming_number or "—", _W["incoming"], bold=True, tooltip=ctl.incoming_number, color=GLASS["text"], size=13),
+            _vsep,
             _cell(_display_date(ctl.receive_date), _W["receive"], color=GLASS["text_secondary"], size=12),
+            _vsep,
             _cell(short_name(ctl.initiator) if ctl.initiator else "—", _W["initiator"], tooltip=ctl.initiator, color=GLASS["text"], size=12),
+            _vsep,
             ft.Row(controls=content_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            _vsep,
             _cell(", ".join(short_name(x) for x in ctl.executors) or "—", _W["executors"], tooltip=", ".join(ctl.executors), color=GLASS["text"], size=12, max_lines=2),
+            _vsep,
             _cell(short_name(ctl.controller) if ctl.controller else "—", _W["controller"], tooltip=ctl.controller, color=GLASS["text"], size=12),
+            _vsep,
             type_cell,
+            _vsep,
             due_cell,
+            _vsep,
             ft.Container(
                 content=ft.Row(controls=[
                     ft.Icon(STATUS_ICONS.get(status, ft.icons.REMOVE_CIRCLE_OUTLINE), size=12, color=color),
@@ -721,6 +734,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 width=_W["status"], height=26, border_radius=13, padding=ft.padding.symmetric(horizontal=8),
                 alignment=ft.alignment.center, bgcolor=with_alpha(color, "22"), border=ft.border.all(1, color),
             ),
+            _vsep,
             ft.Row(controls=actions, spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
         ]
 
@@ -738,26 +752,40 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         )
         row.mouse_cursor = ft.MouseCursor.CLICK
 
-        # Раунд 6: hover ВОЗВРАЩЁН и сделан БЫСТРЫМ. Причина лагов раунда 5 — traceback.print_exc()
-        # в горячем обработчике (печать traceback в консоль Windows очень медленная -> «через одну»).
-        # Теперь абсолютный минимум: рамка акцентная #4f8cff + фон чуть светлее #2c3650.
-        # БЕЗ try/except и БЕЗ traceback.print_exc() в этом обработчике (см. AGENTS).
-        # Раунд 7 (задача 6): hover БЕЗ задержек — меняем ТОЛЬКО bgcolor (рамка
-        # статичная), повторные события с тем же состоянием не шлют update.
-        # border не трогаем: смена border + bgcolor увеличивает payload update
-        # и на быстром движении курсора даёт «через одну».
-        def _make_hover(cont, orig_bg):
-            def _hover(e):
-                if e.data == "true":
-                    new_bg = GLASS["hover_bg"]          # #2c3650
-                else:
-                    new_bg = orig_bg
-                if cont.bgcolor == new_bg:
-                    return  # состояние не изменилось — без update
-                cont.bgcolor = new_bg
-                _safe_update(cont)  # молча пропускает немонтированный контрол
-            return _hover
-        row.on_hover = _make_hover(row, GLASS["card"])
+        # Раунд 8 (задача 4): hover без задержек.
+        # Причина лага: page.update(row) на строке с десятками детей сериализует
+        # ВСЁ дерево строки на каждое событие. Решение — hover-подсветка отдельным
+        # верхним слоем (Container внутри строки): меняем только его bgcolor и
+        # шлём update ТОЛЬКО этого лёгкого контрола (1 атрибут, без детей).
+        # Сам row.on_hover не используем — обработчик вешаем на hover-слой.
+        hover_layer = ft.Container(
+            expand=True,
+            bgcolor="transparent",
+            border_radius=10,
+        )
+        row.content = ft.Stack(
+            controls=[
+                ft.Row(controls=row_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                hover_layer,
+            ],
+            expand=True,
+        )
+        row.expand = None  # не растягивать строку — высота по контенту
+        def _hover(e):
+            # горячий обработчик: минимум кода, без try/except и traceback.
+            # update() только лёгкого слоя; немонтированный контрол пропускаем
+            # (headless/инициализация) — без исключений.
+            if e.data == "true":
+                if hover_layer.bgcolor != GLASS["hover_bg"]:
+                    hover_layer.bgcolor = GLASS["hover_bg"]
+                    if hover_layer.page is not None:
+                        hover_layer.update()
+            else:
+                if hover_layer.bgcolor != "transparent":
+                    hover_layer.bgcolor = "transparent"
+                    if hover_layer.page is not None:
+                        hover_layer.update()
+        hover_layer.on_hover = _hover
         return row
 
     def _rebuild_table():
@@ -2354,13 +2382,16 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _open_settings(e=None):
         from .controls_settings_modal import create_controls_settings_modal
         def on_apply_inner(new_settings):
-            nonlocal soon_days, network_role, network_user
+            nonlocal soon_days, network_role, network_user, executor_canonical, controller_canonical
             settings.clear()
             settings.update(new_settings)
             save_settings(new_settings)
             soon_days = int(new_settings.get("soon_days", 3) or 3)
             network_role = new_settings.get("network_role", "admin") or "admin"
             network_user = new_settings.get("network_user", "") or ""
+            # Раунд 8: справочник людей мог измениться — пересобираем каноны фильтров
+            executor_canonical = get_controller_names(settings)
+            controller_canonical = get_controller_names(settings)
             initiators.clear()
             initiators.extend(get_initiators(settings))
             try:
