@@ -141,9 +141,10 @@ def load_settings() -> dict:
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        for k in DEFAULT_SETTINGS:
-            if k in data:
-                settings[k] = data[k]
+        # Раунд 7: сохраняем ВСЕ ключи из файла, включая дополнительные
+        # (например, col_widths — иначе ширины колонок терялись при перезапуске)
+        for k, v in data.items():
+            settings[k] = v
         return settings
     except (json.JSONDecodeError, OSError) as e:
         print(f"[CONTROLS_DATA] Oshibka zagruzki settings: {e}")
@@ -274,6 +275,69 @@ def get_controller_names() -> List[str]:
         seen.add(surname)
         out.append(n)
     return out
+
+
+# ────────────────────────────────────────────────
+# ИНИЦИАТОРЫ: КАНОНИЧЕСКАЯ КЛАСТЕРИЗАЦИЯ (фильтр)
+# ────────────────────────────────────────────────
+
+# Токены-«шум» в хвосте инициатора: не меняют каноническую группу
+_INITIATOR_NOISE = {"ск", "с", "рф", "у", "к"}
+
+
+def _initiator_tokens(raw: str) -> List[str]:
+    """Токены инициатора: casefold, разделители → пробелы, точки убраны."""
+    s = (raw or "").casefold().replace(".", " ").replace("/", " ").replace("-", " ").replace(",", " ")
+    return [t for t in s.split() if t]
+
+
+def canonical_initiator_group(raw: str) -> str:
+    """Каноническая «группа» инициатора (нижний регистр, токены через пробел).
+
+    Схлопывает варианты написания одного инициатора:
+      «ГУК С.», «ГУК СК», «ГУК С.Т.С.А.С.И.Ю.» → «гук»;
+      «СУ/СК», «СУ СК» → «су»;
+      «ГУК ЮФО» остаётся «гук юфо» (не схлопывается в «гук»).
+    Значения, не похожие ни на один известный шаблон, возвращаются как есть
+    (нормализованные) — они становятся собственными канонами фильтра.
+    """
+    rt = _initiator_tokens(raw)
+    if not rt:
+        return ""
+    first = rt[0]
+    tail = rt[1:]
+    # «ГУК …»: хвост из одиночных букв/шумовых токенов → «гук»
+    if first == "гук":
+        if not tail:
+            return "гук"
+        if all(len(t) == 1 or t in _INITIATOR_NOISE for t in tail):
+            return "гук"
+        return " ".join(rt)
+    # «СУ/СК», «СУ СК» → «су»
+    if first == "су" and all(t in ("ск", "с") for t in tail):
+        return "су"
+    # общее правило: первый токен + хвост из одиночных букв → первый токен
+    if tail and all(len(t) == 1 for t in tail):
+        return first
+    return " ".join(rt)
+
+
+def initiator_filter_options(raw_values) -> List[str]:
+    """Канонические опции фильтра «Инициаторы» (заглавными, без дублей, по алфавиту).
+
+    Принимает все исходные значения (дефолтные + custom + distinct из данных),
+    кластеризует их в группы и возвращает display-форму (upper).
+    """
+    groups = {}
+    for v in raw_values or []:
+        g = canonical_initiator_group(v)
+        if not g:
+            continue
+        # display: «гук юфо» → «ГУК ЮФО»
+        display = " ".join(t.upper() for t in g.split())
+        if display not in groups:
+            groups[display] = True
+    return sorted(groups.keys())
 
 
 def get_criminalist_short_names() -> List[str]:

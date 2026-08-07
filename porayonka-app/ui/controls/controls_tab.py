@@ -20,8 +20,8 @@ from core.controls_models import (
 )
 from core.controls_data import (
     load_controls, save_controls, load_settings, save_settings,
-    get_criminalist_names, get_criminalists_only, get_controller_names,
-    get_initiators,
+    get_criminalist_names, get_controller_names,
+    get_initiators, canonical_initiator_group, initiator_filter_options,
     archive_control, restore_control,
     delete_all_attachments,
     read_shared_controls, write_shared_controls, get_shared_mtime,
@@ -180,7 +180,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     settings = load_settings()
     soon_days = int(settings.get("soon_days", 3) or 3)
     available_names = get_criminalist_names()
-    executor_canonical = get_criminalists_only()      # 16 канонических криминалистов (фильтр «Исполнители»)
+    # Раунд 7 (задача 1): фильтр «Исполнители» использует ПОЛНЫЙ канонический
+    # справочник людей — криминалисты + дефолтные контролёры (Потемкин С.А.,
+    # Чашин Э.А. и т.п. в данных стоят исполнителями и не должны попадать в «Прочие»).
+    executor_canonical = get_controller_names()
     controller_canonical = get_controller_names()     # криминалисты + Потемкин/Чашин (фильтр «Контролёры»)
     initiators = get_initiators(settings)
     network_user = settings.get("network_user", "") or ""
@@ -388,10 +391,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 return False
             if state["f_type"] != "all" and ctl.control_type != state["f_type"]:
                 return False
-            # Bug 5: нормализация ФИО (пробелы/ё/регистр)
-            if state["f_initiator"] != "all" and _norm(state["f_initiator"]) != _norm(ctl.initiator):
-                # allow exact normalized match
-                if _norm(state["f_initiator"]) != _norm(ctl.initiator):
+            # Раунд 7 (задача 2): канонический фильтр инициаторов — сравниваем группы
+            if state["f_initiator"] != "all":
+                sel_group = canonical_initiator_group(state["f_initiator"])
+                if not sel_group or canonical_initiator_group(ctl.initiator) != sel_group:
                     return False
             if state["f_controller"] != "all":
                 if state["f_controller"] == FILTER_OTHER:
@@ -480,6 +483,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         padding=ft.padding.symmetric(horizontal=4, vertical=2),
     )
 
+    # Раунд 7 (задача 5): ссылки на контейнеры заголовков для resize без пересоздания
+    header_cell_refs: Dict[str, ft.Container] = {}
+
     def _header_cell(text: str, width: int, key: str, center=False):
         arrow = "▲" if (state["sort_key"]==key and not state["sort_reverse"]) else ("▼" if (state["sort_key"]==key and state["sort_reverse"]) else "")
         lbl = f"{text} {arrow}".strip().upper()
@@ -491,29 +497,31 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             alignment=ft.alignment.center if center else ft.alignment.center_left,
             on_click=lambda e, k=key: _sort_by(k),
         )
-        # Drag handle Bug 2.6: GestureDetector 8px width, hover #4f8cff
+        # Drag handle: тянем ПРАВУЮ границу колонки. В update-фазе меняем ширину
+        # контейнера заголовка напрямую (без пересоздания header — иначе drag
+        # обрывается), по завершении — rebuild таблицы + сохранение в настройки.
         def _make_drag(k):
-            def _on_drag(e):
+            def _on_drag_start(e):
+                pass
+
+            def _on_drag_update(e):
                 try:
-                    # e.delta_x may not exist, try primary_delta or local
                     delta = 0
                     try:
                         delta = int(getattr(e, 'delta_x', 0) or getattr(e, 'primary_delta', 0) or getattr(e, 'dx', 0) or 0)
                     except Exception:
                         delta = 0
-                    # If delta is 0, try to estimate from local? fallback small step
                     if delta == 0:
-                        # no delta info, ignore
                         return
                     old = _W.get(k, width)
                     new = max(60, old + delta)
-                    # Rubber content logic
+                    # Rubber content logic: увеличение фиксированных колонок
+                    # компенсируется сжатием «Содержания» (min 60)
                     if k not in ("content", "executors", "actions"):
                         delta_actual = new - old
                         content_old = _W.get("content", 100)
                         content_new = max(60, content_old - delta_actual)
                         if content_new < 60:
-                            # clamp
                             delta_actual = content_old - 60
                             new = old + delta_actual
                             content_new = 60
@@ -521,16 +529,31 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         _W["content"] = content_new
                     else:
                         _W[k] = new
+                    # применяем ширину к живым контролам заголовка (без rebuild)
+                    refs = header_cell_refs.get(k)
+                    if refs is not None:
+                        cell, tcont = refs
+                        cell.width = _W[k]
+                        tcont.width = max(20, _W[k] - 10)
+                        _safe_update(cell)
+                except Exception:
+                    traceback.print_exc()
+
+            def _on_drag_end(e):
+                try:
                     _rebuild_header()
                     _rebuild_table()
                     _save_col_widths()
                 except Exception:
                     traceback.print_exc()
-            return _on_drag
+            return _on_drag_start, _on_drag_update, _on_drag_end
 
+        _ds, _du, _de = _make_drag(key)
         drag_handle = ft.GestureDetector(
             mouse_cursor=ft.MouseCursor.RESIZE_LEFT_RIGHT,
-            on_horizontal_drag_update=_make_drag(key),
+            on_horizontal_drag_start=_ds,
+            on_horizontal_drag_update=_du,
+            on_horizontal_drag_end=_de,
             content=ft.Container(
                 width=8,
                 height=34,
@@ -553,7 +576,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         drag_handle.on_hover = _on_hover
 
         # Combine text + handle in Row tight
-        return ft.Container(
+        cell = ft.Container(
             width=width,
             content=ft.Row(
                 controls=[text_cont, drag_handle],
@@ -562,6 +585,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         )
+        header_cell_refs[key] = (cell, text_cont)
+        return cell
 
     def _sort_by(key: str):
         if state["sort_key"] == key:
@@ -717,17 +742,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # в горячем обработчике (печать traceback в консоль Windows очень медленная -> «через одну»).
         # Теперь абсолютный минимум: рамка акцентная #4f8cff + фон чуть светлее #2c3650.
         # БЕЗ try/except и БЕЗ traceback.print_exc() в этом обработчике (см. AGENTS).
-        def _make_hover(cont, orig_bg, orig_border):
+        # Раунд 7 (задача 6): hover БЕЗ задержек — меняем ТОЛЬКО bgcolor (рамка
+        # статичная), повторные события с тем же состоянием не шлют update.
+        # border не трогаем: смена border + bgcolor увеличивает payload update
+        # и на быстром движении курсора даёт «через одну».
+        def _make_hover(cont, orig_bg):
             def _hover(e):
                 if e.data == "true":
-                    cont.bgcolor = GLASS["hover_bg"]          # #2c3650
-                    cont.border = ft.border.all(1, GLASS["accent"])  # #4f8cff, 1px та же толщина
+                    new_bg = GLASS["hover_bg"]          # #2c3650
                 else:
-                    cont.bgcolor = orig_bg
-                    cont.border = orig_border
+                    new_bg = orig_bg
+                if cont.bgcolor == new_bg:
+                    return  # состояние не изменилось — без update
+                cont.bgcolor = new_bg
                 _safe_update(cont)  # молча пропускает немонтированный контрол
             return _hover
-        row.on_hover = _make_hover(row, GLASS["card"], ft.border.all(1, GLASS["border"]))
+        row.on_hover = _make_hover(row, GLASS["card"])
         return row
 
     def _rebuild_table():
@@ -791,26 +821,40 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _restyle_counters()
 
     def _refresh_filter_options():
-        # Фильтры «Исполнители»/«Контролёры» — канонический список (криминалисты +
-        # дефолтные контролёры), без мусора из данных; в конце пункт «Прочие».
-        # Инициаторы — без изменений (дефолтные + custom_initiators).
+        # Фильтры «Исполнители»/«Контролёры» — полный канонический список людей
+        # (криминалисты + дефолтные контролёры), без мусора из данных; в конце «Прочие».
+        # Инициаторы — каноническая кластеризация вариантов («ГУК СК» → «ГУК» и т.п.).
         try:
-            real_initiators = sorted({c.initiator for c in state["controls"] if c.initiator} | set(initiators))
+            raw_initiators = {c.initiator for c in state["controls"] if c.initiator} | set(initiators)
+            canon_initiators = initiator_filter_options(raw_initiators)
             executor_filter_dd.options = ([ft.dropdown.Option("all", "Все исполнители")]
                                           + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical]
                                           + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
             controller_filter_dd.options = ([ft.dropdown.Option("all", "Все контролеры")]
                                             + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical]
                                             + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
-            initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in real_initiators]
-            # Задача 5: ранее выбранное значение сохраняем, только если это каноническое
-            # ФИО или «Прочие»; мусорная строка из старых данных — молча сброс на «Все».
+            initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in canon_initiators]
+            # Ранее выбранное значение сохраняем, только если оно каноническое;
+            # мусорная строка из старых данных — молча сброс на «Все».
             if state["f_executor"] not in ("all", FILTER_OTHER) and state["f_executor"] not in executor_canonical:
                 state["f_executor"] = "all"
                 executor_filter_dd.value = "all"
             if state["f_controller"] not in ("all", FILTER_OTHER) and state["f_controller"] not in controller_canonical:
                 state["f_controller"] = "all"
                 controller_filter_dd.value = "all"
+            if state["f_initiator"] != "all":
+                sel_group = canonical_initiator_group(state["f_initiator"])
+                if sel_group:
+                    new_val = " ".join(t.upper() for t in sel_group.split())
+                    if new_val in canon_initiators:
+                        state["f_initiator"] = new_val
+                        initiator_filter_dd.value = new_val
+                    else:
+                        state["f_initiator"] = "all"
+                        initiator_filter_dd.value = "all"
+                else:
+                    state["f_initiator"] = "all"
+                    initiator_filter_dd.value = "all"
             try:
                 _safe_update(executor_filter_dd)
                 _safe_update(controller_filter_dd)
@@ -892,7 +936,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     status_filter_dd = _glass_dropdown("Все статусы", 160, [ft.dropdown.Option("all", "Все статусы"), ft.dropdown.Option(OVERDUE, "Просрочено"), ft.dropdown.Option(TODAY, "Сегодня"), ft.dropdown.Option(SOON, "Скоро"), ft.dropdown.Option(IN_PROGRESS, "В работе"), ft.dropdown.Option(DONE, "Исполнено"), ft.dropdown.Option(COMPLETED, "Завершён")])
     type_filter_dd = _glass_dropdown("Все типы", 140, [ft.dropdown.Option("all", "Все типы"), ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")])
-    initiator_filter_dd = _glass_dropdown("Все инициаторы", 190, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators])
+    initiator_filter_dd = _glass_dropdown("Все инициаторы", 190, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators)])
     executor_filter_dd = _glass_dropdown("Все исполнители", 190, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
     controller_filter_dd = _glass_dropdown("Все контролеры", 190, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
 
@@ -2320,8 +2364,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             initiators.clear()
             initiators.extend(get_initiators(settings))
             try:
-                initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators]
+                initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators)]
                 _safe_update(initiator_filter_dd)
+            except Exception:
+                traceback.print_exc()
+            # «Удалить все» — только админ
+            try:
+                delete_all_btn.visible = (network_role == "admin")
+                _safe_update(delete_all_btn)
             except Exception:
                 traceback.print_exc()
             _update_sync_ui()
@@ -2331,6 +2381,81 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         dialog = create_controls_settings_modal(page, settings, on_apply_inner)
         page.open(dialog)
 
+    def _delete_all(e=None):
+        """Раунд 7 (задача 3): удалить ВСЕ контроли (локально + shared). Только админ."""
+        if network_role != "admin":
+            return
+        confirm_field = _glass_textfield(hint="Введите слово УДАЛИТЬ", width=220)
+        err_text = ft.Text("", size=11, color=GLASS["overdue"])
+        def _check(e=None):
+            ok = ((confirm_field.value or "").strip().upper() == "УДАЛИТЬ")
+            confirm_btn.disabled = not ok
+            err_text.value = "" if ok else "Введите слово УДАЛИТЬ для подтверждения"
+            try:
+                _safe_update(confirm_btn)
+                _safe_update(err_text)
+            except Exception:
+                traceback.print_exc()
+        def _do(e=None):
+            try:
+                if ((confirm_field.value or "").strip().upper() != "УДАЛИТЬ"):
+                    return
+                page.close(dlg)
+                state["controls"] = []
+                save_controls([])
+                if settings.get("network_enabled"):
+                    try:
+                        write_shared_controls([], settings)
+                    except Exception:
+                        print("[CONTROLS_TAB] delete all shared write error")
+                    try:
+                        state["shared_mtime"] = get_shared_mtime(settings)
+                    except Exception:
+                        traceback.print_exc()
+                settings["notify_log"] = {}
+                save_settings(settings)
+                state["known_ids"] = set()
+                state["my_status_map"] = {}
+                state["known_attachments"] = {}
+                state["pending_shared"] = None
+                state["last_overdue"] = -1
+                _rebuild_table()
+                _refresh_counters()
+                _refresh_filter_options()
+                from ui.toast import show_toast
+                show_toast(page, "Все контроли удалены", icon=ft.icons.DELETE_FOREVER)
+            except Exception:
+                traceback.print_exc()
+        def _cancel(e=None):
+            try:
+                page.close(dlg)
+            except Exception:
+                traceback.print_exc()
+        confirm_btn = ft.ElevatedButton("Удалить всё", icon=ft.icons.DELETE_FOREVER, bgcolor=GLASS["overdue"], color="#ffffff", disabled=True, on_click=_do)
+        confirm_field.on_change = _check
+        dlg = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Text("Удаление всех контролей", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            content=ft.Column(controls=[
+                ft.Text("Уверены, что хотите удалить ВСЕ контроли? Это действие нельзя отменить.",
+                        size=12, color=GLASS["text"]),
+                ft.Container(height=4),
+                confirm_field,
+                err_text,
+            ], spacing=6, tight=True),
+            actions=[
+                ft.TextButton("Отмена", on_click=_cancel, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+                confirm_btn,
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        try:
+            page.open(dlg)
+        except Exception:
+            print("[CONTROLS_TAB] delete all dialog error")
+
     def _add_control(e=None):
         _open_detail(None)
 
@@ -2338,6 +2463,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     add_btn = ft.ElevatedButton(text="Добавить контроль", icon=ft.icons.ADD_CIRCLE_OUTLINE, bgcolor=GLASS["accent"], color="#ffffff", height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=16)), on_click=_add_control)
     import_btn = ft.ElevatedButton(text="Импорт Excel", icon=ft.icons.UPLOAD_FILE, bgcolor=GLASS["surface"], color=GLASS["text"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["border"]), padding=ft.padding.symmetric(horizontal=12)), on_click=_import)
     export_btn = ft.ElevatedButton(text="Экспорт Excel", icon=ft.icons.FILE_DOWNLOAD_OUTLINED, bgcolor=GLASS["in_progress"], color=GLASS["surface_solid"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=14)), on_click=_export)
+    delete_all_btn = ft.ElevatedButton(text="Удалить все", icon=ft.icons.DELETE_FOREVER, bgcolor=with_alpha(GLASS["overdue"], "22"), color=GLASS["overdue"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["overdue"]), padding=ft.padding.symmetric(horizontal=12)), on_click=_delete_all, visible=(network_role == "admin"))
     settings_btn = ft.IconButton(icon=ft.icons.SETTINGS_OUTLINED, icon_size=20, icon_color=GLASS["text_secondary"], tooltip="Настройки", style=ft.ButtonStyle(bgcolor=GLASS["surface"], shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["border"])), on_click=_open_settings)
 
     title_content = ft.Row(controls=[
@@ -2346,7 +2472,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         ft.Container(width=10),
         sync_dot, ft.Container(width=4), sync_label,
         ft.Container(expand=True),
-        add_btn, import_btn, export_mode_dd, export_btn, settings_btn,
+        add_btn, import_btn, export_mode_dd, export_btn, delete_all_btn, settings_btn,
     ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
     title_row = glass_panel(content=title_content, height=60, radius=12, padding=ft.padding.symmetric(horizontal=16, vertical=8))
