@@ -803,14 +803,14 @@ def main():
           "П-1" in vis and "П-3" not in vis, f"видно: {sorted(vis)}")
 
     # ── 17. Раунд 7, задача 2: канонические инициаторы ──
-    check("initiator: «ГУК СК» → «гук»", canonical_initiator_group("ГУК СК") == "гук")
-    check("initiator: «ГУК С.» → «гук»", canonical_initiator_group("ГУК С.") == "гук")
-    check("initiator: «ГУК С.Т.С.А.С.И.Ю.» → «гук»",
+    check("initiator: «ГУК СК» -> «гук»", canonical_initiator_group("ГУК СК") == "гук")
+    check("initiator: «ГУК С.» -> «гук»", canonical_initiator_group("ГУК С.") == "гук")
+    check("initiator: «ГУК С.Т.С.А.С.И.Ю.» -> «гук»",
           canonical_initiator_group("ГУК С.Т.С.А.С.И.Ю.") == "гук")
     check("initiator: «ГУК ЮФО» остаётся отдельным",
           canonical_initiator_group("ГУК ЮФО") == "гук юфо")
-    check("initiator: «СУ/СК» → «су»", canonical_initiator_group("СУ/СК") == "су")
-    check("initiator: «СУ СК» → «су»", canonical_initiator_group("СУ СК") == "су")
+    check("initiator: «СУ/СК» -> «су»", canonical_initiator_group("СУ/СК") == "су")
+    check("initiator: «СУ СК» -> «су»", canonical_initiator_group("СУ СК") == "су")
     check("initiator: «СК РФ» сохраняется", canonical_initiator_group("СК РФ") == "ск рф")
     check("initiator: «ОКРИМ» сохраняется", canonical_initiator_group("ОКРИМ") == "окрим")
     opts = initiator_filter_options(["СУ", "ГУК СК", "ГУК ЮФО", "СК РФ", "ПСК", "ГСУ", "ОКРИМ",
