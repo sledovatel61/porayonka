@@ -32,6 +32,19 @@
   * сохранение выбранного значения при refresh: каноническое — сохраняется,
     мусорное — молча сбрасывается на «Все».
 
+Раунд 7 (PROMPT_контроли_доработка7.md):
+  * «Прочие»: Потемкин/Чашин как исполнители НЕ попадают в «Прочие» (полный справочник);
+  * инициаторы: кластеризация «ГУК СК»/«ГУК С.»/«ГУК С.Т.С.А.С.И.Ю.» → «ГУК»,
+    «СУ/СК» → «СУ», фильтрация по канону находит все варианты;
+  * «Удалить все»: диалог со словом-подтверждением, очистка state/файлов/журнала,
+    кнопка только у админа;
+  * экспорт Excel 1:1 с эталоном «Контроли ОКРИМ.xlsx»: заголовок A1:J1, шапка во 2-й
+    строке, ширины/цвета эталона, автофильтр от шапки, даты DD.MM.YYYY, скрытый
+    _controls_full; импорт эталона и round-trip;
+  * resize: drag меняет ширину и сохраняет col_widths в настройки (load_settings
+    теперь возвращает все ключи — раньше col_widths терялся);
+  * hover: bgcolor-only, рамка статична, без исключений.
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -41,6 +54,7 @@ import sys
 import tempfile
 import contextlib
 import traceback
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -56,11 +70,12 @@ from core.controls_data import (  # noqa: E402
     load_settings, save_settings,
     read_shared_controls, write_shared_controls, get_shared_mtime,
     merge_controls, _should_notify, prune_notify_log,
-    get_criminalists_only, get_controller_names,
+    get_controller_names, canonical_initiator_group, initiator_filter_options,
 )
 from core.controls_models import (  # noqa: E402
     Control, OVERDUE, TODAY, name_matches,
 )
+from core.controls_exporter import ControlsExcelExporter, import_from_excel  # noqa: E402
 from ui.controls.controls_tab import create_controls_tab  # noqa: E402
 
 FILTER_OTHER = "__other__"
@@ -265,6 +280,17 @@ def _visible_texts(tab):
     return out
 
 
+def _invoke_event_handler(eh, e):
+    """Вызвать обработчик события Flet напрямую (headless)."""
+    for fn in getattr(eh, "_EventHandler__handlers", {}).keys():
+        try:
+            fn(e)
+        except Exception:
+            traceback.print_exc()
+        return True
+    return False
+
+
 def _save_settings_dialog(page, tab):
     """Открыть настройки и нажать «Сохранить» → on_apply → _load_initial → refresh фильтров."""
     btns = [c for c in walk(tab) if isinstance(c, ft.IconButton)
@@ -415,21 +441,19 @@ def main():
         check("у строк ЕСТЬ on_hover (раунд 6)", len(with_hover) == len(rows), f"{len(with_hover)}/{len(rows)}")
         cur = {getattr(r, "mouse_cursor", None) for r in rows}
         check("курсор CLICK остался", ft.MouseCursor.CLICK in cur)
-        # вызвать on_hover(true) -> border accent #4f8cff, bgcolor hover_bg #2c3650
+        # Раунд 7 (задача 6): hover меняет ТОЛЬКО bgcolor (рамка статичная) —
+        # минимальный payload для мгновенной реакции на быстром движении курсора.
         r = rows[0]
+        base_border = getattr(r, "border", None)
         try:
             r.on_hover(type("E", (), {"data": "true"})())
-            b = getattr(r, "border", None)
-            hover_bg_ok = getattr(r, "bgcolor", None) == "#2c3650"
-            accent_border = False
-            if b is not None:
-                # border.all: bottom side contains the accent color
-                try:
-                    accent_border = getattr(b, "bottom", None) is not None and getattr(b.bottom, "color", None) == "#4f8cff"
-                except Exception:
-                    accent_border = False
-            check("hover: фон #2c3650", hover_bg_ok, f"bg={r.bgcolor}")
-            check("hover: рамка #4f8cff", accent_border)
+            check("hover: фон #2c3650", getattr(r, "bgcolor", None) == "#2c3650", f"bg={r.bgcolor}")
+            check("hover: рамка НЕ меняется (bgcolor-only)",
+                  getattr(r, "border", None) is base_border, "border статична")
+            # повторный enter с тем же состоянием — без исключений
+            r.on_hover(type("E", (), {"data": "true"})())
+            check("hover: повторный enter без исключений",
+                  getattr(r, "bgcolor", None) == "#2c3650")
             # вернуть обратно
             r.on_hover(type("E", (), {"data": "false"})())
             check("hover off: фон вернулся #2a3247", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
@@ -658,8 +682,10 @@ def main():
     check("фильтр-опции: dropdown «Все исполнители» найден", ex is not None)
     if ex:
         opts = [o.key for o in (ex.options or [])]
-        expected = ["all"] + get_criminalists_only() + [FILTER_OTHER]
-        check("фильтр-опции: ровно канонический список + «Прочие»",
+        # Раунд 7 (задача 1): исполнители = ПОЛНЫЙ справочник людей (криминалисты +
+        # дефолтные контролёры), чтобы Потемкин/Чашин не попадали в «Прочие»
+        expected = ["all"] + get_controller_names() + [FILTER_OTHER]
+        check("фильтр-опции: ровно полный канонический список + «Прочие»",
               opts == expected, f"{len(opts)} опций")
         check("фильтр-опции: мусор из данных не попал",
               "Миронович Д.В.-5.1" not in opts
@@ -756,6 +782,178 @@ def main():
           dd is not None and dd.value == "all", f"value={getattr(dd, 'value', None)}")
     vis = _visible_texts(tab)
     check("refresh: после сброса видны все контроли", "Ф-30" in vis and "Ф-31" in vis)
+
+    # ── 16. Раунд 7, задача 1: «Прочие» — без канонических людей (Потемкин/Чашин) ──
+    _seed_raw([
+        _ctrl("p1", "П-1", executors=["Потемкин С.А."]),
+        _ctrl("p2", "П-2", executors=["Чашин Э.А."]),
+        _ctrl("p3", "П-3", executors=["Посторонний А.А."]),
+    ])
+    page, tab, _ = build()
+    check("«Прочие»: выбор применился",
+          _set_filter(tab, "Все исполнители", FILTER_OTHER))
+    vis = _visible_texts(tab)
+    check("«Прочие»: Потемкин/Чашин как исполнители НЕ в «Прочие»",
+          "П-1" not in vis and "П-2" not in vis, f"видно: {sorted(vis)}")
+    check("«Прочие»: посторонний остаётся в «Прочие»", "П-3" in vis)
+    check("«Прочие»: Потемкин С.А. есть в опциях исполнителей",
+          _set_filter(tab, "Все исполнители", "Потемкин С.А."))
+    vis = _visible_texts(tab)
+    check("«Прочие»: фильтр по Потемкину находит его контроль",
+          "П-1" in vis and "П-3" not in vis, f"видно: {sorted(vis)}")
+
+    # ── 17. Раунд 7, задача 2: канонические инициаторы ──
+    check("initiator: «ГУК СК» → «гук»", canonical_initiator_group("ГУК СК") == "гук")
+    check("initiator: «ГУК С.» → «гук»", canonical_initiator_group("ГУК С.") == "гук")
+    check("initiator: «ГУК С.Т.С.А.С.И.Ю.» → «гук»",
+          canonical_initiator_group("ГУК С.Т.С.А.С.И.Ю.") == "гук")
+    check("initiator: «ГУК ЮФО» остаётся отдельным",
+          canonical_initiator_group("ГУК ЮФО") == "гук юфо")
+    check("initiator: «СУ/СК» → «су»", canonical_initiator_group("СУ/СК") == "су")
+    check("initiator: «СУ СК» → «су»", canonical_initiator_group("СУ СК") == "су")
+    check("initiator: «СК РФ» сохраняется", canonical_initiator_group("СК РФ") == "ск рф")
+    check("initiator: «ОКРИМ» сохраняется", canonical_initiator_group("ОКРИМ") == "окрим")
+    opts = initiator_filter_options(["СУ", "ГУК СК", "ГУК ЮФО", "СК РФ", "ПСК", "ГСУ", "ОКРИМ",
+                                     "ГУК С.Т.С.А.С.И.Ю.", "СУ/СК", "МВД"])
+    check("initiator: опции без дублей и мусора",
+          opts == ["ГСУ", "ГУК", "ГУК ЮФО", "МВД", "ОКРИМ", "ПСК", "СК РФ", "СУ"],
+          f"{opts}")
+    # UI: фильтрация по канону находит все варианты
+    d1 = _ctrl("i1", "И-1", controller="Потемкин С.А."); d1["initiator"] = "ГУК СК"
+    d2 = _ctrl("i2", "И-2", controller="Потемкин С.А."); d2["initiator"] = "ГУК С.Т.С.А.С.И.Ю."
+    d3 = _ctrl("i3", "И-3", controller="Потемкин С.А."); d3["initiator"] = "СУ/СК"
+    d4 = _ctrl("i4", "И-4", controller="Потемкин С.А."); d4["initiator"] = "ГУК ЮФО"
+    _seed_raw([d1, d2, d3, d4])
+    page, tab, _ = build()
+    idd = _find_dd(tab, "Все инициаторы")
+    check("initiator: в опциях есть «ГУК», «СУ», «ГУК ЮФО»",
+          idd is not None and "ГУК" in [o.key for o in (idd.options or [])]
+          and "СУ" in [o.key for o in (idd.options or [])]
+          and "ГУК ЮФО" in [o.key for o in (idd.options or [])])
+    check("initiator: «ГУК СК» как опция отсутствует (схлопнут)",
+          idd is not None and "ГУК СК" not in [o.key for o in (idd.options or [])])
+    check("initiator: фильтр «ГУК» применился",
+          _set_filter(tab, "Все инициаторы", "ГУК"))
+    vis = _visible_texts(tab)
+    check("initiator: «ГУК» находит «ГУК СК» и «ГУК С.Т.С.А.С.И.Ю.»",
+          "И-1" in vis and "И-2" in vis, f"видно: {sorted(vis)}")
+    check("initiator: «ГУК» не находит «СУ/СК» и «ГУК ЮФО»",
+          "И-3" not in vis and "И-4" not in vis)
+    check("initiator: фильтр «СУ» применился",
+          _set_filter(tab, "Все инициаторы", "СУ"))
+    vis = _visible_texts(tab)
+    check("initiator: «СУ» находит «СУ/СК»", "И-3" in vis, f"видно: {sorted(vis)}")
+    check("initiator: «СУ» не находит «ГУК …»", "И-1" not in vis and "И-4" not in vis)
+
+    # ── 18. Раунд 7, задача 4: экспорт Excel 1:1 с эталоном ──
+    de1 = _ctrl("e1", "Э-1", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")
+    de1.update({"initiator": "ГУК СК", "due_date": "2020-01-01", "receive_date": "2026-05-26"})
+    de2 = _ctrl("e2", "Э-2", executors=["Ливенский В.О."], controller="Чащин Э.А.")
+    de2.update({"initiator": "СУ", "done": True, "done_date": "2026-06-01",
+                "due_date": "2026-08-10", "receive_date": "2026-06-18"})
+    _seed_raw([de1, de2])
+    page, tab, _ = build()
+    from core.controls_exporter import TABLE_HEADERS, TABLE_WIDTHS, TABLE_TITLE, FULL_SHEET
+    xlsx_path = os.path.join(tempfile.mkdtemp(prefix="porayonka_xlsx_"), "export.xlsx")
+    ControlsExcelExporter().export(load_controls(), xlsx_path, soon_days=3, full=True)
+    from openpyxl import load_workbook
+    wbx = load_workbook(xlsx_path)
+    check("excel: активный лист «Контроли»", "Контроли" in wbx.sheetnames)
+    wsx = wbx["Контроли"]
+    check("excel: A1 = «КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ»", wsx["A1"].value == TABLE_TITLE)
+    check("excel: A1:J1 объединён", "A1:J1" in [str(r) for r in wsx.merged_cells.ranges])
+    check("excel: A1 заливка зелёная FF00B050",
+          wsx["A1"].fill.patternType == "solid" and wsx["A1"].fill.fgColor.rgb == "FF00B050")
+    check("excel: шапка во 2-й строке (вх. № ВХСОП-____-__)",
+          str(wsx["B2"].value).startswith("вх. № ВХСОП"))
+    check("excel: G2 — «За кем контроль (Потёмкин С.А. / Чащин Э.А.)»",
+          "Потёмкин С.А." in str(wsx["G2"].value))
+    check("excel: H2 — «Разовый / постоянный»", "Разовый / постоянный" in str(wsx["H2"].value))
+    check("excel: автофильтр A2:J4 (от шапки до последней строки данных)",
+          wsx.auto_filter.ref == "A2:J4", wsx.auto_filter.ref)
+    check("excel: ширина B = 34.3 как в эталоне",
+          abs((wsx.column_dimensions["B"].width or 0) - 34.3) < 0.2)
+    check("excel: C3 дата поступления — дата Excel (DD.MM.YYYY)",
+          isinstance(wsx["C3"].value, datetime) and wsx["C3"].number_format == "DD.MM.YYYY")
+    check("excel: I3 жёлтая заливка (просрочен)", 
+          wsx["I3"].fill.patternType == "solid" and wsx["I3"].fill.fgColor.rgb == "FFFFFF00")
+    check("excel: J4 зелёная заливка (исполнено)",
+          wsx["J4"].fill.patternType == "solid" and wsx["J4"].fill.fgColor.rgb == "FF00B050")
+    check("excel: скрытый лист _controls_full",
+          FULL_SHEET in wbx.sheetnames and wbx[FULL_SHEET].sheet_state == "hidden")
+    # round-trip: импорт файла с шапкой во 2-й строке
+    parsed, stats = import_from_excel(xlsx_path, [])
+    check("excel: импорт round-trip находит контроли",
+          stats["imported"] == 2 and any(c.incoming_number == "Э-1" for c in parsed),
+          f"imported={stats['imported']}")
+    check("excel: round-trip сохранил done/даты",
+          any(c.incoming_number == "Э-2" and c.done and c.done_date == "2026-06-01" for c in parsed))
+    # импорт самого эталона «Контроли ОКРИМ.xlsx» (шапка во 2-й строке)
+    etalon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                               "Контроли ОКРИМ.xlsx")
+    if os.path.exists(etalon_path):
+        parsed_e, stats_e = import_from_excel(etalon_path, [])
+        check("excel: импорт эталона ОКРИМ находит строки",
+              stats_e["imported"] > 0 and any(c.incoming_number == "4108-26" for c in parsed_e),
+              f"imported={stats_e['imported']}")
+
+    # ── 19. Раунд 7, задача 5: resize колонок (drag → сохранение в настройки) ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True})
+    _seed_raw([_ctrl("r1", "Р-1", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    gds = [c for c in walk(tab) if isinstance(c, ft.GestureDetector)
+           and getattr(c, "on_horizontal_drag_update", None) is not None]
+    check("resize: drag-хэндлы найдены", len(gds) >= 1, f"{len(gds)}")
+    if gds:
+        E = type("E", (), {})
+        _invoke_event_handler(gds[0].on_horizontal_drag_start, E())
+        _invoke_event_handler(gds[0].on_horizontal_drag_update, type("E", (), {"delta_x": 40})())
+        _invoke_event_handler(gds[0].on_horizontal_drag_end, E())
+        saved = load_settings().get("col_widths") or {}
+        check("resize: ширины сохранены в controls_settings.json",
+              len(saved) > 0, f"{saved}")
+        check("resize: значение изменилось относительно стартового",
+              any(v > 60 for v in saved.values()))
+
+    # ── 20. Раунд 7, задача 3: «Удалить все» ──
+    _seed_raw([_ctrl("d1", "Д-1", executors=["Семисенко И.Ю."])])
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {"d1:new": "2026-08-05"},
+                   "notify_sound": True})
+    page, tab, _ = build()
+    check("delete_all: кнопка «Удалить все» есть у админа",
+          any(isinstance(c, ft.ElevatedButton) and getattr(c, "text", None) == "Удалить все"
+              and getattr(c, "visible", True) for c in walk(tab)))
+    dbtns = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+             and getattr(c, "text", None) == "Удалить все"]
+    dbtns[0].on_click(None)
+    check("delete_all: диалог подтверждения открыт", len(page.dialogs) >= 1)
+    dlg = page.dialogs[-1]
+    # без слова подтверждения кнопка неактивна
+    from page_stub import PageStub
+    fields = [c for c in walk(dlg) if isinstance(c, ft.TextField)]
+    confirms = [c for c in getattr(dlg, "actions", []) if isinstance(c, ft.ElevatedButton)
+                and getattr(c, "text", None) == "Удалить всё"]
+    check("delete_all: кнопка «Удалить всё» неактивна до ввода", confirms and confirms[0].disabled)
+    if fields and confirms:
+        fields[0].value = "УДАЛИТЬ"
+        if fields[0].on_change:
+            fields[0].on_change(None)
+        check("delete_all: кнопка активна после ввода «УДАЛИТЬ»", not confirms[0].disabled)
+        confirms[0].on_click(None)
+    check("delete_all: state очищен (таблица пуста)",
+          len(_visible_rows(tab)) == 0)
+    check("delete_all: controls.json пуст", load_controls() == [])
+    check("delete_all: notify_log очищен", not (load_settings().get("notify_log") or {}))
+    # для роли user кнопка скрыта
+    save_settings({"network_enabled": False, "network_role": "user", "network_user": "Семисенко Иван Юрьевич",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True})
+    _seed_raw([_ctrl("d2", "Д-2", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    check("delete_all: у роли user кнопка скрыта",
+          not any(isinstance(c, ft.ElevatedButton) and getattr(c, "text", None) == "Удалить все"
+                  and getattr(c, "visible", True) for c in walk(tab)))
 
     print()
     if FAILURES:

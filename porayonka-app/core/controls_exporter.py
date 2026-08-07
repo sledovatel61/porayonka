@@ -13,12 +13,31 @@ from .controls_models import (
     OVERDUE, TODAY, SOON, COMPLETED,
 )
 
-# Заголовки в формате пользователя (одна строка = один контроль)
+# Заголовки в формате пользователя — 1:1 с эталоном «Контроли ОКРИМ.xlsx»
+# (строка 2 листа «текущее»; строка 1 — объединённый заголовок «КОНТРОЛИ ОТДЕЛА
+# КРИМИНАЛИСТИКИ»). Импорт устойчив к расположению шапки (ищет строку с заголовками).
 TABLE_HEADERS = [
-    "№", "вх. № ВХСОП", "Дата поступления", "Инициатор", "Содержание",
-    "Исполнитель (ФИО)", "За кем контроль", "Разовый/постоянный",
-    "Следующая дата исполнения", "Исполнено + дата",
+    "№",
+    "вх. № ВХСОП-____-__",
+    "Дата поступления",
+    "Инициатор ",
+    "Содержание (если один из нескольких пунктов - указать пункт)",
+    "Исполнитель (ФИО)",
+    "За кем контроль                       (Потёмкин С.А. / Чащин Э.А.)",
+    "Разовый / постоянный ",
+    "Следующая дата исполнения",
+    "Исполнено + дата",
 ]
+
+# Общий заголовок (строка 1, объединённая A1:J1) — как в эталоне
+TABLE_TITLE = "КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ"
+
+# Ширины колонок — как в эталоне (лист «текущее»)
+TABLE_WIDTHS = [10.3, 34.3, 25.6, 19.7, 72.4, 38.1, 36.6, 64.0, 25.1, 30.3]
+
+# Цвета эталона
+ETALON_GREEN = "FF00B050"    # заголовок A1:J1 и «Исполнено + дата»
+ETALON_YELLOW = "FFFFFF00"   # «Следующая дата исполнения» при наступившем/близком сроке
 
 # Имя скрытого листа для полного round-trip
 FULL_SHEET = "_controls_full"
@@ -65,7 +84,7 @@ class ControlsExcelExporter:
         """
         try:
             from openpyxl import Workbook
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.styles import Color, Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
         except ImportError:
             raise ImportError("openpyxl не установлена. pip install openpyxl")
@@ -74,84 +93,84 @@ class ControlsExcelExporter:
         ws = wb.active
         ws.title = "Контроли"
 
-        header_fill = PatternFill("solid", fgColor="1E293B")
-        header_font = Font(bold=True, color="FFFFFF", size=10)
-        yellow_fill = PatternFill("solid", fgColor="FEF9C3")
-        green_fill = PatternFill("solid", fgColor="DCFCE7")
-        gray_fill = PatternFill("solid", fgColor="F1F5F9")
-        thin = Side(style="thin", color="CBD5E1")
+        # Стили — 1:1 с эталоном «Контроли ОКРИМ.xlsx» (лист «текущее»)
+        title_font = Font(name="Times New Roman", size=36)
+        title_fill = PatternFill("solid", fgColor=ETALON_GREEN)
+        # Шапка: theme dk1 (чёрный) с тинтом −25% — как в оригинале
+        header_fill = PatternFill("solid", fgColor=Color(theme=0, tint=-0.249977111117893))
+        header_font = Font(name="Times New Roman", size=14)
+        data_font = Font(name="Times New Roman", size=14)
+        yellow_fill = PatternFill("solid", fgColor=ETALON_YELLOW)
+        green_fill = PatternFill("solid", fgColor=ETALON_GREEN)
+        thin = Side(style="thin")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        center = Alignment(horizontal="center", vertical="center")
+        center_wrap = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        date_fmt = "DD.MM.YYYY"
 
-        widths = [4, 16, 15, 18, 46, 24, 20, 22, 14, 16]
-        for col_i, (h, w) in enumerate(zip(TABLE_HEADERS, widths), 1):
-            c = ws.cell(row=1, column=col_i, value=h)
+        # Строка 1 — объединённый заголовок
+        ws.merge_cells(start_row=1, start_column=1, end_row=1,
+                       end_column=len(TABLE_HEADERS))
+        tc = ws.cell(row=1, column=1, value=TABLE_TITLE)
+        tc.font = title_font
+        tc.fill = title_fill
+        tc.alignment = center
+        ws.row_dimensions[1].height = 45.75
+
+        # Строка 2 — шапка колонок
+        for col_i, (h, w) in enumerate(zip(TABLE_HEADERS, TABLE_WIDTHS), 1):
+            c = ws.cell(row=2, column=col_i, value=h)
             c.fill = header_fill
             c.font = header_font
-            c.alignment = center
+            c.alignment = center_wrap if col_i in (5, 7, 8, 9) else center
             c.border = border
             ws.column_dimensions[get_column_letter(col_i)].width = w
-        ws.row_dimensions[1].height = 24
+        ws.row_dimensions[2].height = 56.25
 
         active = [c for c in controls if not c.archived]
-        st_map = {"overdue": 0, "today": 0, "soon": 0, "in_progress": 0,
-                  "done": 0, "completed": 0}
-        for ctl in active:
-            st_map[deadline_status(ctl, soon_days)] = st_map.get(
-                deadline_status(ctl, soon_days), 0) + 1
-
-        row = 2
-        info = (f"Всего: {len(active)}  |  Просрочено: {st_map['overdue']}  |  "
-                f"Сегодня: {st_map['today']}  |  Скоро: {st_map['soon']}  |  "
-                f"В работе: {st_map['in_progress']}  |  Исполнено: {st_map['done']}")
-        ws.merge_cells(start_row=row, start_column=1, end_row=row,
-                       end_column=len(TABLE_HEADERS))
-        ic = ws.cell(row=row, column=1, value=info)
-        ic.font = Font(bold=True, size=9, color="FFFFFF")
-        ic.fill = PatternFill("solid", fgColor="334155")
-        ic.alignment = Alignment(horizontal="center", vertical="center")
-        ic.border = border
-        ws.row_dimensions[row].height = 18
-        row += 1
-
+        row = 3
         for idx, ctl in enumerate(active, 1):
             st = deadline_status(ctl, soon_days)
             due = effective_due_date(ctl)
+            due_iso = ctl.due_date or (due.isoformat() if due else None)
+            done_txt = _done_text(ctl)
             values = [
                 idx,
-                ctl.incoming_number or "—",
-                _fmt(ctl.receive_date),
-                ctl.initiator or "—",
-                ctl.content or "—",
-                ", ".join(short_name(x) for x in ctl.executors) or "—",
-                short_name(ctl.controller) or "—",
+                ctl.incoming_number or "",
+                ctl.receive_date or "",          # ISO → станет датой Excel
+                ctl.initiator or "",
+                ctl.content or "",
+                ", ".join(short_name(x) for x in ctl.executors),
+                short_name(ctl.controller) if ctl.controller else "",
                 _type_text(ctl),
-                _fmt(ctl.due_date) if ctl.due_date else _fmt(due.isoformat() if due else None),
-                _done_text(ctl),
+                due_iso or "",                   # ISO → станет датой Excel
+                done_txt,
             ]
             for col_i, v in enumerate(values, 1):
                 c = ws.cell(row=row, column=col_i, value=v)
                 c.border = border
-                c.font = Font(size=10, color="334155")
-                c.alignment = center if col_i in (1, 2, 3, 7, 8, 9, 10) else left_wrap
-
-            # Жёлтая заливка «Следующая дата» при наступившем/близком сроке
+                c.font = data_font
+                c.alignment = center_wrap if col_i in (5, 7, 8) else center
+            # Даты — настоящие даты Excel с форматом dd.mm.yyyy (эталон хранит serial)
+            for col_i in (3, 9):
+                d = parse_date(values[col_i - 1])
+                if d:
+                    cell = ws.cell(row=row, column=col_i)
+                    cell.value = datetime(d.year, d.month, d.day)
+                    cell.number_format = date_fmt
+            # Жёлтая заливка «Следующая дата исполнения» при наступившем/близком сроке
             if st in (OVERDUE, TODAY, SOON):
                 ws.cell(row=row, column=9).fill = yellow_fill
-            # Зелёная заливка «Исполнено + дата» при done
+            # Зелёная заливка «Исполнено + дата» при исполнении
             if ctl.done:
                 ws.cell(row=row, column=10).fill = green_fill
-                ws.cell(row=row, column=1).fill = green_fill
-            elif st == COMPLETED:
-                ws.cell(row=row, column=9).fill = gray_fill
 
-            content_lines = max(1, -(-len(ctl.content or "") // 40))
+            content_lines = max(1, -(-len(ctl.content or "") // 46))
+            ws.row_dimensions[row].height = max(24, content_lines * 16 + 8)
             row += 1
-            ws.row_dimensions[row - 1].height = max(20, content_lines * 14 + 6)
 
-        ws.freeze_panes = "A3"
-        ws.auto_filter.ref = f"A1:{get_column_letter(len(TABLE_HEADERS))}{row - 1}"
+        # Автофильтр как в эталоне: от шапки (строка 2) до последней строки данных
+        ws.auto_filter.ref = f"A2:{get_column_letter(len(TABLE_HEADERS))}{max(2, row - 1)}"
         ws.page_setup.orientation = "landscape"
         ws.page_setup.fitToWidth = 1
         ws.page_setup.fitToHeight = 0
@@ -293,7 +312,22 @@ def import_from_excel(
     if not rows:
         return [], stats
 
-    header = rows[0]
+    # Шапка может лежать не в первой строке: раунд 7 — строка 1 объединённый
+    # заголовок «КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ», шапка — строка 2.
+    # Ищем строку с заголовками среди первых 10 непустых строк.
+    def _is_header_row(row):
+        vals = [str(h or "").strip() for h in row]
+        has_in = any(("вх" in v.lower() or "вхсоп" in v.lower() or "иссоп" in v.lower()) for v in vals)
+        has_content = any(("Содерж" in v or "Исполнитель" in v) for v in vals)
+        return has_in and has_content
+
+    header_row_idx = 0
+    for i, row in enumerate(rows[:10]):
+        if _is_header_row(row):
+            header_row_idx = i
+            break
+
+    header = rows[header_row_idx]
     # Ищем индекс колонок по заголовкам (устойчиво к порядку/названию)
     col_idx = {i: None for i in range(len(TABLE_HEADERS))}
     for ci, h in enumerate(header):
@@ -302,7 +336,7 @@ def import_from_excel(
             col_idx[1] = ci
         elif hs == "Дата поступления":
             col_idx[2] = ci
-        elif hs == "Инициатор":
+        elif hs == "Инициатор" or hs == "Инициатор ":
             col_idx[3] = ci
         elif "Содерж" in hs:
             col_idx[4] = ci
@@ -324,7 +358,7 @@ def import_from_excel(
     existing_incoming = {c.incoming_number for c in existing}
     new_controls: List[Control] = []
     errors = 0
-    for ri, row in enumerate(rows[1:], 2):
+    for ri, row in enumerate(rows[header_row_idx + 1:], header_row_idx + 2):
         if all(v is None or str(v).strip() == "" for v in row):
             continue
         incoming_cell = None
@@ -384,9 +418,11 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
 
     # Если есть скрытый лист — берём точные данные оттуда
     if full_by_incoming:
-        ctl = _from_full_row(full_by_incoming.get(incoming), incoming)
-        if ctl is not None:
-            return ctl
+        full_row = full_by_incoming.get(incoming)
+        if full_row:
+            ctl = _from_full_row(full_row, incoming)
+            if ctl is not None:
+                return ctl
 
     receive = parse_excel_date(_get(2))
     initiator = str(_get(3) or "").strip()
