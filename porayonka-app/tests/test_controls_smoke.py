@@ -10,7 +10,7 @@
     (середина остаётся, колонки живы);
   * hover-заливка строк УБРАНА (у строки нет on_hover), остался CLICK-курсор;
   * плашка строки — серый графит #2a3247 (не #1e2a44);
-  * фильтры исполнителей/контролёров из реальных данных (distinct).
+  * фильтры исполнителей/контролёров — канонический список + «Прочие» (без мусора).
 
 Сетевая часть (PROMPT_контроли_сеть.md):
   * merge_controls: union по id, конфликт — новый updated_at, порядок стабилен;
@@ -20,6 +20,17 @@
     merge не теряет локальную правку;
   * вкладка при network_enabled грузит данные из shared и показывает «Сеть: админ»;
   * подрезка журнала: записи старше 30 дней удаляются.
+
+Канонические фильтры (PROMPT_контроли_фильтр_исполнителей.md):
+  * name_matches: полное ФИО vs «Фамилия И.О.», суффиксы, несколько имён в строке,
+    опечатки, чужая фамилия (False), пустые строки (False), фамилия <3 символов (False);
+  * опции фильтров = только канонический список (криминалисты + Потемкин/Чашин) + «Прочие»,
+    без мусора и дублей;
+  * фильтрация находит любые написания («Семисенко И.Ю.», «Семисенко Иван Юрьевич»,
+    «Чашин Э.А., Семисенко И.Ю.», ответственные по пунктам);
+  * «Прочие» находит контроли с людьми вне списка и не находит через криминалистов;
+  * сохранение выбранного значения при refresh: каноническое — сохраняется,
+    мусорное — молча сбрасывается на «Все».
 
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
@@ -45,9 +56,14 @@ from core.controls_data import (  # noqa: E402
     load_settings, save_settings,
     read_shared_controls, write_shared_controls, get_shared_mtime,
     merge_controls, _should_notify, prune_notify_log,
+    get_criminalists_only, get_controller_names,
 )
-from core.controls_models import Control, OVERDUE, TODAY  # noqa: E402
+from core.controls_models import (  # noqa: E402
+    Control, OVERDUE, TODAY, name_matches,
+)
 from ui.controls.controls_tab import create_controls_tab  # noqa: E402
+
+FILTER_OTHER = "__other__"
 
 # Раунд 5: плашка строки — серый графит (было #1e2a44)
 TILE_BG = "#2a3247"
@@ -191,6 +207,88 @@ def panels_of(col_container):
     col = getattr(col_container, "content", col_container)
     controls = getattr(col, "controls", [])
     return [p for p in controls if getattr(p, "content", None) is not None]
+
+
+def _ctrl(id_, incoming, executors=None, controller="Потемкин С.А.", tasks=None):
+    """Компактный контроль для тестов фильтров."""
+    return {
+        "id": id_, "incoming_number": incoming, "receive_date": "2026-08-01",
+        "initiator": "СУ", "content": f"контроль {incoming}", "executors": list(executors or []),
+        "controller": controller, "control_type": "once", "period_days": 7,
+        "due_date": "2026-09-01", "end_date": None, "done": False, "done_date": None,
+        "comment": "", "tasks": tasks or [], "milestones": [], "attachments": [],
+        "archived": False, "archived_at": None, "archive_reason": "",
+        "created_at": "2026-08-01T10:00:00", "updated_at": "2026-08-01T10:00:00",
+    }
+
+
+def _seed_raw(controls):
+    data = {"schema_version": 2, "last_saved": "2026-08-05T12:00:00", "controls": controls}
+    with open(get_controls_file(), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _find_dd(tab, hint):
+    for c in walk(tab):
+        if isinstance(c, ft.Dropdown) and getattr(c, "hint_text", None) == hint:
+            return c
+    return None
+
+
+def _set_filter(tab, hint, value):
+    """Выбрать значение в фильтре-дропдауне и применить (как выбор пользователем)."""
+    dd = _find_dd(tab, hint)
+    if dd is None:
+        return False
+    dd.value = value
+    try:
+        if dd.on_change:
+            dd.on_change(None)
+    except Exception:
+        traceback.print_exc()
+        return False
+    return True
+
+
+def _visible_rows(tab):
+    return [c for c in walk(tab) if isinstance(c, ft.Container)
+            and getattr(c, "bgcolor", None) == TILE_BG and getattr(c, "on_click", None)]
+
+
+def _visible_texts(tab):
+    """Все тексты видимых строк таблицы (для проверки, какие контроли отфильтрованы)."""
+    out = set()
+    for r in _visible_rows(tab):
+        for t in walk(r):
+            if isinstance(t, ft.Text) and t.value:
+                out.add(str(t.value))
+    return out
+
+
+def _save_settings_dialog(page, tab):
+    """Открыть настройки и нажать «Сохранить» → on_apply → _load_initial → refresh фильтров."""
+    btns = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+            and getattr(c, "tooltip", None) == "Настройки"]
+    if not btns:
+        return False
+    try:
+        btns[0].on_click(None)
+    except Exception:
+        traceback.print_exc()
+        return False
+    if not page.dialogs:
+        return False
+    dlg = page.dialogs[-1]
+    save_btns = [c for c in getattr(dlg, "actions", []) if isinstance(c, ft.ElevatedButton)
+                 and getattr(c, "text", None) == "Сохранить"]
+    if not save_btns:
+        return False
+    try:
+        save_btns[0].on_click(None)
+    except Exception:
+        traceback.print_exc()
+        return False
+    return True
 
 
 def main():
@@ -375,7 +473,7 @@ def main():
         check("под сроком видна неисполненная точка", "точка 23.07.2026" in joined,
               "точка 1 под сроком")
 
-    # ── 9. фильтры исполнителей/контролёров из реальных данных ──
+    # ── 9. фильтры исполнителей/контролёров — канонический список (задачи 2–3) ──
     page, tab, _ = build()
     allc = walk(tab)
     hints = {}
@@ -386,15 +484,24 @@ def main():
     check("dropdown «Все исполнители» найден", ex is not None)
     if ex:
         opts = [o.key for o in (ex.options or [])]
-        check("исполнители из реальных данных (distinct)",
-              "Семисенко Иван Юрьевич" in opts and "Чашин Эдуард Анатольевич" in opts,
+        # канонические криминалисты есть, «кривые» написания из данных — НЕ попадают
+        check("исполнители — канонический список (без мусора из данных)",
+              "Семисенко Иван Юрьевич" in opts
+              and "Чашин Эдуард Александрович" in opts
+              and "Чашин Эдуард Анатольевич" not in opts
+              and "Потемкин Сергей Анатольевич" not in opts,
               f"{len(opts)-1} опций")
+        check("исполнители — без дублей", len(opts) == len(set(opts)))
+        check("исполнители — «Прочие» в конце", opts[-1] == FILTER_OTHER)
     ct = hints.get("Все контролеры")
     check("dropdown «Все контролеры» найден", ct is not None)
     if ct:
         opts = [o.key for o in (ct.options or [])]
-        check("контролёры из реальных данных (distinct)", "Потемкин С.А." in opts,
+        check("контролёры — канонический список (криминалисты + Потемкин/Чашин)",
+              "Потемкин С.А." in opts and "Семисенко Иван Юрьевич" in opts,
               f"{len(opts)-1} опций")
+        check("контролёры — без дублей", len(opts) == len(set(opts)))
+        check("контролёры — «Прочие» в конце", opts[-1] == FILTER_OTHER)
 
     # ── 10. merge_controls: union по id, конфликт, порядок (задача 1) ──
     def _mk(id_, updated, **kw):
@@ -499,6 +606,148 @@ def main():
     check("prune: свежие записи остались",
           "c2:overdue" in plog and "c3:today" in plog)
     check("prune: битые значения удалены", "c4:soon" not in plog)
+
+    # ── 15. канонические фильтры исполнителей/контролёров (PROMPT_контроли_фильтр_исполнителей.md) ──
+    # сбросить сеть, чтобы вкладка читала локальный controls.json
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True})
+
+    # 15а. name_matches
+    check("name_matches: полное ФИО vs «Фамилия И.О.»",
+          name_matches("Семисенко Иван Юрьевич", "Семисенко И.Ю.") is True)
+    check("name_matches: «Фамилия И.О.-5.1» (суффикс)",
+          name_matches("Семисенко Иван Юрьевич", "Семисенко И.Ю.-5.1") is True)
+    check("name_matches: несколько имён в строке (фамилия не первое слово)",
+          name_matches("Семисенко Иван Юрьевич", "Чашин Э.А., Семисенко И.Ю.") is True)
+    check("name_matches: опечатка в имени, фамилия верная",
+          name_matches("Семисенко Иван Юрьевич", "Семисенко Иван Юриевич") is True)
+    check("name_matches: регистр не важен",
+          name_matches("Семисенко Иван Юрьевич", "семисенко и.ю.") is True)
+    check("name_matches: чужая фамилия — False",
+          name_matches("Семисенко Иван Юрьевич", "Гайнутдинов С.И.") is False)
+    check("name_matches: пустая строка — False",
+          name_matches("Семисенко Иван Юрьевич", "") is False)
+    check("name_matches: None — False",
+          name_matches("Семисенко Иван Юрьевич", None) is False)
+    check("name_matches: пустой canonical — False",
+          name_matches("", "Семисенко И.Ю.") is False)
+    check("name_matches: фамилия <3 символов — False",
+          name_matches("Ян И.В.", "Ян Петрович") is False)
+    check("name_matches: короткая форма vs полное ФИО (контролёр)",
+          name_matches("Потемкин С.А.", "Потемкин Сергей Анатольевич") is True)
+
+    # 15б. опции фильтров — только канонический список + «Прочие»
+    _seed_raw([
+        _ctrl("o1", "О-1", executors=["Миронович Д.В.-5.1"]),
+        _ctrl("o2", "О-2", executors=["Гайнутдинов С.И.Т.С.А.С.И.Ю."]),
+        _ctrl("o3", "О-3", executors=[" Авакян А.А. "]),
+        _ctrl("o4", "О-4", executors=["Авакян  А.А."]),
+        _ctrl("o5", "О-5", executors=["Чашин Э.А., Семисенко И.Ю."]),
+        _ctrl("o6", "О-6", executors=["Посторонний А.А."]),
+    ])
+    page, tab, _ = build()
+    ex = _find_dd(tab, "Все исполнители")
+    check("фильтр-опции: dropdown «Все исполнители» найден", ex is not None)
+    if ex:
+        opts = [o.key for o in (ex.options or [])]
+        expected = ["all"] + get_criminalists_only() + [FILTER_OTHER]
+        check("фильтр-опции: ровно канонический список + «Прочие»",
+              opts == expected, f"{len(opts)} опций")
+        check("фильтр-опции: мусор из данных не попал",
+              "Миронович Д.В.-5.1" not in opts
+              and "Т.С.А" not in "".join(opts)
+              and "Авакян А.А." not in opts
+              and "Посторонний А.А." not in opts)
+    ct = _find_dd(tab, "Все контролеры")
+    check("фильтр-опции: dropdown «Все контролеры» найден", ct is not None)
+    if ct:
+        opts = [o.key for o in (ct.options or [])]
+        expected = ["all"] + get_controller_names() + [FILTER_OTHER]
+        check("фильтр-опции контролёров: криминалисты + Потемкин/Чашин (без дублей)",
+              opts == expected, f"{len(opts)} опций")
+        check("фильтр-опции контролёров: Чашин Э.А. дедуплицирован",
+              "Чашин Э.А." not in opts and "Чашин Эдуард Александрович" in opts)
+
+    # 15в. фильтрация находит любые написания (включая ответственных по пунктам)
+    _seed_raw([
+        _ctrl("fA", "Ф-1", executors=["Семисенко И.Ю."]),
+        _ctrl("fB", "Ф-2", executors=["Семисенко Иван Юрьевич"]),
+        _ctrl("fC", "Ф-3", executors=["Чашин Э.А., Семисенко И.Ю."]),
+        _ctrl("fD", "Ф-4", executors=["Гайнутдинов С.И."]),
+        _ctrl("fE", "Ф-5", tasks=[{"id": "t1", "title": "п.1", "assignees": ["Миронович Д.В.-5.1"],
+                                   "due_date": None, "is_done": False, "done_date": None, "comment": ""}]),
+    ])
+    page, tab, _ = build()
+    check("фильтрация: выбор канонического ФИО применился",
+          _set_filter(tab, "Все исполнители", "Семисенко Иван Юрьевич"))
+    vis = _visible_texts(tab)
+    check("фильтрация: найдены «Семисенко И.Ю.» и «Семисенко Иван Юрьевич»",
+          "Ф-1" in vis and "Ф-2" in vis, f"видно: {sorted(vis)}")
+    check("фильтрация: найден «Чашин Э.А., Семисенко И.Ю.»", "Ф-3" in vis)
+    check("фильтрация: чужие контроли скрыты", "Ф-4" not in vis and "Ф-5" not in vis)
+    check("фильтрация: выбор по фамилии с суффиксом (ответственный пункта)",
+          _set_filter(tab, "Все исполнители", "Миронович Дмитрий Владимирович"))
+    vis = _visible_texts(tab)
+    check("фильтрация: найден контроль по assignees пункта",
+          "Ф-5" in vis and not any(x in vis for x in ("Ф-1", "Ф-2", "Ф-3", "Ф-4")),
+          f"видно: {sorted(vis)}")
+
+    # 15г. «Прочие» — контроли с людьми вне списка
+    _seed_raw([
+        _ctrl("fX", "Ф-10", executors=["Посторонний А.А."]),
+        _ctrl("fY", "Ф-11", executors=["Семисенко Иван Юрьевич"]),
+    ])
+    page, tab, _ = build()
+    check("«Прочие»: выбор применился",
+          _set_filter(tab, "Все исполнители", FILTER_OTHER))
+    vis = _visible_texts(tab)
+    check("«Прочие»: контроль с посторонним найден", "Ф-10" in vis, f"видно: {sorted(vis)}")
+    check("«Прочие»: контроль криминалиста скрыт", "Ф-11" not in vis)
+    check("«Прочие»: через криминалиста посторонний не находится",
+          _set_filter(tab, "Все исполнители", "Семисенко Иван Юрьевич"))
+    vis = _visible_texts(tab)
+    check("«Прочие»: через криминалиста виден только его контроль",
+          "Ф-11" in vis and "Ф-10" not in vis)
+
+    # 15д. контролёры — фамильное совпадение
+    _seed_raw([
+        _ctrl("fG", "Ф-20", controller="Потемкин Сергей"),
+        _ctrl("fH", "Ф-21", controller="Чашин Эдуард Александрович"),
+    ])
+    page, tab, _ = build()
+    check("контролёры: фильтр по «Потемкин С.А.» применился",
+          _set_filter(tab, "Все контролеры", "Потемкин С.А."))
+    vis = _visible_texts(tab)
+    check("контролёры: найден «Потемкин Сергей» (кривое написание)",
+          "Ф-20" in vis, f"видно: {sorted(vis)}")
+    check("контролёры: чужой контролёр скрыт", "Ф-21" not in vis)
+
+    # 15е. сохранение выбранного значения при refresh фильтров (задача 5)
+    _seed_raw([
+        _ctrl("fZ", "Ф-30", executors=["Семисенко И.Ю."]),
+        _ctrl("fW", "Ф-31", executors=["Гайнутдинов С.И."]),
+    ])
+    page, tab, _ = build()
+    check("refresh: канонический фильтр выбран",
+          _set_filter(tab, "Все исполнители", "Семисенко Иван Юрьевич"))
+    ok_save = _save_settings_dialog(page, tab)
+    check("refresh: сохранение настроек прошло", ok_save)
+    dd = _find_dd(tab, "Все исполнители")
+    check("refresh: каноническое значение сохранилось",
+          dd is not None and dd.value == "Семисенко Иван Юрьевич")
+    vis = _visible_texts(tab)
+    check("refresh: фильтр продолжает работать после refresh",
+          "Ф-30" in vis and "Ф-31" not in vis, f"видно: {sorted(vis)}")
+    # мусорное значение из старых данных — молча сбрасывается на «Все»
+    dd.value = "Миронович Д.В.-5.1"
+    if dd.on_change:
+        dd.on_change(None)
+    _save_settings_dialog(page, tab)
+    dd = _find_dd(tab, "Все исполнители")
+    check("refresh: мусорное значение сброшено на «Все»",
+          dd is not None and dd.value == "all", f"value={getattr(dd, 'value', None)}")
+    vis = _visible_texts(tab)
+    check("refresh: после сброса видны все контроли", "Ф-30" in vis and "Ф-31" in vis)
 
     print()
     if FAILURES:

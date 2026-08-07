@@ -64,6 +64,26 @@ def short_names(names: List[str]) -> List[str]:
     return [short_name(n) for n in names]
 
 
+def name_matches(canonical_name: str, raw: str) -> bool:
+    """True, если `raw` (строка из данных, возможно кривая) относится к человеку
+    `canonical_name` (полное ФИО). Правила:
+    - точное совпадение строк (после strip) — True;
+    - фамилия (первое слово canonical) встречается в raw как подстрока
+      (case-insensitive) — True;
+    - иначе False. Фамилия короче 3 символов не матчится (защита от мусора).
+    """
+    canon = (canonical_name or "").strip()
+    raw_s = (raw or "").strip()
+    if not canon or not raw_s:
+        return False
+    if canon.casefold() == raw_s.casefold():
+        return True
+    surname = canon.split()[0] if canon.split() else ""
+    if len(surname) < 3:
+        return False
+    return surname.casefold() in raw_s.casefold()
+
+
 @dataclass
 class ControlTask:
     """Пункт задания внутри контроля (п.1, п.2, ...)."""

@@ -13,13 +13,15 @@ import flet as ft
 from core.controls_models import (
     Control, ControlTask, ControlMilestone, PERIODIC, ONE_TIME,
     effective_due_date, deadline_status, parse_date, short_name,
+    name_matches,
     STATUS_LABELS,
     OVERDUE, TODAY, SOON, IN_PROGRESS, DONE, COMPLETED, NO_DATE,
     ARCHIVE_DONE, ARCHIVE_DELETED,
 )
 from core.controls_data import (
     load_controls, save_controls, load_settings, save_settings,
-    get_criminalist_names, get_initiators,
+    get_criminalist_names, get_criminalists_only, get_controller_names,
+    get_initiators,
     archive_control, restore_control,
     delete_all_attachments,
     read_shared_controls, write_shared_controls, get_shared_mtime,
@@ -29,6 +31,8 @@ from core.controls_data import (
     add_custom_initiator,
     merge_controls, _should_notify,
 )
+
+FILTER_OTHER = "__other__"  # пункт «Прочие» в фильтрах исполнителей/контролёров
 from core.controls_exporter import ControlsExcelExporter, import_from_excel
 from .glass_theme import GLASS, with_alpha, glass_panel
 from .russian_calendar import create_russian_date_field, create_russian_calendar_expanded
@@ -176,6 +180,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     settings = load_settings()
     soon_days = int(settings.get("soon_days", 3) or 3)
     available_names = get_criminalist_names()
+    executor_canonical = get_criminalists_only()      # 16 канонических криминалистов (фильтр «Исполнители»)
+    controller_canonical = get_controller_names()     # криминалисты + Потемкин/Чашин (фильтр «Контролёры»)
     initiators = get_initiators(settings)
     network_user = settings.get("network_user", "") or ""
     network_role = settings.get("network_role", "admin")
@@ -340,14 +346,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _mine(c: Control) -> bool:
         """Контроль пользователя: он исполнитель или ответственный по пункту.
-        Совпадение — точное или по фамилии (подстрока, без учёта регистра),
-        т.к. в данных имена в разных форматах: полное ФИО, «Фамилия И.О.», с суффиксами."""
-        if not network_user:
-            return False
-        if network_user in c.executors:
+        Фамильное сопоставление через общий хелпер name_matches()."""
+        if any(name_matches(network_user, ex) for ex in c.executors):
             return True
         for t in c.tasks:
-            if network_user in t.assignees:
+            if any(name_matches(network_user, a) for a in t.assignees):
                 return True
         parts = network_user.strip().split()
         if not parts:
@@ -391,11 +394,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if _norm(state["f_initiator"]) != _norm(ctl.initiator):
                     return False
             if state["f_controller"] != "all":
-                if not any(_norm(state["f_controller"]) == _norm(c) for c in [ctl.controller]):
+                if state["f_controller"] == FILTER_OTHER:
+                    # «Прочие»: контролёр не матчится ни с одним каноническим
+                    if any(name_matches(cn, ctl.controller) for cn in controller_canonical):
+                        return False
+                elif not name_matches(state["f_controller"], ctl.controller):
                     return False
             if state["f_executor"] != "all":
-                norm_filter = _norm(state["f_executor"])
-                if not any(_norm(ex) == norm_filter for ex in ctl.executors):
+                names = list(ctl.executors)
+                for t in ctl.tasks:
+                    names.extend(t.assignees)
+                if state["f_executor"] == FILTER_OTHER:
+                    # «Прочие»: ни один исполнитель/ответственный не матчится с каноническими
+                    if any(name_matches(cn, nm) for cn in executor_canonical for nm in names if nm):
+                        return False
+                elif not any(name_matches(state["f_executor"], nm) for nm in names):
                     return False
             if state["f_from"]:
                 dd = effective_due_date(ctl)
@@ -778,15 +791,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _restyle_counters()
 
     def _refresh_filter_options():
-        # Bug 2.2 & 2.3: options from real data, not справочник
+        # Фильтры «Исполнители»/«Контролёры» — канонический список (криминалисты +
+        # дефолтные контролёры), без мусора из данных; в конце пункт «Прочие».
+        # Инициаторы — без изменений (дефолтные + custom_initiators).
         try:
-            real_executors = sorted({e for c in state["controls"] for e in c.executors if e})
-            real_controllers = sorted({c.controller for c in state["controls"] if c.controller})
-            # initiators = distinct from data + custom from settings
             real_initiators = sorted({c.initiator for c in state["controls"] if c.initiator} | set(initiators))
-            executor_filter_dd.options = [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in real_executors]
-            controller_filter_dd.options = [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in real_controllers]
+            executor_filter_dd.options = ([ft.dropdown.Option("all", "Все исполнители")]
+                                          + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical]
+                                          + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
+            controller_filter_dd.options = ([ft.dropdown.Option("all", "Все контролеры")]
+                                            + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical]
+                                            + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
             initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in real_initiators]
+            # Задача 5: ранее выбранное значение сохраняем, только если это каноническое
+            # ФИО или «Прочие»; мусорная строка из старых данных — молча сброс на «Все».
+            if state["f_executor"] not in ("all", FILTER_OTHER) and state["f_executor"] not in executor_canonical:
+                state["f_executor"] = "all"
+                executor_filter_dd.value = "all"
+            if state["f_controller"] not in ("all", FILTER_OTHER) and state["f_controller"] not in controller_canonical:
+                state["f_controller"] = "all"
+                controller_filter_dd.value = "all"
             try:
                 _safe_update(executor_filter_dd)
                 _safe_update(controller_filter_dd)
@@ -869,8 +893,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     status_filter_dd = _glass_dropdown("Все статусы", 160, [ft.dropdown.Option("all", "Все статусы"), ft.dropdown.Option(OVERDUE, "Просрочено"), ft.dropdown.Option(TODAY, "Сегодня"), ft.dropdown.Option(SOON, "Скоро"), ft.dropdown.Option(IN_PROGRESS, "В работе"), ft.dropdown.Option(DONE, "Исполнено"), ft.dropdown.Option(COMPLETED, "Завершён")])
     type_filter_dd = _glass_dropdown("Все типы", 140, [ft.dropdown.Option("all", "Все типы"), ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")])
     initiator_filter_dd = _glass_dropdown("Все инициаторы", 190, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiators])
-    executor_filter_dd = _glass_dropdown("Все исполнители", 190, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
-    controller_filter_dd = _glass_dropdown("Все контролеры", 190, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in available_names])
+    executor_filter_dd = _glass_dropdown("Все исполнители", 190, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
+    controller_filter_dd = _glass_dropdown("Все контролеры", 190, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
 
     def _on_filter_change(e=None):
         state["f_status"] = status_filter_dd.value or "all"

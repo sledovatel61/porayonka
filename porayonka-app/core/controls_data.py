@@ -251,6 +251,31 @@ def get_criminalist_names() -> List[str]:
         return list(DEFAULT_CONTROLLERS)
 
 
+def get_criminalists_only() -> List[str]:
+    """Канонический список криминалистов (полные ФИО), без дефолтных контролёров.
+    Отсортирован по фамилии."""
+    try:
+        from .zonal_data import load_criminalists
+        names = [c.full_name for c in load_criminalists() if c.full_name]
+    except Exception:
+        names = []
+    return sorted(names, key=lambda n: (n.split()[0].casefold() if n.strip() else "", n.casefold()))
+
+
+def get_controller_names() -> List[str]:
+    """Канонический список контролёров: криминалисты + дефолтные контролёры
+    (Потемкин С.А., Чашин Э.А.), без дублей по фамилии. Отсортирован по фамилии."""
+    out = []
+    seen = set()
+    for n in get_criminalists_only() + list(DEFAULT_CONTROLLERS):
+        surname = (n.strip().split()[0] if n.strip() else "").casefold()
+        if not surname or surname in seen:
+            continue
+        seen.add(surname)
+        out.append(n)
+    return out
+
+
 def get_criminalist_short_names() -> List[str]:
     """Сокращённые ФИО криминалистов («Семисенко И.Ю.»)."""
     return [short_name(n) for n in get_criminalist_names()]
