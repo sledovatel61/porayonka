@@ -1,6 +1,7 @@
 # core/controls_models.py
 # Модели данных для вкладки «Контроли» (schema v2)
 # Формат дат в моделях — строка ISO «YYYY-MM-DD» для простоты сериализации.
+import difflib
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, date
@@ -64,12 +65,34 @@ def short_names(names: List[str]) -> List[str]:
     return [short_name(n) for n in names]
 
 
+def _word_similarity(a: str, b: str) -> float:
+    """Быстрое приближение степени похожести слов (0..1)."""
+    a = a.casefold()
+    b = b.casefold()
+    if not a or not b:
+        return 0.0
+    # расстояние Левенштейна, оптимизированное для коротких строк
+    if abs(len(a) - len(b)) > max(len(a), len(b)) // 2:
+        return 0.0
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cost = 0 if ca == cb else 1
+            cur.append(min(cur[-1] + 1, prev[j] + 1, prev[j - 1] + cost))
+        prev = cur
+    dist = prev[-1]
+    return 1.0 - dist / max(len(a), len(b))
+
+
 def name_matches(canonical_name: str, raw: str) -> bool:
     """True, если `raw` (строка из данных, возможно кривая) относится к человеку
     `canonical_name` (полное ФИО). Правила:
     - точное совпадение строк (после strip) — True;
     - фамилия (первое слово canonical) встречается в raw как подстрока
       (case-insensitive) — True;
+    - фамилия похожа на одно из слов raw с коэффициентом >= 0.80
+      (ловим опечатки вроде «Семисеннко», «Гайнутдинов» с лишней буквой);
     - иначе False. Фамилия короче 3 символов не матчится (защита от мусора).
     """
     canon = (canonical_name or "").strip()
@@ -81,7 +104,14 @@ def name_matches(canonical_name: str, raw: str) -> bool:
     surname = canon.split()[0] if canon.split() else ""
     if len(surname) < 3:
         return False
-    return surname.casefold() in raw_s.casefold()
+    if surname.casefold() in raw_s.casefold():
+        return True
+    # Fuzzy: сравниваем фамилию с каждым словом raw, убирая пунктуацию
+    for w in raw_s.replace(",", " ").replace(";", " ").split():
+        w = w.strip(".-")
+        if len(w) >= 3 and _word_similarity(surname, w) >= 0.80:
+            return True
+    return False
 
 
 @dataclass
