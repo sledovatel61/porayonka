@@ -74,6 +74,18 @@
   * карточка: clip_behavior=HARD_EDGE — скругление по всем 4 углам;
   * предпросмотр: ~90% ширины и ~85% высоты окна, изображение масштабируется.
 
+Раунд 11 (PROMPT_контроли_доработка11.md):
+  * hover: глобальный state["hover_row"] — подсвечена ТОЛЬКО одна строка,
+    предыдущая сбрасывается сразу при наведении на другую;
+  * дефолтные ширины (_FIXED) подобраны так, что при 1280 px таблица
+    помещается целиком без горизонтального скролла;
+  * справочники: модалка растягивается за угол (resize-хэндл), списки —
+    ft.ListView (построчный скролл колесом);
+  * карточка: «За кем контроль» заполняется из данных строки по фамилии
+    (Чащин Э.А. → Чашин Эдуард Александрович);
+  * прикрепление: файл сразу виден в списке вложений + attachments
+    сохраняются в controls.json без сохранения карточки.
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -1295,6 +1307,92 @@ def main():
         if bodies:
             check("preview10: ширина >= 90% окна (1280 -> >= 1000)",
                   bodies[0].width >= 1000, f"w={bodies[0].width}")
+
+    # ── 34. Раунд 11, задача 1: hover — только ОДНА строка ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("h11a", "Х11-1", executors=["Семисенко И.Ю."]),
+               _ctrl("h11b", "Х11-2", executors=["Гайнутдинов С.И."])])
+    page, tab, _ = build()
+    rows11 = _visible_rows(tab)
+    check("hover11: две строки", len(rows11) >= 2, f"{len(rows11)}")
+    if len(rows11) >= 2:
+        r1, r2 = rows11[0], rows11[1]
+        r1.on_hover(type("E", (), {"data": "true"})())
+        check("hover11: первая подсвечена", getattr(r1, "bgcolor", None) == "#2c3650")
+        check("hover11: вторая не подсвечена", getattr(r2, "bgcolor", None) == TILE_BG)
+        # наведение на вторую — первая СРАЗУ сбрасывается
+        r2.on_hover(type("E", (), {"data": "true"})())
+        check("hover11: вторая подсвечена", getattr(r2, "bgcolor", None) == "#2c3650")
+        check("hover11: первая сброшена (одна строка)", getattr(r1, "bgcolor", None) == TILE_BG, f"bg={r1.bgcolor}")
+        r2.on_hover(type("E", (), {"data": "false"})())
+        check("hover11: выход — вторая сброшена", getattr(r2, "bgcolor", None) == TILE_BG)
+
+    # ── 35. Раунд 11, задача 2: дефолтные ширины помещаются в 1280 ──
+    from ui.controls.controls_tab import _FIXED, _TAB_HORIZONTAL_PADDING, _ROW_EXTRA
+    fixed_sum = sum(_FIXED.values())
+    total = fixed_sum + 265  # flex при width=1280
+    check("widths11: сумма ширин <= 1280-отступы",
+          fixed_sum + 265 + _ROW_EXTRA + _TAB_HORIZONTAL_PADDING <= 1280,
+          f"fixed={fixed_sum}, total={total}")
+    # проверить фактический _W при page.width=1280
+    page, tab, _ = build(width=1280)
+    dds = [c for c in walk(tab) if isinstance(c, ft.Dropdown)]
+    check("widths11: вкладка строится при 1280 без ошибок", len(dds) >= 1)
+
+    # ── 36. Раунд 11, задача 3: справочники — resize-хэндл + ListView ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "custom_initiators": []})
+    _seed_raw([_ctrl("r11", "Р-11", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    ref_btns11 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                  and getattr(c, "text", None) == "Справочники"]
+    ref_btns11[0].on_click(None)
+    dlg11 = page.dialogs[-1]
+    pans11 = [c for c in walk(dlg11) if isinstance(c, ft.GestureDetector)
+              and len(getattr(getattr(c, "on_pan_update", None), "_EventHandler__handlers", {})) > 0]
+    check("refs11: resize-хэндл есть", len(pans11) >= 1, f"{len(pans11)}")
+    lvs = [c for c in walk(dlg11) if isinstance(c, ft.ListView)]
+    check("refs11: списки — ListView (построчный скролл)", len(lvs) >= 2, f"{len(lvs)}")
+
+    # ── 37. Раунд 11, задача 4: «За кем контроль» из данных строки ──
+    _seed_raw([_ctrl("c11", "К-11", executors=["Семисенко И.Ю."], controller="Чащин Э.А.")])
+    page, tab, _ = build()
+    _open_card(tab, via_add=False)
+    allc11 = walk(tab)
+    ctrls = [c for c in allc11 if isinstance(c, ft.Dropdown)
+             and getattr(c, "hint_text", None) == "За кем контроль"]
+    check("card11: dropdown «За кем контроль» найден", len(ctrls) >= 1)
+    if ctrls:
+        check("card11: значение заполнено по фамилии (Чащин → Чашин)",
+              getattr(ctrls[0], "value", None) == "Чашин Эдуард Александрович",
+              f"value={getattr(ctrls[0], 'value', None)}")
+
+    # ── 38. Раунд 11, задача 5: прикрепление сразу видно ──
+    _seed_raw([_ctrl("a11", "А-11", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    _open_card(tab, via_add=False)
+    # имитация выбора файла в FilePicker
+    tmp_file = os.path.join(tempfile.mkdtemp(prefix="attach_"), "doc.png")
+    with open(tmp_file, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+    pickers = [getattr(page, "_controls_attach_picker", None)] if hasattr(page, "_controls_attach_picker") else []
+    check("attach11: FilePicker есть", len(pickers) >= 1)
+    if pickers:
+        class _F:
+            path = tmp_file
+            name = "doc.png"
+        _invoke_event_handler(pickers[0].on_result, type("E", (), {"files": [_F()]}))
+        texts11 = [t.value for t in walk(tab) if isinstance(t, ft.Text) and t.value]
+        joined11 = " ".join(str(x) for x in texts11)
+        check("attach11: имя файла сразу в списке вложений", "doc.png" in joined11, joined11[:120])
+        # и attachments сохранились в controls.json
+        saved11 = load_controls()
+        check("attach11: attachments сохранены в controls.json",
+              any(any("doc.png" in (a or "") for a in (c.attachments or [])) for c in saved11),
+              f"{[c.attachments for c in saved11]}")
 
     print()
     if FAILURES:
