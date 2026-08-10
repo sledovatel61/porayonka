@@ -86,6 +86,19 @@
     открытии + страховка в обработчике; сеть недоступна — локальное копирование;
     copy_* с пустым control_id возвращают None без TypeError.
 
+Раунд 14 (PROMPT_контроли_доработка14.md):
+  * hover ВОЗВРАЩЁН и мгновенный: enter — фон #2c3650 + акцентная рамка #4f8cff,
+    единая активная строка (предыдущая гасится при enter новой — без «хвостов»),
+    on_hover только на Container строки (не на вложенных контролах), календари
+    без hover; курсор CLICK сохранён;
+  * таблица шире (фикс-колонки крупнее, кегль 12–13, spacing 1, padding 6), но
+    сумма <= 1240 при 1280; кламп сохранённых col_widths и лимиты flex сохранены;
+  * справочники — overlay-Container (НЕ AlertDialog) с resize за правый нижний
+    угол; колесо в списках листает 2 строки за щелчок (on_scroll + scroll_to);
+    правки записей раунда 13 сохранены;
+  * карточка: равномерная рамка border.all + radius 16 + HARD_EDGE (углы не
+    прозрачные).
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -359,6 +372,21 @@ def _save_settings_dialog(page, tab):
     return True
 
 
+def _refs_overlay_of(tab):
+    """Раунд 14: overlay-Container справочников (видимый, с заголовком «Справочники»)."""
+    for c in walk(tab):
+        if isinstance(c, ft.Container) and getattr(c, "bgcolor", None) == "#cc04070f" \
+                and getattr(c, "visible", False):
+            if any(isinstance(t, ft.Text) and t.value == "Справочники" for t in walk(c)):
+                return c
+    return None
+
+
+def _refs_apply_of(dlg):
+    return [c for c in walk(dlg) if isinstance(c, ft.ElevatedButton)
+            and getattr(c, "text", None) == "Применить"]
+
+
 def main():
     _seed_controls()
 
@@ -472,20 +500,34 @@ def main():
             check("точка добавлена (поле точки в правой колонке)", len(fields) >= 1,
                   f"{len(fields)} полей")
 
-    # ── 7. Раунд 13 (задача 1): hover строк УБРАН полностью, курсор CLICK остался ──
+    # ── 7. Раунд 14 (задача 1): hover МГНОВЕННЫЙ — рамка+фон, без «хвостов» ──
     page, tab, _ = build()
     allc = walk(tab)
     rows = [c for c in allc if isinstance(c, ft.Container)
             and getattr(c, "bgcolor", None) == TILE_BG and getattr(c, "on_click", None)]
     check("в таблице есть строки", len(rows) >= 1, f"{len(rows)} строк")
-    if rows:
+    if len(rows) >= 2:
         cur = {getattr(r, "mouse_cursor", None) for r in rows}
-        check("курсор CLICK остался", ft.MouseCursor.CLICK in cur)
-        # Раунд 13: on_hover нет вовсе => update() не дёргается => лаг невозможен
-        check("hover13: у строк нет on_hover",
-              all(getattr(r, "on_hover", None) is None for r in rows))
-        check("hover13: фон строк статичен #2a3247",
-              all(getattr(r, "bgcolor", None) == TILE_BG for r in rows))
+        check("hover14: курсор CLICK остался", ft.MouseCursor.CLICK in cur)
+        check("hover14: on_hover на строках возвращён",
+              all(getattr(r, "on_hover", None) is not None for r in rows))
+        r1, r2 = rows[0], rows[1]
+        r1.on_hover(type("E", (), {"data": "true"})())
+        check("hover14: enter — фон #2c3650", getattr(r1, "bgcolor", None) == "#2c3650",
+              f"bg={r1.bgcolor}")
+        check("hover14: enter — акцентная рамка #4f8cff",
+              getattr(r1.border, "top", None) is not None and r1.border.top.color == "#4f8cff",
+              f"border={r1.border}")
+        # enter ДРУГОЙ строки — первая гасится СРАЗУ (хвосты исключены)
+        r2.on_hover(type("E", (), {"data": "true"})())
+        check("hover14: нет хвостов — предыдущая погашена при enter новой",
+              getattr(r1, "bgcolor", None) == TILE_BG
+              and getattr(r1.border, "top", None) is not None
+              and r1.border.top.color == "#0dffffff",
+              f"r1.bg={r1.bgcolor}")
+        check("hover14: новая строка подсвечена", getattr(r2, "bgcolor", None) == "#2c3650")
+        r2.on_hover(type("E", (), {"data": "false"})())
+        check("hover14: leave — строка возвращена", getattr(r2, "bgcolor", None) == TILE_BG)
 
     # ── 8. плашка строки — серый графит ──
     page, tab, _ = build()
@@ -1055,17 +1097,17 @@ def main():
     saved = load_settings().get("col_widths") or {}
     check("resize: drag «Содержания» сохранил ширину", len(saved) > 0, f"{saved}")
 
-    # ── 24. Раунд 13: hover отсутствует на строках, календарях и хэндлах таблицы ──
+    # ── 24. Раунд 14: hover только на строках; календари и хэндлы — без hover ──
     page, tab, _ = build()
     rows8 = _visible_rows(tab)
-    check("hover13: строки есть", len(rows8) >= 1)
+    check("hover14: строки есть", len(rows8) >= 1)
     if rows8:
-        check("hover13: строки без on_hover",
-              all(getattr(r8, "on_hover", None) is None for r8 in rows8))
-    # ячейки календарей (фильтр-календарь собирается при init) — тоже без hover
+        check("hover14: на каждой строке on_hover (мгновенная подсветка)",
+              all(getattr(r8, "on_hover", None) is not None for r8 in rows8))
+    # ячейки календарей (фильтр-календарь собирается при init) — без hover-update
     cal_cells = [c for c in walk(tab) if isinstance(c, ft.Container)
                  and getattr(c, "width", None) == 34 and getattr(c, "height", None) == 32]
-    check("hover13: ячейки календарей без on_hover",
+    check("hover14: ячейки календарей без on_hover",
           all(getattr(c, "on_hover", None) is None for c in cal_cells),
           f"{len(cal_cells)} ячеек")
 
@@ -1080,8 +1122,10 @@ def main():
     check("refs: кнопка «Справочники» в тулбаре", len(ref_btns) == 1)
     if ref_btns:
         ref_btns[0].on_click(None)
-        check("refs: модалка открыта", len(page.dialogs) >= 1)
-        dlg = page.dialogs[-1]
+        # Раунд 14: overlay-Container, НЕ AlertDialog
+        check("refs14: справочники — не AlertDialog", len(page.dialogs) == 0)
+        dlg = _refs_overlay_of(tab)
+        check("refs: overlay открыт", dlg is not None)
         fields = [c for c in walk(dlg) if isinstance(c, ft.TextField)]
         add_btns = [c for c in walk(dlg) if isinstance(c, ft.ElevatedButton)
                     and getattr(c, "text", None) == "Добавить"]
@@ -1099,8 +1143,7 @@ def main():
             check("refs: custom_initiators пополнен",
                   "МВД" in (load_settings().get("custom_initiators") or []))
             # применить
-            apply_btns = [c for c in getattr(dlg, "actions", []) if isinstance(c, ft.ElevatedButton)
-                          and getattr(c, "text", None) == "Применить"]
+            apply_btns = _refs_apply_of(dlg)
             if apply_btns:
                 apply_btns[0].on_click(None)
             ex = _find_dd(tab, "Все исполнители")
@@ -1186,17 +1229,21 @@ def main():
                   not any(getattr(c, "visible", False) for c in walk(tab)
                           if getattr(c, "bgcolor", None) == "#e604070f"))
 
-    # ── 29. Раунд 13, задача 1: hover отсутствует или не использует update() ──
+    # ── 29. Раунд 14, задача 1: hover только на Container строки, не на вложенных ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("h1", "Х-1", executors=["Семисенко И.Ю."])])
     page, tab, _ = build()
     rows10 = _visible_rows(tab)
-    check("hover13: строки есть", len(rows10) >= 1)
+    check("hover14: строки есть", len(rows10) >= 1)
     if rows10:
-        check("hover13: on_hover у строк отсутствует (тормоза исключены)",
-              all(getattr(r10, "on_hover", None) is None for r10 in rows10))
+        check("hover14: on_hover установлен на каждой строке",
+              all(getattr(r10, "on_hover", None) is not None for r10 in rows10))
+        nested = [c for r in rows10 for c in walk(r)
+                  if c is not r and getattr(c, "on_hover", None) is not None]
+        check("hover14: на вложенных контролах строки on_hover НЕТ", not nested,
+              f"{len(nested)} вложенных")
 
     # ── 30. Раунд 10, задача 2: «Действия» прижаты к правому краю ──
     page, tab, _ = build()
@@ -1215,7 +1262,8 @@ def main():
     ref_btns10 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
                   and getattr(c, "text", None) == "Справочники"]
     ref_btns10[0].on_click(None)
-    dlg10 = page.dialogs[-1]
+    dlg10 = _refs_overlay_of(tab)
+    check("refs10: overlay справочников открыт", dlg10 is not None)
     edit_icons = [c for c in walk(dlg10) if isinstance(c, ft.IconButton)
                   and getattr(c, "tooltip", None) == "Переименовать"]
     check("refs10: иконки «Переименовать» есть", len(edit_icons) >= 1, f"{len(edit_icons)}")
@@ -1262,6 +1310,12 @@ def main():
               getattr(card10, "clip_behavior", None) == ft.ClipBehavior.HARD_EDGE,
               f"clip={getattr(card10, 'clip_behavior', None)}")
         check("card10: border_radius > 0", (getattr(card10, "border_radius", 0) or 0) > 0)
+        # Раунд 14 (задача 4): равномерная рамка (без border.only с разной толщиной)
+        b10 = getattr(card10, "border", None)
+        check("card14: рамка равномерная border.all (углы не прозрачные)",
+              b10 is not None
+              and b10.top.color == b10.left.color == b10.right.color == b10.bottom.color,
+              f"border={b10}")
 
     # ── 33. Раунд 10, задача 5: предпросмотр занимает ~90% окна ──
     att_dir10 = os.path.join(os.environ["APPDATA"], "porayonka", "controls_attachments", "c10")
@@ -1303,9 +1357,19 @@ def main():
                 and len(getattr(c.content, "controls", []) or []) >= 20]
         return hdrs[0].content if hdrs else None
 
+    def _ctrl_w(c_):
+        w_ = getattr(c_, "width", None)
+        if w_:
+            return w_
+        if isinstance(c_, ft.Row):  # вложенная колонка «Содержание» (+вложения)
+            t_ = sum(_ctrl_w(x_) for x_ in c_.controls)
+            t_ += (c_.spacing or 0) * (len(c_.controls) - 1)
+            return t_
+        return 0
+
     def _row_total(row_, extra_padding):
         ctrls = row_.controls
-        tot = sum((getattr(c, "width", 0) or 0) for c in ctrls)
+        tot = sum(_ctrl_w(c) for c in ctrls)
         tot += (row_.spacing or 0) * (len(ctrls) - 1)
         return tot + extra_padding
 
@@ -1313,12 +1377,12 @@ def main():
     hdr = _header_row_of(tab)
     check("width13: заголовок таблицы найден", hdr is not None)
     if hdr:
-        tot_h = _row_total(hdr, 16)  # padding заголовка 8*2
+        tot_h = _row_total(hdr, 12)  # padding заголовка 6*2 (раунд 14)
         check("width13: заголовок + отступы <= 1240 при 1280", tot_h <= 1240, f"sum={tot_h}")
     rows_w = _visible_rows(tab)
     check("width13: строки есть", len(rows_w) >= 1)
     if rows_w:
-        tot_r = _row_total(rows_w[0].content, 16 + 2)  # padding 8*2 + рамка 2
+        tot_r = _row_total(rows_w[0].content, 12 + 2)  # padding 6*2 + рамка 2 (раунд 14)
         check("width13: строка + отступы <= 1240 при 1280", tot_r <= 1240, f"sum={tot_r}")
     # раздутые сохранённые ширины (как после ручного resize) клампятся
     st_w = load_settings()
@@ -1329,14 +1393,17 @@ def main():
     page, tab, _ = build(1280)
     hdr = _header_row_of(tab)
     if hdr:
-        tot_h2 = _row_total(hdr, 16)
+        tot_h2 = _row_total(hdr, 12)
         check("width13: раздутые col_widths из settings ужаты <= 1240",
               tot_h2 <= 1240, f"sum={tot_h2}")
     rows_w2 = _visible_rows(tab)
     if rows_w2:
-        tot_r2 = _row_total(rows_w2[0].content, 18)
+        tot_r2 = _row_total(rows_w2[0].content, 14)
         check("width13: строка с раздутыми col_widths <= 1240", tot_r2 <= 1240, f"sum={tot_r2}")
-    # широкий экран: гибкие колонки не раздуваются
+    # широкий экран: гибкие колонки не раздуваются (col_widths сбрасываем)
+    st_w = load_settings()
+    st_w.pop("col_widths", None)
+    save_settings(st_w)
     page, tab, _ = build(1920)
     hdr = _header_row_of(tab)
     if hdr:
@@ -1347,7 +1414,7 @@ def main():
         exec_w = getattr(ctrls[11], "width", 0) or 0
         check("width13: при 1920 «Содержание» <= 480", content_w <= 480, f"w={content_w}")
         check("width13: при 1920 «Исполнители» <= 220", exec_w <= 220, f"w={exec_w}")
-        tot_h3 = _row_total(hdr, 16)
+        tot_h3 = _row_total(hdr, 12)
         check("width13: при 1920 сумма <= доступной (1880)", tot_h3 <= 1880, f"sum={tot_h3}")
 
     # ── 35. Раунд 13, задача 3: редактирование БАЗОВОЙ записи справочника сохраняется ──
@@ -1363,7 +1430,8 @@ def main():
                   and getattr(c, "text", None) == "Справочники"]
     check("ref13: кнопка «Справочники» есть", len(ref_btns13) == 1)
     ref_btns13[0].on_click(None)
-    dlg13 = page.dialogs[-1]
+    dlg13 = _refs_overlay_of(tab)
+    check("ref13: overlay справочников открыт", dlg13 is not None)
     # компактные строки: кнопки 26px, spacing списков 2
     ref_lists = [c for c in walk(dlg13) if isinstance(c, ft.Column)
                  and getattr(c, "height", None) == 180]
@@ -1404,8 +1472,7 @@ def main():
             texts13 = {t.value for t in walk(dlg13) if isinstance(t, ft.Text)}
             check("ref13: список перестроен с новым именем",
                   (base_name + "!!!") in texts13 and base_name not in texts13)
-    apply13 = [c for c in getattr(dlg13, "actions", []) if isinstance(c, ft.ElevatedButton)
-               and getattr(c, "text", None) == "Применить"]
+    apply13 = _refs_apply_of(dlg13)
     apply13[0].on_click(None)
     ex13 = _find_dd(tab, "Все исполнители")
     opts13 = [o.key for o in (ex13.options or [])]
@@ -1416,7 +1483,7 @@ def main():
     ref_btns13 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
                   and getattr(c, "text", None) == "Справочники"]
     ref_btns13[0].on_click(None)
-    dlg13b = page.dialogs[-1]
+    dlg13b = _refs_overlay_of(tab)
     init_rows = [c for c in walk(dlg13b) if isinstance(c, ft.Container)
                  and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
                  and any(isinstance(t, ft.Text) and t.value == "ГУК" for t in walk(c))]
@@ -1436,8 +1503,7 @@ def main():
             check("ref13: переименование кластера сохранено в init_renames (json)",
                   (st_i.get("init_renames") or {}).get("ГУК") == "ГУК РОСТОВ",
                   f"{st_i.get('init_renames')}")
-        apply_i = [c for c in getattr(dlg13b, "actions", []) if isinstance(c, ft.ElevatedButton)
-                   and getattr(c, "text", None) == "Применить"]
+        apply_i = _refs_apply_of(dlg13b)
         apply_i[0].on_click(None)
         idd13 = _find_dd(tab, "Все инициаторы")
         iopts = [o.key for o in (idd13.options or [])]
@@ -1548,6 +1614,53 @@ def main():
           ok_bad and rel_bad is None)
     rel_loc = copy_attachment_to_local("cid13", src13)
     check("attach13: локальный фолбэк скопировал файл", rel_loc is not None)
+
+    # ── 38. Раунд 14, задача 3: справочники — overlay с resize и построчным скроллом ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "custom_initiators": [],
+                   "hidden_people": [], "hidden_init_groups": [], "init_renames": {}})
+    _seed_raw([_ctrl("r14", "Р-14", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")])
+    page, tab, _ = build()
+    refb14 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Справочники"]
+    refb14[0].on_click(None)
+    check("refs14: не AlertDialog (overlay-Container)", len(page.dialogs) == 0)
+    ovl14 = _refs_overlay_of(tab)
+    check("refs14: overlay видим", ovl14 is not None)
+    if ovl14:
+        stacks14 = [c for c in walk(ovl14) if isinstance(c, ft.Stack)]
+        gds14 = [c for c in walk(ovl14) if isinstance(c, ft.GestureDetector)
+                 and getattr(c, "on_pan_update", None) is not None]
+        check("refs14: resize-хэндл в правом нижнем углу", len(gds14) >= 1, f"{len(gds14)}")
+        if gds14 and stacks14:
+            rcard = stacks14[0].controls[0]
+            w0, h0 = rcard.width, rcard.height
+            _invoke_event_handler(gds14[0].on_pan_update,
+                                  type("E", (), {"delta_x": 60, "delta_y": 40})())
+            check("refs14: resize растягивает окно",
+                  rcard.width == w0 + 60 and rcard.height == h0 + 40,
+                  f"w={rcard.width} h={rcard.height}")
+            check("refs14: рамка overlay-карточки равномерная + скругление",
+                  rcard.border.top.color == rcard.border.left.color
+                  and (rcard.border_radius or 0) > 0)
+        lists14 = [c for c in walk(ovl14) if isinstance(c, ft.Column)
+                   and getattr(c, "height", None) == 180]
+        check("refs14: у списков on_scroll (построчная прокрутка)",
+              len(lists14) >= 2 and all(getattr(c, "on_scroll", None) is not None for c in lists14),
+              f"{len(lists14)} списков")
+        if lists14:
+            # щелчок колеса (delta=100) => шаг 2 строки (64 px): offset = 500-(100-64)
+            _invoke_event_handler(lists14[0].on_scroll,
+                                  type("E", (), {"delta": 100.0, "pixels": 500.0})())
+            last = getattr(lists14[0], "_row_scroll_last", None)
+            check("refs14: колесо прокручивает на 2 строки, а не на 100px",
+                  last == 464.0, f"last={last}")
+            # обратное направление: d=-100, px=400 => off = 400-(-100+64) = 436
+            _invoke_event_handler(lists14[1].on_scroll,
+                                  type("E", (), {"delta": -100.0, "pixels": 400.0})())
+            last2 = getattr(lists14[1], "_row_scroll_last", None)
+            check("refs14: колесо вверх — шаг 2 строки", last2 == 436.0, f"last2={last2}")
 
     print()
     if FAILURES:
