@@ -69,41 +69,15 @@ def _quiet_update(control):
         pass
 
 
-def _make_row_scroller(col, row_h=32):
-    """Раунд 14 (задача 3): колесо мыши листает 1–2 строки за щелчок.
-
-    Нативный delta колеса (~100 px) компенсируется до фиксированного шага
-    (2 строки) через scroll_to(offset=...) — «перехват on_scroll и ручная
-    прокрутка на небольшое значение». Короткая блокировка игнорирует on_scroll,
-    порождённые собственным программным скроллом. Без print/traceback.
-    """
-    st = {"lock": 0.0}
-    step = float(row_h) * 2
-
-    def _on_scroll(e):
-        now = time.time()
-        if now < st["lock"]:
-            return
-        try:
-            d = float(getattr(e, "delta", 0.0) or 0.0)
-            px = float(getattr(e, "pixels", 0.0) or 0.0)
-        except Exception:
-            return
-        if not d:
-            return
-        s = step if d > 0 else -step
-        corr = d - s
-        if abs(corr) < 1.0:
-            return
-        off = max(0.0, px - corr)
-        col._row_scroll_last = off  # фиксируем для headless-тестов
-        st["lock"] = now + 0.15
-        try:
-            col.scroll_to(offset=off, duration=0)
-        except Exception:
-            pass
-
-    return _on_scroll
+# Раунд 16 (задача 2): _make_row_scroller УДАЛЁН полностью. Причина ошибок
+# KeyError: 'sd'/'dir' в консоли (лог design/screenshots/10.08.2026/лог_раунд15.txt):
+# OnScrollEvent в flet_core 0.23.2 (scrollable_control.py) БЕЗУСЛОВНО читает
+# d["sd"], d["dir"], d["os"], d["v"] из payload, а клиентский ScrollNotificationControl
+# присылает часть нотификаций без этих ключей (особенно после программного
+# scroll_to, который дергал наш кастомный обработчик). Это признанный баг Flet,
+# исправлен только в версиях > 0.23.2 — апгрейд запрещён, поэтому кастомный
+# on_scroll + scroll_to не используем ВООБЩЕ: без подписки on_scroll клиент не
+# шлёт scroll-события вообще (attr "onScroll" не выставляется), и падать нечему.
 
 
 def _play_notify_sound():
@@ -275,6 +249,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         "known_attachments": {},         # id -> tuple(attachments) для синка вложений (задача 5)
         "card_w": int(settings.get("card_width", 0) or 920),
         "card_h": int(settings.get("card_height", 0) or 780),
+        # Раунд 16 (задача 4): размеры окна справочников — из настроек (дефолт 680x560)
+        "refs_w": int(settings.get("refs_width", 0) or 680),
+        "refs_h": int(settings.get("refs_height", 0) or 560),
     }
 
     rows_column = ft.Column(spacing=6, tight=True)  # Bug 2: gap 6px между плашками
@@ -368,14 +345,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _W["executors"] = int(_W["executors"]) + (extra - c_add)
 
     _W = _layout_widths(page.width)
-    # Bug 2.6: подхватить сохраненные ширины колонок из settings
+    # Bug 2.6: подхватить сохраненные ширины колонок из settings.
+    # Раунд 16 (задача 1): ключ "bar" ИГНОРИРУЕТСЯ: полоса статуса — строго 4 px,
+    # не ресайзабельна и не сохраняется в col_widths. Раньше общий кламп
+    # max(40, v) превращал сохранённые 4 px в 40 — отсюда «большие цветные блоки
+    # слева» на приёмке. Устаревший ключ из настроек удаляем и сохраняем чистый
+    # json один раз при старте.
     try:
         saved_widths = settings.get("col_widths") or {}
+        if "bar" in saved_widths:
+            saved_widths = {k: v for k, v in saved_widths.items() if k != "bar"}
+            settings["col_widths"] = saved_widths
+            save_settings(settings)
         for k, v in saved_widths.items():
-            if k in _W:
+            if k in _W and k != "bar":
                 _W[k] = max(40, int(v))
     except Exception:
         traceback.print_exc()
+    _W["bar"] = 4  # страховка от любых старых путей
     # Раунд 15 (задача 2): кламп сохранённых «раздутых» ширин (не шире бюджета
     # окна) + заполнение при недоборе — применяется ВСЕГДА (и при старте, и при
     # resize окна).
@@ -383,7 +370,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _save_col_widths():
         try:
-            settings["col_widths"] = dict(_W)
+            # Раунд 16 (задача 1): bar НЕ сохраняем — колонка не ресайзабельна
+            settings["col_widths"] = {k: v for k, v in _W.items() if k != "bar"}
             save_settings(settings)
         except Exception:
             traceback.print_exc()
@@ -861,7 +849,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Раунд 8 (задача 3): видимые вертикальные разделители между колонками строк
         _vsep = ft.Container(width=1, height=24, bgcolor="#12ffffff")
         row_controls = [
-            ft.Container(width=_W["bar"], height=28, bgcolor=color, border_radius=2),
+            # Раунд 16 (задача 1): под полосой статуса остаётся только прозрачный
+            # спейсер 4 px (для раскладки колонок/ширин); сама ЦВЕТНАЯ полоса —
+            # отдельный Positioned-слой поверх левого края (см. Stack ниже), чтобы
+            # быть ПОЛНОЙ высоты строки, а не «плашкой» 28px по центру.
+            ft.Container(width=_W["bar"]),
             _cell(str(num), _W["num"], center=True, color=GLASS["text_secondary"], size=12),
             _vsep,
             _cell(ctl.incoming_number or "—", _W["incoming"], bold=True, tooltip=ctl.incoming_number, color=GLASS["text"], size=13),
@@ -898,7 +890,20 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Плашка строки: Bug 2 exact colors — #2a3247, border #0dffffff or none, radius 10, gap 6
         # Bug 2.4: height по контенту min 56, padding vertical 8, max_lines 2
         row = ft.Container(
-            content=ft.Row(controls=row_controls, spacing=1, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            # Раунд 16 (задача 1): контент — Stack: [паддинг+колонки] и поверх
+            # левого края Positioned-полоса статуса (left=0, top=0, bottom=0) —
+            # СТРОГО 4 px (из _FIXED, захардкожено), на ПОЛНУЮ высоту строки,
+            # клип по скруглению (border_radius 10), без рамки-«плашки».
+            content=ft.Stack(
+                controls=[
+                    ft.Container(
+                        content=ft.Row(controls=row_controls, spacing=1, tight=True,
+                                       vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        padding=ft.padding.symmetric(horizontal=6, vertical=8),
+                    ),
+                    ft.Container(width=4, left=0, top=0, bottom=0, bgcolor=color),
+                ],
+            ),
             # height None — по контенту, min 56 via padding
             # Раунд 15 (задача 2): ЯВНАЯ ширина строки до правого края панели —
             # иначе вся цепочка (панель -> колонка -> строка) shrink-wrap'ится по
@@ -907,7 +912,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             bgcolor=GLASS["card"],  # #2a3247
             border=ft.border.all(1, GLASS["border"]),  # #0dffffff
             border_radius=10,
-            padding=ft.padding.symmetric(horizontal=6, vertical=8),
+            # Раунд 16 (задача 1): клип по скруглённой рамке — чтобы полоса
+            # статуса у левого края аккуратно обрезалась по радиусу углов.
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
             on_click=lambda e, c=ctl: _open_detail(c),
             # Раунд 15 (задача 1): hover — НАТИВНЫЙ (Flutter InkWell), БЕЗ Python-
             # событий. В Flet 0.23.2 Container(on_click, ink=True) рендерится как
@@ -2594,14 +2601,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         detail_card.content = detail_content
         try:
+            win_w = page.width or 1280
+        except Exception:
+            win_w = 1280
+        try:
             win_h = page.window.height or 860
         except Exception:
             win_h = 860
-        card_max_h = min(780, int(win_h * 0.9))
-        # Раунд 9 (задача 4): размеры из настроек (сохранённые пользователем),
-        # с ограничениями по окну
-        cw = max(600, min(int(win_h * 1.6), state.get("card_w", 920)))
-        ch = max(400, min(card_max_h, state.get("card_h", 780)))
+        # Раунд 16 (задача 4): восстановление размеров — те же клампы, что и при
+        # drag (win_w*0.95 / win_h*0.92). Раньше высота при открытии жёстко
+        # резалась в max 780 (min(780, ...)), а ширина — в win_h*1.6: растянутая
+        # пользователем карточка при следующем открытии сжималась обратно —
+        # «размеры не запоминаются». Теперь сохранённое значение применяется 1-в-1
+        # (пока влезает в окно), дефолт 920x780 — только если сохранённого нет.
+        cw = max(600, min(int(win_w * 0.95), state.get("card_w", 920)))
+        ch = max(400, min(int(win_h * 0.92), state.get("card_h", 780)))
         detail_card.width = cw
         detail_card.height = ch
         state["card_w"] = cw
@@ -2840,16 +2854,23 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             # Раунд 10 (задача 3): поле добавления растянуто на всю ширину,
             # редактирование записи — инлайн (карандаш → поле + галочка/крестик),
             # без вложенных диалогов.
-            # Раунд 13 (задача 3): компактные строки (~30 px) и маленькие кнопки —
-            # одно движение колеса прокручивает меньше, скролл построчный и плавный.
+            # Раунд 13 (задача 3): компактные строки (~30 px) и маленькие кнопки.
             # Раунд 15 (задача 4): список растягивается вместе с окном — expand=True
             # ВМЕСТО фиксированной высоты 180. Это легально: родительская колонка
             # секции НЕ скроллится и её высота ограничена refs_card (паттерн
             # «bounded column + scroll inside»), запрет AGENTS §15.11 касается
             # expand ВНУТРИ Column(scroll=AUTO).
-            col = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, expand=True)
-            # Раунд 14 (задача 3): колесо — 1–2 строки за щелчок
-            col.on_scroll = _make_row_scroller(col, 32)
+            # Раунд 16 (задачи 2–3): кастомный on_scroll/_make_row_scroller УБРАН —
+            # в Flet 0.23.2 это давало KeyError 'sd'/'dir' (баг OnScrollEvent,
+            # признан апстримом, чинится только апгрейдом Flet). Скролл — чисто
+            # нативный. scroll=ADAPTIVE: клиент (scrollable_control.dart) оборачивает
+            # в Scrollbar с thumbVisibility=true на десктопе — ВИДИМЫЙ бегунок.
+            # Шаг колеса — нативный (клиент 0.23.2 на Windows дополнительно прыгает
+            # +80 px через AdjustableScrollController — это зашито в клиенте,
+            # из Python не кастомизируется; точный шаг 1–2 строки недостижим
+            # без on_scroll, который и падал). ft.ListView не подошёл: в 0.23.2
+            # он не принимает scroll=..., без него Scrollbar не оборачивается вообще.
+            col = ft.Column(spacing=2, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
             field = _glass_textfield(hint="Новое значение…", expand=True)
             field.height = 32
             edit_state = {"idx": None}
@@ -3010,9 +3031,23 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         # Раунд 14 (задача 3): карточка справочников — фикс-размер с resize за
         # правый нижний угол; равномерная рамка + скругление + клип (как карточка).
+        # Раунд 16 (задача 4): размеры СОХРАНЯЮТСЯ — refs_width/refs_height из
+        # controls_settings.json (дефолт 680x560), кламп по окну/минимуму.
+        try:
+            win_w0 = page.width or 1280
+        except Exception:
+            win_w0 = 1280
+        try:
+            win_h0 = page.window.height or 860
+        except Exception:
+            win_h0 = 860
+        refs_w0 = max(480, min(int(win_w0 * 0.95), int(state.get("refs_w", 680) or 680)))
+        refs_h0 = max(420, min(int(win_h0 * 0.92), int(state.get("refs_h", 560) or 560)))
+        state["refs_w"] = refs_w0
+        state["refs_h"] = refs_h0
         refs_card = ft.Container(
-            width=680,
-            height=560,
+            width=refs_w0,
+            height=refs_h0,
             bgcolor=GLASS["card_panel"],
             border=ft.border.all(1, GLASS["border"]),
             border_radius=16,
@@ -3042,16 +3077,30 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             nh = max(420, min(int(win_h * 0.92), refs_card.height + dy))
             refs_card.width = nw
             refs_card.height = nh
+            # Раунд 16 (задача 4): запоминаем текущие размеры (в state сразу,
+            # в settings — по окончании drag, см. _refs_on_pan_end).
+            state["refs_w"] = nw
+            state["refs_h"] = nh
             # Раунд 15 (задача 4): refs_handle больше НЕ позиционируется пиксельно
             # (left/top) — он пришит к углу через right=0/bottom=0 (см. ниже), поэтому
             # следует за углом карточки автоматически; ручной пересчёт здесь не нужен
             # и был причиной «хэндл замер на месте».
             _quiet_update(refs_card)
 
+        def _refs_on_pan_end(e):
+            # Раунд 16 (задача 4): сохранить размеры справочников в настройки —
+            # при следующем открытии окно будет того же размера.
+            try:
+                settings["refs_width"] = int(state.get("refs_w", 680) or 680)
+                settings["refs_height"] = int(state.get("refs_h", 560) or 560)
+                save_settings(settings)
+            except Exception:
+                traceback.print_exc()
+
         refs_handle = ft.GestureDetector(
             mouse_cursor=ft.MouseCursor.RESIZE_DOWN_RIGHT,
             on_pan_update=_refs_on_pan_update,
-            on_pan_end=lambda e: None,
+            on_pan_end=_refs_on_pan_end,
             content=ft.Container(
                 width=22,
                 height=22,

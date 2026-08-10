@@ -3007,3 +3007,86 @@ python tests/test_controls_smoke.py   # ALL OK (283 проверки)
 - `design/screenshots/10.08.2026/Справочники скролл1.png` — справочники до скролла.
 - `design/screenshots/10.08.2026/Справочники скролл2_1 прокрутка скроллом.png` — после одного щелчка.
 - `design/screenshots/10.08.2026/лог_раунд15.txt` — полный лог с ошибками.
+
+
+## 47. Вкладка «Контроли» — раунд 16 выполнен (полоса 4 px / KeyError скролла / память размеров)
+
+**Дата:** 2026-08-10. **Статус:** раунд 16 выполнен, smoke ALL OK (301 проверка).
+
+### 47.1 Найденные причины и решения
+
+1. **Большие цветные блоки слева (вместо полосы 4 px).**
+   - Причина: при загрузке `settings["col_widths"]` стоял общий кламп
+     `max(40, int(v))` для ВСЕХ ключей, включая `bar`. Сохранённые 4 px
+     превращались в 40 px при старте; полоса 28 px высотой по центру дорисовывала
+     эффект «цветной колонки» (скрин `hover победа_ основной экран.png`).
+   - Решение: `bar` вообще исключён из persistence: при старте сохранённый `bar`
+     игнорируется и ключ вычищается из `controls_settings.json` (сохраняем чистый
+     json один раз), `_save_col_widths()` пишет col_widths БЕЗ `bar`,
+     `_W["bar"] = 4` форсируется. Drag-хэндлов у полосы никогда не было.
+   - Отрисовка: полоса — отдельный слой `Container(width=4, left=0, top=0,
+     bottom=0)` в `Stack` строки (Positioned от краёв) → строго 4 px и ПОЛНАЯ
+     высота строки; на его месте в Row остался прозрачный спейсер 4 px, поэтому
+     раскладка/ширины колонок не изменились. `clip_behavior=HARD_EDGE` на плашке
+     обрезает полосу по радиусу углов. Номер строки — на нейтральном фоне
+     (ячейка без заливки).
+
+2. **KeyError: 'sd' / 'dir' при скролле в «Справочниках».**
+   - Причина (подтверждено flet_core 0.23.2 + апстрим-дискуссией flet-dev#3755):
+     `OnScrollEvent.__init__` безусловно читает `d["sd"]`, `d["dir"]`, `d["os"]`,
+     `d["v"]`, а клиент (`column.dart`/`list_view.dart` → `ScrollNotificationControl`)
+     присылает часть scroll-нотификаций БЕЗ этих ключей — падение в конвертере
+     EventHandler ещё до нашего обработчика. Наш `_make_row_scroller` (перехват
+     on_scroll + программный `scroll_to`) включал события и дополнительно сам
+     порождал «неполные» нотификации. Баг починен апстримом только в версиях
+     > 0.23.2 (апгрейд запрещён).
+   - Решение: ни один контрол вкладки НЕ подписывается на `on_scroll` —
+     `attrBool("onScroll")` у клиента = false → `ScrollNotificationControl` не
+     создаётся → scroll-события в Python не отправляются → падать нечему.
+     `_make_row_scroller` удалён из кода целиком.
+
+3. **Скролл справочников — большой шаг и невидимый бегунок.**
+   - Шаг: в 0.23.2 на Windows ЛЮБОЙ скролл использует `AdjustableScrollController`
+     (+80 px прыжок после каждой нотификации, зашито в клиенте) — с нашим
+     корректором выходило «почти страница за щелчок». Нативный шаг без
+     корректора ≈ несколько строк; точный шаг 1–2 строки в 0.23.2 недостижим без
+     on_scroll (который падает) — см. п.2.
+   - Бегунок: списки — `Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True)`.
+     По `scrollable_control.dart` ADAPTIVE на десктопе (Windows/Linux/macOS)
+     → `Scrollbar(thumbVisibility: true)` — бегунок ВИДЕН ПОСТОЯННО (при AUTO
+     он лишь показывается при скролле/hover).
+   - `ft.ListView` НЕ подошёл: в 0.23.2 `ListView.__init__` не принимает
+     `scroll=...` → scroll-атрибут не выставляется → ScrollableControl не
+     оборачивает его в Scrollbar вообще (проверено по `list_view.dart` —child
+     без обёртки когда scroll==none).
+
+4. **Размеры окон не запоминались.**
+   - Карточка: при открытии высота клампилась `min(780, win_h*0.9)`, ширина —
+     `win_h*1.6` (опечатка высоты вместо ширины) — растянутая карточка после
+     переоткрытия сжималась. Теперь восстановление с теми же клампами, что и
+     drag: `win_w*0.95` / `win_h*0.92`; дефолт 920×780 — только при пустых
+     настройках. Сохранение уже было (`_on_drag_end` → `card_width/card_height`).
+   - «Справочники»: добавлены `refs_width`/`refs_height` (дефолт 680×560):
+     читаются в `state` при старте вкладки, применяются к карточке при открытии,
+     обновляются в drag, пишутся в settings в `_refs_on_pan_end`.
+     Min-размеры: 480×420.
+
+### 47.2 Технические заметки
+
+- `ListView` в 0.23.2: `controls` + `spacing` → `ListView.separated`; `item_extent`
+  работает только без spacing (ветка `ListView.builder`). Scrollbar — только через
+  `scroll=...`, которого у ListView нет — ещё один довод за Column.
+- Тесты для скролл-шага (464.0/436.0 через `_row_scroll_last`) удалены вместе с
+  кастомным обработчиком; вместо них — структурные проверки (нет подписки
+  `onScroll`, `scroll==ADAPTIVE`).
+
+### 47.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py \
+  ui/controls/glass_theme.py ui/controls/control_card_modal.py \
+  ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # ALL OK (301 проверка)
+```
