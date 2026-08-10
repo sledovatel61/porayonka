@@ -460,7 +460,7 @@ def main():
             check("точка добавлена (поле точки в правой колонке)", len(fields) >= 1,
                   f"{len(fields)} полей")
 
-    # ── 7. Hover строки ВЕРНУТ и БЫСТРЫЙ (раунд 6): on_hover меняет рамку на #4f8cff и фон #2c3650 ──
+    # ── 7. Hover строки (раунд 12): on_hover меняет ТОЛЬКО рамку на #4f8cff (акцент), фон статичен #2a3247 ──
     page, tab, _ = build()
     allc = walk(tab)
     rows = [c for c in allc if isinstance(c, ft.Container)
@@ -469,19 +469,24 @@ def main():
     if rows:
         cur = {getattr(r, "mouse_cursor", None) for r in rows}
         check("курсор CLICK остался", ft.MouseCursor.CLICK in cur)
-        # Раунд 9 (БАГ 1): hover возвращён на саму строку (hover_layer в Stack
-        # ломал события в реальном GUI). Проверяем подсветку строки.
+        # Раунд 12 (задача 1): hover — только рамка (border color #4f8cff), фон остаётся #2a3247
         r = rows[0]
         try:
             r.on_hover(type("E", (), {"data": "true"})())
-            check("hover: фон строки #2c3650", getattr(r, "bgcolor", None) == "#2c3650", f"bg={r.bgcolor}")
+            check("hover: фон строки не меняется (статичен #2a3247)", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
+            check("hover: рамка подсвечена акцентом", getattr(r, "border", None) is not None
+                  and getattr(r.border, "top", None) is not None
+                  and r.border.top.color == GLASS["accent"])
             # повторный enter с тем же состоянием — без исключений
             r.on_hover(type("E", (), {"data": "true"})())
             check("hover: повторный enter без исключений",
-                  getattr(r, "bgcolor", None) == "#2c3650")
+                  getattr(r, "bgcolor", None) == TILE_BG)
             # выход
             r.on_hover(type("E", (), {"data": "false"})())
-            check("hover off: фон вернулся #2a3247", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
+            check("hover off: фон остался #2a3247", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
+            check("hover off: рамка вернулась к исходной", getattr(r, "border", None) is not None
+                  and getattr(r.border, "top", None) is not None
+                  and r.border.top.color == GLASS["border"])
         except Exception:
             traceback.print_exc()
             check("hover вызов без исключения", False)
@@ -1054,7 +1059,7 @@ def main():
     saved = load_settings().get("col_widths") or {}
     check("resize: drag «Содержания» сохранил ширину", len(saved) > 0, f"{saved}")
 
-    # ── 24. Раунд 9, БАГ 1: hover на самой строке (быстрый прогон) ──
+    # ── 24. Раунд 12, задача 1: hover на самой строке (рамка акцент, фон статичен) ──
     page, tab, _ = build()
     rows8 = _visible_rows(tab)
     check("hover9: строки есть", len(rows8) >= 1)
@@ -1069,11 +1074,13 @@ def main():
         check("hover9: быстрый прогон по 3 строкам без исключений", ok)
         r8 = rows8[0]
         r8.on_hover(type("E", (), {"data": "true"})())
-        check("hover9: строка подсвечена", getattr(r8, "bgcolor", None) == "#2c3650", f"bg={r8.bgcolor}")
+        check("hover9: строка подсвечена рамкой акцента", getattr(r8, "border", None) is not None
+              and getattr(r8.border, "top", None) is not None and r8.border.top.color == GLASS["accent"])
+        check("hover9: фон остался #2a3247 (без лагающей заливки)", getattr(r8, "bgcolor", None) == TILE_BG)
         r8.on_hover(type("E", (), {"data": "false"})())
         check("hover9: строка сброшена", getattr(r8, "bgcolor", None) == TILE_BG, f"bg={r8.bgcolor}")
 
-    # ── 25. Раунд 9, задача 3: редактор справочников ──
+    # ── 25. Раунд 12, задача 3: редактор справочников (overlay-Container) ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "custom_initiators": []})
@@ -1084,34 +1091,40 @@ def main():
     check("refs: кнопка «Справочники» в тулбаре", len(ref_btns) == 1)
     if ref_btns:
         ref_btns[0].on_click(None)
-        check("refs: модалка открыта", len(page.dialogs) >= 1)
-        dlg = page.dialogs[-1]
-        fields = [c for c in walk(dlg) if isinstance(c, ft.TextField)]
-        add_btns = [c for c in walk(dlg) if isinstance(c, ft.ElevatedButton)
-                    and getattr(c, "text", None) == "Добавить"]
-        check("refs: в модалке есть поля и кнопки «Добавить»",
-              len(fields) >= 2 and len(add_btns) >= 2, f"{len(fields)}/{len(add_btns)}")
-        if fields and add_btns:
-            # добавить человека в справочник
-            fields[0].value = "Макаренко Роман Андреевич"
-            add_btns[0].on_click(None)
-            check("refs: extra_people пополнен",
-                  "Макаренко Роман Андреевич" in (load_settings().get("extra_people") or []))
-            # добавить инициатор
-            fields[1].value = "МВД"
-            add_btns[1].on_click(None)
-            check("refs: custom_initiators пополнен",
-                  "МВД" in (load_settings().get("custom_initiators") or []))
-            # применить
-            apply_btns = [c for c in getattr(dlg, "actions", []) if isinstance(c, ft.ElevatedButton)
-                          and getattr(c, "text", None) == "Применить"]
-            if apply_btns:
-                apply_btns[0].on_click(None)
-            ex = _find_dd(tab, "Все исполнители")
-            check("refs: Макаренко появился в фильтре после применения",
-                  ex is not None and "Макаренко Роман Андреевич" in [o.key for o in (ex.options or [])])
-            idd = _find_dd(tab, "Все инициаторы")
-            check("refs: «МВД» появился в фильтре инициаторов",
+        # Раунд 12: модалка «Справочники» — overlay Container в tab_stack
+        refs_ovs = [c for c in walk(tab) if isinstance(c, ft.Container)
+                    and getattr(c, "bgcolor", None) == GLASS["overlay_bg"]
+                    and getattr(c, "visible", False)
+                    and any(isinstance(t, ft.Text) and t.value == "Справочники" for t in walk(c))]
+        check("refs: overlay-модалка открыта", len(refs_ovs) >= 1)
+        if refs_ovs:
+            dlg = refs_ovs[0]
+            fields = [c for c in walk(dlg) if isinstance(c, ft.TextField)]
+            add_btns = [c for c in walk(dlg) if isinstance(c, ft.ElevatedButton)
+                        and getattr(c, "text", None) == "Добавить"]
+            check("refs: в модалке есть поля и кнопки «Добавить»",
+                  len(fields) >= 2 and len(add_btns) >= 2, f"{len(fields)}/{len(add_btns)}")
+            if fields and add_btns:
+                # добавить человека в справочник
+                fields[0].value = "Макаренко Роман Андреевич"
+                add_btns[0].on_click(None)
+                check("refs: extra_people пополнен",
+                      "Макаренко Роман Андреевич" in (load_settings().get("extra_people") or []))
+                # добавить инициатор
+                fields[1].value = "МВД"
+                add_btns[1].on_click(None)
+                check("refs: custom_initiators пополнен",
+                      "МВД" in (load_settings().get("custom_initiators") or []))
+                # применить
+                apply_btns = [c for c in walk(dlg) if isinstance(c, ft.ElevatedButton)
+                              and getattr(c, "text", None) == "Применить"]
+                if apply_btns:
+                    apply_btns[0].on_click(None)
+                ex = _find_dd(tab, "Все исполнители")
+                check("refs: Макаренко появился в фильтре после применения",
+                      ex is not None and "Макаренко Роман Андреевич" in [o.key for o in (ex.options or [])])
+                idd = _find_dd(tab, "Все инициаторы")
+                check("refs: «МВД» появился в фильтре инициаторов",
                   idd is not None and "МВД" in [o.key for o in (idd.options or [])])
 
     # ── 26. Раунд 9, задача 4: resize карточки (размеры сохраняются) ──
@@ -1190,7 +1203,7 @@ def main():
                   not any(getattr(c, "visible", False) for c in walk(tab)
                           if getattr(c, "bgcolor", None) == "#e604070f"))
 
-    # ── 29. Раунд 10, задача 1: hover (bgcolor + throttle, без исключений) ──
+    # ── 29. Раунд 12, задача 1: hover — рамка меняется, фон не меняется (быстрый прогон) ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
@@ -1202,10 +1215,14 @@ def main():
         r10 = rows10[0]
         check("hover10: on_hover установлен", getattr(r10, "on_hover", None) is not None)
         r10.on_hover(type("E", (), {"data": "true"})())
-        check("hover10: enter подсветил строку", getattr(r10, "bgcolor", None) == "#2c3650", f"bg={r10.bgcolor}")
+        check("hover10: enter подсветил строку рамкой", getattr(r10, "border", None) is not None
+              and getattr(r10.border, "top", None) is not None and r10.border.top.color == GLASS["accent"])
+        check("hover10: enter не меняет фон (#2a3247)", getattr(r10, "bgcolor", None) == TILE_BG)
         r10.on_hover(type("E", (), {"data": "true"})())
         r10.on_hover(type("E", (), {"data": "false"})())
-        check("hover10: leave вернул фон", getattr(r10, "bgcolor", None) == TILE_BG, f"bg={r10.bgcolor}")
+        check("hover10: leave вернул рамку", getattr(r10, "border", None) is not None
+              and getattr(r10.border, "top", None) is not None and r10.border.top.color == GLASS["border"])
+        check("hover10: leave сохранил фон", getattr(r10, "bgcolor", None) == TILE_BG, f"bg={r10.bgcolor}")
 
     # ── 30. Раунд 10, задача 2: «Действия» прижаты к правому краю ──
     page, tab, _ = build()
@@ -1215,7 +1232,7 @@ def main():
                    and getattr(c, "width", None) is not None]
     check("actions10: Row действий с alignment=END и шириной колонки", len(action_rows) >= 1, f"{len(action_rows)}")
 
-    # ── 31. Раунд 10, задача 3: редактирование записи в справочнике ──
+    # ── 31. Раунд 12, задача 3: редактирование записи в справочнике (overlay ListView) ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": ["Макаренко Роман Андреевич"], "custom_initiators": ["МВД"]})
@@ -1224,38 +1241,46 @@ def main():
     ref_btns10 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
                   and getattr(c, "text", None) == "Справочники"]
     ref_btns10[0].on_click(None)
-    dlg10 = page.dialogs[-1]
-    edit_icons = [c for c in walk(dlg10) if isinstance(c, ft.IconButton)
-                  and getattr(c, "tooltip", None) == "Переименовать"]
-    check("refs10: иконки «Переименовать» есть", len(edit_icons) >= 1, f"{len(edit_icons)}")
-    # найти КОНКРЕТНУЮ запись «Макаренко Роман Андреевич» (контейнер с фоном
-    # surface_alt, содержащий текст и иконки) и кликнуть её карандаш
-    mak_rows = [c for c in walk(dlg10) if isinstance(c, ft.Container)
-                and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
-                and any(isinstance(t, ft.Text) and t.value == "Макаренко Роман Андреевич"
-                        for t in walk(c) if isinstance(t, ft.Text))]
-    check("refs10: запись Макаренко в списке", len(mak_rows) >= 1, f"{len(mak_rows)}")
-    if mak_rows:
-        mak_edit = [c for c in walk(mak_rows[0]) if isinstance(c, ft.IconButton)
-                    and getattr(c, "tooltip", None) == "Переименовать"]
-        if mak_edit:
-            mak_edit[0].on_click(None)
-        fields10 = [c for c in walk(dlg10) if isinstance(c, ft.TextField)
-                    and (getattr(c, "value", "") or "") == "Макаренко Роман Андреевич"]
-        check("refs10: поле редактирования с текущим значением", len(fields10) >= 1)
-        if fields10:
-            fields10[0].value = "Макаренко Р.А."
-            save_icons = [c for c in walk(dlg10) if isinstance(c, ft.IconButton)
-                          and getattr(c, "tooltip", None) == "Сохранить"]
-            if save_icons:
-                save_icons[0].on_click(None)
-            st10 = load_settings()
-            check("refs10: значение переименовано в extra_people",
-                  "Макаренко Р.А." in (st10.get("extra_people") or [])
-                  and "Макаренко Роман Андреевич" not in (st10.get("extra_people") or []),
-                  f"{st10.get('extra_people')}")
+    refs_ovs10 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                  and getattr(c, "bgcolor", None) == GLASS["overlay_bg"]
+                  and getattr(c, "visible", False)
+                  and any(isinstance(t, ft.Text) and t.value == "Справочники" for t in walk(c))]
+    check("refs10: overlay модалки найден", len(refs_ovs10) >= 1)
+    if refs_ovs10:
+        dlg10 = refs_ovs10[0]
+        # Проверка построчного скролла: ListView с item_extent=40
+        list_views = [c for c in walk(dlg10) if isinstance(c, ft.ListView)]
+        check("refs12: ListView для построчного скролла", len(list_views) >= 2
+              and all(getattr(lv, "item_extent", 0) == 40 for lv in list_views))
+        edit_icons = [c for c in walk(dlg10) if isinstance(c, ft.IconButton)
+                      and getattr(c, "tooltip", None) == "Переименовать"]
+        check("refs10: иконки «Переименовать» есть", len(edit_icons) >= 1, f"{len(edit_icons)}")
+        mak_rows = [c for c in walk(dlg10) if isinstance(c, ft.Container)
+                    and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
+                    and any(isinstance(t, ft.Text) and t.value == "Макаренко Роман Андреевич"
+                            for t in walk(c) if isinstance(t, ft.Text))]
+        check("refs10: запись Макаренко в списке", len(mak_rows) >= 1, f"{len(mak_rows)}")
+        if mak_rows:
+            mak_edit = [c for c in walk(mak_rows[0]) if isinstance(c, ft.IconButton)
+                        and getattr(c, "tooltip", None) == "Переименовать"]
+            if mak_edit:
+                mak_edit[0].on_click(None)
+            fields10 = [c for c in walk(dlg10) if isinstance(c, ft.TextField)
+                        and (getattr(c, "value", "") or "") == "Макаренко Роман Андреевич"]
+            check("refs10: поле редактирования с текущим значением", len(fields10) >= 1)
+            if fields10:
+                fields10[0].value = "Макаренко Р.А."
+                save_icons = [c for c in walk(dlg10) if isinstance(c, ft.IconButton)
+                              and getattr(c, "tooltip", None) == "Сохранить"]
+                if save_icons:
+                    save_icons[0].on_click(None)
+                st10 = load_settings()
+                check("refs10: значение переименовано в extra_people",
+                      "Макаренко Р.А." in (st10.get("extra_people") or [])
+                      and "Макаренко Роман Андреевич" not in (st10.get("extra_people") or []),
+                      f"{st10.get('extra_people')}")
 
-    # ── 32. Раунд 10, задача 4: уголки карточки (clip_behavior) ──
+    # ── 32. Раунд 12, задача 4: скруглённые углы карточки (равномерная рамка + clip_behavior) ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
@@ -1271,6 +1296,10 @@ def main():
               getattr(card10, "clip_behavior", None) == ft.ClipBehavior.HARD_EDGE,
               f"clip={getattr(card10, 'clip_behavior', None)}")
         check("card10: border_radius > 0", (getattr(card10, "border_radius", 0) or 0) > 0)
+        # Равномерная рамка — для предотвращения бага прямоугольных углов в Flutter/Flet
+        check("card12: равномерная рамка border (не border.only)",
+              card10.border is not None and getattr(card10.border, "top", None) is not None
+              and card10.border.top.color == GLASS["border"])
 
     # ── 33. Раунд 10, задача 5: предпросмотр занимает ~90% окна ──
     att_dir10 = os.path.join(os.environ["APPDATA"], "porayonka", "controls_attachments", "c10")
@@ -1295,6 +1324,92 @@ def main():
         if bodies:
             check("preview10: ширина >= 90% окна (1280 -> >= 1000)",
                   bodies[0].width >= 1000, f"w={bodies[0].width}")
+
+    # ── 34. Раунд 12, задача 2: сумма ширин колонок + padding + spacing <= 1240 px при 1280 ──
+    page12, tab12, _ = build(width=1280, height=860)
+    # Находим заголовки колонок в таблице
+    hcells = [c for c in walk(tab12) if isinstance(c, ft.Stack) and getattr(c, "width", None) is not None]
+    col_widths_sum = sum(c.width for c in hcells[:11])
+    # 10 разделителей (1px) + spacing (2px между 12 элементами = 24px) + padding строки (16px) + bar (4px)
+    total_table_row_width = col_widths_sum + 4 + 10 * 1 + 12 * 2 + 16
+    check("width12: сумма ширин колонок + padding + spacing <= 1240 при 1280",
+          total_table_row_width <= 1240, f"total={total_table_row_width}")
+    # Колонка «Действия» имеет достаточную ширину и видна
+    actions_cell = [c for c in hcells if any(isinstance(t, ft.Text) and "ДЕЙСТВИЯ" in str(t.value).upper() for t in walk(c))]
+    check("width12: заголовок «Действия» найден", len(actions_cell) >= 1)
+    if actions_cell:
+        check("width12: ширина колонки действий >= 90 px", actions_cell[0].width >= 90, f"w={actions_cell[0].width}")
+
+    # ── 35. Раунд 12, задача 4: поле «За кем контроль» заполнено для «Чащин Э.А.» и других ──
+    _seed_raw([
+        _ctrl("c_chash", "4239-26", executors=["Гайнутдинов С.И."], controller="Чащин Э.А."),
+        _ctrl("c_potem", "4836-26", executors=["Эксузян А.М."], controller="Потемкин С.А."),
+        _ctrl("c_custom", "9999-26", executors=["Эксузян А.М."], controller="Иванов Иван Иванович"),
+    ])
+    page12, tab12, _ = build()
+    # Открываем контроль 4239-26 (edit)
+    rows12 = _visible_rows(tab12)
+    check("ctrl12: строки для теста контролёра загружены", len(rows12) >= 3)
+    if rows12:
+        rows12[0].on_click(None)  # 4239-26 с контролёром Чащин Э.А.
+        card_dds = [c for c in walk(tab12) if isinstance(c, ft.Dropdown) and getattr(c, "hint_text", None) == "За кем контроль"]
+        check("ctrl12: dropdown «За кем контроль» в карточке найден", len(card_dds) >= 1)
+        if card_dds:
+            cdd = card_dds[0]
+            check("ctrl12: поле «За кем контроль» НЕ пустое для 4239-26",
+                  cdd.value is not None and len(str(cdd.value)) > 0, f"value={cdd.value}")
+            check("ctrl12: контролёр соответствует Чащин/Чашин",
+                  "чащ" in str(cdd.value).lower() or "чаш" in str(cdd.value).lower(), f"value={cdd.value}")
+
+    # Тест неизвестного контролёра (Иванов) — должен быть добавлен в опции и выбран
+    page12_b, tab12_b, _ = build()
+    rows12_b = _visible_rows(tab12_b)
+    if len(rows12_b) >= 3:
+        rows12_b[2].on_click(None)  # 9999-26 с контролёром Иванов
+        card_dds_b = [c for c in walk(tab12_b) if isinstance(c, ft.Dropdown) and getattr(c, "hint_text", None) == "За кем контроль"]
+        if card_dds_b:
+            cdd_b = card_dds_b[0]
+            check("ctrl12: кастомный контролёр (Иванов) выбран",
+                  cdd_b.value == "Иванов Иван Иванович", f"value={cdd_b.value}")
+            check("ctrl12: кастомный контролёр добавлен в options",
+                  any(o.key == "Иванов Иван Иванович" for o in (cdd_b.options or [])))
+
+    # ── 36. Раунд 12, задача 5: прикрепление файла — сразу видно в attach_col ──
+    page12, tab12, _ = build()
+    _open_card(tab12, via_add=True)  # открываем карточку
+    allc12 = walk(tab12)
+    # Создаём тестовый временный файл для прикрепления
+    test_attach_file = os.path.join(tempfile.gettempdir(), "test_attach_12.png")
+    with open(test_attach_file, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+    # Имитируем вызов FilePicker on_result
+    fobj = type("FObj", (), {"name": "test_attach_12.png", "path": test_attach_file})()
+    picker_event = type("PickerEvent", (), {"files": [fobj]})()
+    if hasattr(page12, "_controls_attach_picker"):
+        _invoke_event_handler(page12._controls_attach_picker.on_result, picker_event)
+    # Проверяем, что в карточке появился элемент с именем файла
+    attach_texts = [t.value for t in walk(tab12) if isinstance(t, ft.Text) and t.value == "test_attach_12.png"]
+    check("attach12: прикреплённый файл сразу появился в карточке", len(attach_texts) >= 1)
+
+    # ── 37. Раунд 12, задача 3: resize модалки «Справочники» ──
+    page12_c, tab12_c, _ = build()
+    ref_btn_c = [c for c in walk(tab12_c) if isinstance(c, ft.ElevatedButton)
+                 and getattr(c, "text", None) == "Справочники"]
+    if ref_btn_c:
+        ref_btn_c[0].on_click(None)
+        # Находим resize-хэндл справочников
+        refs_pans = [c for c in walk(tab12_c) if isinstance(c, ft.GestureDetector)
+                     and _gd_subs3(c, "on_pan_update") > 0]
+        check("refs-resize: хэндлы найдены", len(refs_pans) >= 1, f"{len(refs_pans)}")
+        if len(refs_pans) >= 2:
+            # Второй pan-хэндл — это refs_resize_handle
+            _invoke_event_handler(refs_pans[1].on_pan_update, type("E", (), {"delta_x": 80, "delta_y": 60})())
+            _invoke_event_handler(refs_pans[1].on_pan_end, type("E", (), {})())
+            st_refs = load_settings()
+            check("refs-resize: ширина сохранена в настройки",
+                  int(st_refs.get("refs_width") or 0) > 720, f"w={st_refs.get('refs_width')}")
+            check("refs-resize: высота сохранена в настройки",
+                  int(st_refs.get("refs_height") or 0) > 580, f"h={st_refs.get('refs_height')}")
 
     print()
     if FAILURES:

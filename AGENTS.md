@@ -2625,3 +2625,47 @@ python main.py                        # живая проверка GUI Windows
 ### 40.3 Процесс раунда 12
 
 См. `PROMPT_контроли_доработка12.md`.
+
+---
+
+## 41. Вкладка «Контроли» — раунд 12: радикальные фиксы UI
+
+**Дата:** 2026-08-10. **Статус:** реализовано (промпт `PROMPT_контроли_доработка12.md`).
+
+### 41.1 Что сделано в раунде 12
+
+1. **Hover (Задача 1)** — устранена заливка фона строки при наведении. Фон строки остаётся статичным (`#2a3247`), а при наведении меняется только **рамка строки** (`border color` на акцент `#4f8cff`, толщина 1px). При выходе курсора рамка возвращается к исходной (`#0dffffff`). Убраны дропы событий и лаги; подсветка мгновенна и не оставляет «хвостов» при быстром движении мыши.
+2. **Таблица по умолчанию помещается на экране (Задача 2)** — оптимизированы дефолтные ширины колонок:
+   - `bar`: 4 px, `num`: 32 px
+   - `incoming`: 135 px
+   - `receive`: 85 px
+   - `initiator`: 100 px
+   - `controller`: 100 px
+   - `type`: 75 px
+   - `due`: 90 px
+   - `status`: 100 px (статус-пилюля 96 px)
+   - `actions`: 94 px (2 кнопки по 28 px с выравниванием вправо)
+   - `executors` (140-150 px) и `content` (200-240 px) вычисляются из доступного остатка с учётом всех отступов (padding 16 px + 10 разделителей + 12 gaps = 50 px).
+   При ширине окна 1280 px сумма ширин строк составляет ровно 1240 px — таблица целиком видна, а колонка «Действия» прижата к правому краю без вылета за экран.
+3. **Справочники (Задача 3)** — модальное окно полностью переведено из `ft.AlertDialog` в **overlay-Container** (`refs_overlay_container` в `tab_stack`):
+   - Затемнённый фон + панель по центру со скруглёнными углами (`border_radius=16`, `clip_behavior=HARD_EDGE`).
+   - Resize-хэндл в правом нижнем углу с сохранением размеров (`refs_width`, `refs_height`) в `controls_settings.json`.
+   - Построчный скролл списков через `ft.ListView(item_extent=40, spacing=4)`.
+   - Инлайн-редактирование и добавление людей / инициаторов.
+4. **Карточка контроля: углы и «За кем контроль» (Задача 4)**:
+   - `detail_card` переведён на равномерную рамку `ft.border.all(1, GLASS["border"])` + `border_radius=16` + `clip_behavior=ft.ClipBehavior.HARD_EDGE` (устранён баг Flutter/Flet с прямоугольными/прозрачными углами при `border.only`).
+   - Поле «За кем контроль» (`controller_dd`) теперь использует канонический список контролёров `get_controller_names(settings)` и многоуровневый матчинг (`exact match`, `name_matches`, фамилия, либо добавление в опции как fallback), поэтому значение контролёра никогда не теряется и всегда отображается в карточке (включая «Чащин Э.А.», «Чашин Э.А.», «Потемкин С.А.»).
+5. **Прикрепление файла (Задача 5)**:
+   - В `_on_attach_picked` прикреплённые файлы сразу обновляют `detail_state["attachments"]`, а при редактировании существующего контроля — немедленно сохраняются в `controls.json`.
+   - `_rebuild_attach()` перестраивает список, вызывает `_safe_update(attach_col)`, `_safe_update(detail_card)` и `page.update()`, благодаря чему вложение сразу появляется в интерфейсе карточки.
+
+### 41.2 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py ui/controls/glass_theme.py ui/controls/control_card_modal.py ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py
+```
+Все проверки пройдены (ALL OK).
+
