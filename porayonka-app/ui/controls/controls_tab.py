@@ -22,6 +22,7 @@ from core.controls_data import (
     load_controls, save_controls, load_settings, save_settings,
     get_criminalist_names, get_controller_names,
     get_initiators, canonical_initiator_group, initiator_filter_options,
+    initiator_filter_group,
     archive_control, restore_control,
     delete_all_attachments,
     read_shared_controls, write_shared_controls, get_shared_mtime,
@@ -67,22 +68,30 @@ def _play_notify_sound():
         pass
 
 
+# Раунд 13 (задача 2): фикс-колонки ужиты, чтобы при 1280 px таблица
+# помещалась с запасом (сумма ширин + все отступы <= 1240).
 _FIXED = {
     "bar": 4,
-    "num": 36,
-    "incoming": 165,
-    "receive": 90,
-    "initiator": 120,
-    "controller": 120,
-    "type": 80,
-    "due": 100,
-    "status": 120,
-    "actions": 110,  # 2 иконки + воздух, фикс 110 чтобы ДЕЙСТВИЯ помещалось
+    "num": 28,
+    "incoming": 150,
+    "receive": 82,
+    "initiator": 110,
+    "controller": 108,
+    "type": 76,
+    "due": 96,
+    "status": 110,
+    "actions": 84,  # 2 иконки 30+30+spacing 4 = 64; заголовок «ДЕЙСТВИЯ» ~64
 }
 _ROW_HEIGHT = 56
 _TAB_HORIZONTAL_PADDING = 40
 _ROW_SPACING = 6
-_ROW_EXTRA = 30  # spacing 2*11 + padding 8 for total row width calc
+# Раунд 13 (задача 2): точный учёт «не-колоночных» пикселей строки/заголовка:
+#   padding строки 2*8=16, spacing 21*2=42, 10 вертикальных разделителей 10*1=10,
+#   рамка плашки 2 => 70; плюс резерв под вертикальный scrollbar страницы 14.
+_ROW_EXTRA = 84
+# Раунд 13 (задача 2): верхние пределы гибких колонок — не раздуваются на больших экранах
+_MAX_CONTENT_W = 480
+_MAX_EXECUTORS_W = 220
 
 _PERIOD_LABELS = [
     ("daily", "Ежедневно", 1),
@@ -221,25 +230,61 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     sync_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=GLASS["text_muted"])
 
     def _layout_widths(width: Optional[float]) -> Dict[str, int]:
-        # Fix Bug 1: сумма ширин не должна превышать доступную, учитывать spacing+padding строки
+        # Раунд 13 (задача 2): сумма ширин колонок + spacing/разделители/padding/
+        # scrollbar не превышает ширину окна: при 1280 => <= 1240.
         if not width or width <= 0:
             width = 1280
         available = max(400.0, width - _TAB_HORIZONTAL_PADDING)
-        available_for_controls = max(300.0, available - _ROW_EXTRA)  # вычитаем spacing+padding строки
+        available_for_controls = max(300.0, available - _ROW_EXTRA)
         fixed_sum = sum(_FIXED.values())
-        flex = max(200.0, available_for_controls - fixed_sum)
+        flex = max(180.0, available_for_controls - fixed_sum)
         w = dict(_FIXED)
-        w["executors"] = int(flex * 0.35)
-        w["content"] = int(flex - w["executors"])
-        # Проверка что заголовок ДЕЙСТВИЯ помещается: actions >=110 должен вместить 8 букв size11 bold
+        ex = min(int(flex * 0.35), _MAX_EXECUTORS_W)
+        w["executors"] = ex
+        w["content"] = min(int(flex - ex), _MAX_CONTENT_W)
         return w
+
+    def _width_budget() -> float:
+        """Раунд 13 (задача 2): максимум суммарной ширины колонок для текущего окна."""
+        try:
+            w = page.width or 1280
+        except Exception:
+            w = 1280
+        return max(300.0, max(400.0, w - _TAB_HORIZONTAL_PADDING) - _ROW_EXTRA)
+
+    def _clamp_widths():
+        """Раунд 13 (задача 2): не дать сумме колонок (в т.ч. сохранённым из
+        настроек после ручного resize) превысить бюджет окна. Сначала жмём
+        гибкие колонки (до 60), затем фиксированные (до 40)."""
+        _W["content"] = max(60, min(int(_W["content"]), _MAX_CONTENT_W))
+        _W["executors"] = max(60, min(int(_W["executors"]), _MAX_EXECUTORS_W))
+        budget = _width_budget()
+        need = int(sum(_W.values()) - budget)
+        if need <= 0:
+            return
+        for k in ("content", "executors"):
+            cut = min(need, _W[k] - 60)
+            if cut > 0:
+                _W[k] -= cut
+                need -= cut
+            if need <= 0:
+                return
+        for k in [k for k in _W if k not in ("content", "executors", "bar")]:
+            if need <= 0:
+                break
+            cut = min(need, _W[k] - 40)
+            if cut > 0:
+                _W[k] -= cut
+                need -= cut
+
     _W = _layout_widths(page.width)
     # Bug 2.6: подхватить сохраненные ширины колонок из settings
     try:
         saved_widths = settings.get("col_widths") or {}
         for k, v in saved_widths.items():
             if k in _W:
-                _W[k] = max(60, int(v))
+                _W[k] = max(40, int(v))
+        _clamp_widths()
     except Exception:
         traceback.print_exc()
 
@@ -393,9 +438,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 return False
             if state["f_type"] != "all" and ctl.control_type != state["f_type"]:
                 return False
-            # Раунд 7 (задача 2): канонический фильтр инициаторов — сравниваем группы
+            # Раунд 7 (задача 2): канонический фильтр инициаторов — сравниваем группы.
+            # Раунд 13: переименованный в справочнике кластер матчится по канону исходного.
             if state["f_initiator"] != "all":
-                sel_group = canonical_initiator_group(state["f_initiator"])
+                sel_group = initiator_filter_group(state["f_initiator"], settings)
                 if not sel_group or canonical_initiator_group(ctl.initiator) != sel_group:
                     return False
             if state["f_controller"] != "all":
@@ -519,6 +565,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         return
                     old = _W.get(k, width)
                     new = max(60, old + delta)
+                    prev = dict(_W)
                     # Rubber content logic: увеличение фиксированных колонок
                     # компенсируется сжатием «Содержания» (min 60)
                     if k not in ("content", "executors", "actions"):
@@ -533,6 +580,17 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         _W["content"] = content_new
                     else:
                         _W[k] = new
+                    # Раунд 13 (задача 2): drag не должен распирать таблицу
+                    # шире окна — при переполнении жмём гибкую колонку или откат.
+                    over = int(sum(_W.values()) - _width_budget())
+                    if over > 0:
+                        if k in ("content", "executors"):
+                            _W[k] = max(60, _W[k] - over)
+                        elif _W.get("content", 60) - over >= 60:
+                            _W["content"] -= over
+                        else:
+                            _W.clear()
+                            _W.update(prev)
                     # применяем ширину к живым контролам заголовка (без rebuild)
                     refs = header_cell_refs.get(k)
                     if refs is not None:
@@ -565,17 +623,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 border_radius=2,
             ),
         )
-        def _on_hover(e):
-            try:
-                cont = e.control.content
-                if e.data == "true":
-                    cont.bgcolor = with_alpha(GLASS["accent"], "55")
-                else:
-                    cont.bgcolor = "transparent"
-                _safe_update(cont)
-            except Exception:
-                traceback.print_exc()
-        drag_handle.on_hover = _on_hover
+        # Раунд 13 (задача 1): hover на хэндле убран полностью — только
+        # курсор resize, без update() и задержек.
 
         # Stack: текст на всю ширину, хэндл прижат к правому краю (поверх границы)
         cell = ft.Stack(
@@ -665,7 +714,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         content_text = "\n".join(content_lines)
         content_tooltip = content_text
 
-        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=2, color=GLASS["text"], size=13)]
+        # Раунд 13 (задача 2): кегль строк ужит (11–12), чтобы таблица помещалась
+        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=2, color=GLASS["text"], size=12)]
         if ctl.attachments:
             content_controls.append(ft.Container(
                 content=ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=12, color=GLASS["accent"]), ft.Text(str(len(ctl.attachments)), size=10, color=GLASS["accent"], no_wrap=True)], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -673,13 +723,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ))
 
         is_archive = state["mode"] == "archive"
-        type_cell = _cell(_type_label(ctl), _W["type"], color=GLASS["text_secondary"], size=12)
+        type_cell = _cell(_type_label(ctl), _W["type"], color=GLASS["text_secondary"], size=11)
         if is_archive:
             reason = ctl.archive_reason or ""
             reason_text = _reason_label(reason)
             if ctl.archived_at:
                 reason_text = f"{reason_text} · {_display_date(ctl.archived_at)}"
-            type_cell = _cell(reason_text, _W["type"], color=GLASS["text_secondary"], size=12, tooltip=reason)
+            type_cell = _cell(reason_text, _W["type"], color=GLASS["text_secondary"], size=11, tooltip=reason)
 
         # Bug 4: только 2 кнопки — Редактировать и Удалить (в архив). Галку Исполнено убрать — вводила в заблуждение (выглядела отмеченной у всех)
         actions = []
@@ -718,19 +768,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _vsep = ft.Container(width=1, height=24, bgcolor="#12ffffff")
         row_controls = [
             ft.Container(width=_W["bar"], height=28, bgcolor=color, border_radius=2),
-            _cell(str(num), _W["num"], center=True, color=GLASS["text_secondary"], size=12),
+            _cell(str(num), _W["num"], center=True, color=GLASS["text_secondary"], size=11),
             _vsep,
-            _cell(ctl.incoming_number or "—", _W["incoming"], bold=True, tooltip=ctl.incoming_number, color=GLASS["text"], size=13),
+            _cell(ctl.incoming_number or "—", _W["incoming"], bold=True, tooltip=ctl.incoming_number, color=GLASS["text"], size=12),
             _vsep,
-            _cell(_display_date(ctl.receive_date), _W["receive"], color=GLASS["text_secondary"], size=12),
+            _cell(_display_date(ctl.receive_date), _W["receive"], color=GLASS["text_secondary"], size=11),
             _vsep,
-            _cell(short_name(ctl.initiator) if ctl.initiator else "—", _W["initiator"], tooltip=ctl.initiator, color=GLASS["text"], size=12),
+            _cell(short_name(ctl.initiator) if ctl.initiator else "—", _W["initiator"], tooltip=ctl.initiator, color=GLASS["text"], size=11),
             _vsep,
             ft.Row(controls=content_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             _vsep,
-            _cell(", ".join(short_name(x) for x in ctl.executors) or "—", _W["executors"], tooltip=", ".join(ctl.executors), color=GLASS["text"], size=12, max_lines=2),
+            _cell(", ".join(short_name(x) for x in ctl.executors) or "—", _W["executors"], tooltip=", ".join(ctl.executors), color=GLASS["text"], size=11, max_lines=2),
             _vsep,
-            _cell(short_name(ctl.controller) if ctl.controller else "—", _W["controller"], tooltip=ctl.controller, color=GLASS["text"], size=12),
+            _cell(short_name(ctl.controller) if ctl.controller else "—", _W["controller"], tooltip=ctl.controller, color=GLASS["text"], size=11),
             _vsep,
             type_cell,
             _vsep,
@@ -763,27 +813,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             on_click=lambda e, c=ctl: _open_detail(c),
             ink=False,
         )
+        # Раунд 13 (задача 1): hover убран ПОЛНОСТЬЮ (on_hover + update() в
+        # Flet 0.23.2 тормозил) — оставлен только курсор-рука. Лаг невозможен.
         row.mouse_cursor = ft.MouseCursor.CLICK
-
-        # Раунд 10 (задача 1): hover без лага. Меняем ТОЛЬКО bgcolor; повторные
-        # события с тем же состоянием не шлют update. Плюс throttle ~40 мс:
-        # при быстром движении курсора не копим очередь round-trip обновлений —
-        # состояние выставляется сразу, а update уходит не чаще раза в 40 мс
-        # (последнее значение всегда применяется).
-        _last_hover = [0.0]
-        def _hover(e):
-            if e.data == "true":
-                new_bg = GLASS["hover_bg"]
-            else:
-                new_bg = GLASS["card"]
-            if row.bgcolor == new_bg:
-                return
-            row.bgcolor = new_bg
-            now = time.time()
-            if row.page is not None and (now - _last_hover[0]) >= 0.04:
-                _last_hover[0] = now
-                row.update()
-        row.on_hover = _hover
         return row
 
     def _rebuild_table():
@@ -852,7 +884,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Инициаторы — каноническая кластеризация вариантов («ГУК СК» → «ГУК» и т.п.).
         try:
             raw_initiators = {c.initiator for c in state["controls"] if c.initiator} | set(initiators)
-            canon_initiators = initiator_filter_options(raw_initiators)
+            # Раунд 13: опции учитывают правки справочника (rename/hide кластеров)
+            canon_initiators = initiator_filter_options(raw_initiators, settings)
             executor_filter_dd.options = ([ft.dropdown.Option("all", "Все исполнители")]
                                           + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical]
                                           + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
@@ -869,18 +902,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 state["f_controller"] = "all"
                 controller_filter_dd.value = "all"
             if state["f_initiator"] != "all":
-                sel_group = canonical_initiator_group(state["f_initiator"])
-                if sel_group:
-                    new_val = " ".join(t.upper() for t in sel_group.split())
-                    if new_val in canon_initiators:
+                sel = state["f_initiator"]
+                if sel not in canon_initiators:
+                    # Раунд 13: кластер переименован — выбор следует за новым именем
+                    ren = (settings.get("init_renames") or {}).get(sel)
+                    sel_group = initiator_filter_group(sel, settings)
+                    new_val = " ".join(t.upper() for t in sel_group.split()) if sel_group else ""
+                    if ren and ren in canon_initiators:
+                        state["f_initiator"] = ren
+                        initiator_filter_dd.value = ren
+                    elif new_val in canon_initiators:
                         state["f_initiator"] = new_val
                         initiator_filter_dd.value = new_val
                     else:
                         state["f_initiator"] = "all"
                         initiator_filter_dd.value = "all"
-                else:
-                    state["f_initiator"] = "all"
-                    initiator_filter_dd.value = "all"
             try:
                 _safe_update(executor_filter_dd)
                 _safe_update(controller_filter_dd)
@@ -962,7 +998,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     status_filter_dd = _glass_dropdown("Все статусы", 160, [ft.dropdown.Option("all", "Все статусы"), ft.dropdown.Option(OVERDUE, "Просрочено"), ft.dropdown.Option(TODAY, "Сегодня"), ft.dropdown.Option(SOON, "Скоро"), ft.dropdown.Option(IN_PROGRESS, "В работе"), ft.dropdown.Option(DONE, "Исполнено"), ft.dropdown.Option(COMPLETED, "Завершён")])
     type_filter_dd = _glass_dropdown("Все типы", 140, [ft.dropdown.Option("all", "Все типы"), ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")])
-    initiator_filter_dd = _glass_dropdown("Все инициаторы", 190, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators)])
+    initiator_filter_dd = _glass_dropdown("Все инициаторы", 190, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators, settings)])
     executor_filter_dd = _glass_dropdown("Все исполнители", 190, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
     controller_filter_dd = _glass_dropdown("Все контролеры", 190, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
 
@@ -1170,19 +1206,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                                 traceback.print_exc()
                         _close_filter_cal()
                     return _click
-                def _make_hover(cell, orig_bg, sel):
-                    def _hover(e):
-                        if sel:
-                            return
-                        try:
-                            cell.bgcolor = GLASS["hover_strong"] if e.data == "true" else orig_bg
-                            _safe_update(cell)
-                        except Exception:
-                            traceback.print_exc()
-                    return _hover
+                # Раунд 13 (задача 1): hover на ячейках календаря убран (без update — без лага)
                 cell = ft.Container(width=34, height=32, border_radius=8, bgcolor=bg, border=border, alignment=ft.alignment.center, content=txt, ink=True)
                 cell.on_click = _make_click(d)
-                cell.on_hover = _make_hover(cell, bg, is_sel)
                 row.controls.append(cell)
             filter_cal_grid.controls.append(row)
         try:
@@ -1442,19 +1468,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                                 traceback.print_exc()
                         _close_global_cal()
                     return _click
-                def _make_hover(cell, orig_bg, sel):
-                    def _hover(e):
-                        if sel:
-                            return
-                        try:
-                            cell.bgcolor = GLASS["hover_strong"] if e.data == "true" else orig_bg
-                            _safe_update(cell)
-                        except Exception:
-                            traceback.print_exc()
-                    return _hover
+                # Раунд 13 (задача 1): hover на ячейках календаря убран (без update — без лага)
                 cell = ft.Container(width=34, height=32, border_radius=8, bgcolor=bg, border=border, alignment=ft.alignment.center, content=txt, ink=True)
                 cell.on_click = _make_click(d)
-                cell.on_hover = _make_hover(cell, bg, is_sel)
                 row.controls.append(cell)
             global_cal_grid.controls.append(row)
         try:
@@ -1527,7 +1543,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 bgcolor="transparent",
             ),
         )
-        handle.on_hover = lambda e: None
+        # Раунд 13 (задача 1): hover на хэндле убран (ранее был no-op)
         return handle
 
     card_resize_handle = _make_card_resize()
@@ -2085,7 +2101,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             files = getattr(e, "files", None)
             if not files:
                 return
+            # Раунд 13 (задача 5): у новой карточки control_id уже uuid (см.
+            # _open_detail), но страховка на краевых случаях — генерируем, если
+            # вдруг None/пусто. Иначе shared_dir / ... / None -> TypeError.
+            cid = detail_state.get("control_id")
+            if not cid:
+                cid = str(uuid4())
+                detail_state["control_id"] = cid
             added = []
+            failed = 0
             for fobj in files:
                 try:
                     fpath = fobj.path
@@ -2103,16 +2127,42 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     traceback.print_exc()
                 rel = None
                 if settings.get("network_enabled"):
-                    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
-                if rel is None:
-                    rel = copy_attachment_to_local(detail_state["control_id"], fpath)
+                    try:
+                        rel = copy_attachment_to_shared(cid, fpath, settings)
+                    except Exception:
+                        # сеть отключена/недоступна — падаем в локальное копирование
+                        traceback.print_exc()
+                        rel = None
+                if not rel:
+                    # Раунд 13 (задача 5): локальное копирование как фолбэк
+                    rel = copy_attachment_to_local(cid, fpath)
                 if rel and rel not in detail_state["attachments"]:
                     detail_state["attachments"].append(rel)
                     added.append(rel)
+                elif not rel:
+                    failed += 1
             if added:
+                # файлы видны сразу: перестроить список вложений
                 _rebuild_attach()
+                if not detail_state["is_new"]:
+                    for x in state["controls"]:
+                        if x.id == cid:
+                            x.attachments = list(detail_state["attachments"])
+                            break
+                    try:
+                        _persist(state["controls"])
+                    except Exception:
+                        traceback.print_exc()
+                try:
+                    page.update()
+                except Exception:
+                    traceback.print_exc()
+                # toast только после успешного копирования
                 from ui.toast import show_toast
-                show_toast(page, f"Прикреплено: {len(added)}", icon=ft.icons.ATTACH_FILE)
+                show_toast(page, f"Файл прикреплён: {len(added)}", icon=ft.icons.ATTACH_FILE)
+            if failed:
+                from ui.toast import show_error_toast
+                show_error_toast(page, "Не удалось прикрепить файл")
 
         _ensure_file_picker(page, "_controls_attach_picker", _on_attach_picked)
 
@@ -2586,15 +2636,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # Settings
     def _open_references(e=None):
         """Раунд 9 (задача 3): редактор справочников — исполнители, контролёры, инициаторы."""
-        from core.controls_data import add_extra_person, remove_extra_person
+        from core.controls_data import (
+            add_extra_person,
+            rename_person, remove_person,
+            rename_initiator, remove_initiator,
+        )
 
         def _build_list_col(source_getter, on_add, on_remove, on_edit, empty_text):
             # Раунд 10 (задача 3): поле добавления растянуто на всю ширину,
             # редактирование записи — инлайн (карандаш → поле + галочка/крестик),
             # без вложенных диалогов.
-            col = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=180)
+            # Раунд 13 (задача 3): компактные строки (~30 px) и маленькие кнопки —
+            # одно движение колеса прокручивает меньше, скролл построчный и плавный.
+            col = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, height=180)
             field = _glass_textfield(hint="Новое значение…", expand=True)
-            field.height = 36
+            field.height = 32
             edit_state = {"idx": None}
 
             def _rebuild():
@@ -2606,11 +2662,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     if edit_state["idx"] == i:
                         # инлайн-редактирование текущей записи
                         edit_field = _glass_textfield(value=it, expand=True)
-                        edit_field.height = 36
+                        edit_field.height = 30
 
                         def _save(e=None, old=it, idx=i):
                             new_val = (edit_field.value or "").strip()
-                            if new_val and new_val != old:
+                            # Раунд 13 (задача 3): сохраняем и при переименовании
+                            # базовой записи (rename_* сам разруливает extra/hidden)
+                            if new_val:
                                 on_edit(old, new_val)
                             edit_state["idx"] = None
                             _rebuild()
@@ -2622,30 +2680,30 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         col.controls.append(ft.Container(
                             content=ft.Row(controls=[
                                 edit_field,
-                                ft.IconButton(icon=ft.icons.CHECK, icon_size=16,
+                                ft.IconButton(icon=ft.icons.CHECK, icon_size=16, width=26, height=26, padding=0,
                                               icon_color=GLASS["in_progress"], tooltip="Сохранить",
                                               on_click=_save),
-                                ft.IconButton(icon=ft.icons.CLOSE, icon_size=16,
+                                ft.IconButton(icon=ft.icons.CLOSE, icon_size=16, width=26, height=26, padding=0,
                                               icon_color=GLASS["text_secondary"], tooltip="Отмена",
                                               on_click=_cancel),
                             ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]),
-                            border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                            border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=1),
                         ))
                     else:
                         col.controls.append(ft.Container(
                             content=ft.Row(controls=[
                                 ft.Text(it, size=12, color=GLASS["text"], expand=True,
                                        no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=it),
-                                ft.IconButton(icon=ft.icons.EDIT_OUTLINED, icon_size=14,
+                                ft.IconButton(icon=ft.icons.EDIT_OUTLINED, icon_size=14, width=26, height=26, padding=0,
                                               icon_color=GLASS["text_secondary"], tooltip="Переименовать",
                                               on_click=lambda e, idx=i: _edit(idx)),
-                                ft.IconButton(icon=ft.icons.CLOSE, icon_size=14,
+                                ft.IconButton(icon=ft.icons.CLOSE, icon_size=14, width=26, height=26, padding=0,
                                               icon_color=GLASS["overdue"], tooltip="Удалить",
                                               on_click=lambda e, n=it: _del(n)),
                             ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]),
-                            border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                            border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=1),
                         ))
                 try:
                     _safe_update(col)
@@ -2686,25 +2744,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             add_extra_person(settings, name)
 
         def _people_remove(name):
-            # из справочника можно удалять только доп. ФИО (extra_people),
-            # базовых криминалистов/контролёров не трогаем
-            remove_extra_person(settings, name)
+            # Раунд 13 (задача 3): удаляется и базовое ФИО (через hidden_people),
+            # изменение сохраняется в controls_settings.json
+            remove_person(settings, name)
 
         def _people_edit(old, new):
-            cur = list(settings.get("extra_people", []) or [])
-            nxt = []
-            replaced = False
-            for x in cur:
-                if x.strip().casefold() == (old or "").strip().casefold() and not replaced:
-                    nxt.append(new)
-                    replaced = True
-                else:
-                    nxt.append(x)
-            settings["extra_people"] = nxt
-            save_settings(settings)
+            # Раунд 13 (задача 3): сохранение редактирования ЛЮБОЙ записи —
+            # доп. ФИО заменяется в extra_people, базовое — new в extra_people
+            # + old в hidden_people; settings пишутся сразу.
+            rename_person(settings, old, new)
 
         def _init_items():
-            return initiator_filter_options(set(initiators) | {c.initiator for c in state["controls"] if c.initiator})
+            # Раунд 13: список с учётом переименований/скрытий из справочника
+            return initiator_filter_options(set(initiators) | {c.initiator for c in state["controls"] if c.initiator}, settings)
 
         def _init_add(name):
             cur = list(settings.get("custom_initiators", []) or [])
@@ -2716,16 +2768,16 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             initiators.extend(get_initiators(settings))
 
         def _init_remove(name):
-            cur = list(settings.get("custom_initiators", []) or [])
-            settings["custom_initiators"] = [x for x in cur if x != name]
-            save_settings(settings)
+            # Раунд 13 (задача 3): убирается и производный кластер (hidden_init_groups)
+            remove_initiator(settings, name)
             initiators.clear()
             initiators.extend(get_initiators(settings))
 
         def _init_edit(old, new):
-            cur = list(settings.get("custom_initiators", []) or [])
-            settings["custom_initiators"] = [new if x == old else x for x in cur]
-            save_settings(settings)
+            # Раунд 13 (задача 3): редактирование сохраняется для любой записи:
+            # пользовательский заменяется в custom_initiators, производный
+            # кластер — через init_renames (new вместо old в опциях фильтра)
+            rename_initiator(settings, old, new)
             initiators.clear()
             initiators.extend(get_initiators(settings))
 
@@ -2821,7 +2873,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             initiators.clear()
             initiators.extend(get_initiators(settings))
             try:
-                initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators)]
+                initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators, settings)]
                 _safe_update(initiator_filter_dd)
             except Exception:
                 traceback.print_exc()

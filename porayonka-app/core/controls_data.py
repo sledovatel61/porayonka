@@ -267,19 +267,134 @@ def get_criminalists_only() -> List[str]:
 def get_controller_names(settings: Optional[dict] = None) -> List[str]:
     """Канонический список людей для фильтров «Исполнители»/«Контролёры»:
     криминалисты + дефолтные контролёры + доп. ФИО из настроек (`extra_people`),
-    без дублей по фамилии. Отсортирован по фамилии."""
+    без дублей по фамилии. Отсортирован по фамилии.
+    Раунд 13: базовые ФИО, переименованные/удалённые через справочники,
+    исключаются списком `hidden_people`."""
     extra = []
+    hidden = set()
     if settings:
         extra = list(settings.get("extra_people", []) or [])
+        hidden = {(h or "").strip().casefold() for h in (settings.get("hidden_people", []) or [])}
     out = []
     seen = set()
     for n in get_criminalists_only() + list(DEFAULT_CONTROLLERS) + extra:
+        if (n or "").strip().casefold() in hidden:
+            continue
         surname = (n.strip().split()[0] if n.strip() else "").casefold()
         if not surname or surname in seen:
             continue
         seen.add(surname)
         out.append(n)
     return out
+
+
+def rename_person(settings: dict, old: str, new: str) -> bool:
+    """Раунд 13: переименовать запись справочника людей.
+
+    Если `old` — доп. ФИО (extra_people), заменяется там. Если `old` — базовое
+    ФИО (криминалист/контролёр), новое значение добавляется в extra_people,
+    а базовое скрывается через hidden_people. Сохраняет настройки.
+    """
+    old = (old or "").strip()
+    new = (new or "").strip()
+    if not old or not new or old.casefold() == new.casefold():
+        return False
+    cur = list(settings.get("extra_people", []) or [])
+    hidden = list(settings.get("hidden_people", []) or [])
+    replaced = False
+    nxt = []
+    for x in cur:
+        if not replaced and (x or "").strip().casefold() == old.casefold():
+            nxt.append(new)
+            replaced = True
+        else:
+            nxt.append(x)
+    if replaced:
+        hidden = [h for h in hidden if (h or "").strip().casefold() != old.casefold()]
+    else:
+        if not any((x or "").strip().casefold() == new.casefold() for x in nxt):
+            nxt.append(new)
+        if not any((h or "").strip().casefold() == old.casefold() for h in hidden):
+            hidden.append(old)
+    settings["extra_people"] = nxt
+    settings["hidden_people"] = hidden
+    save_settings(settings)
+    return True
+
+
+def remove_person(settings: dict, name: str) -> bool:
+    """Раунд 13: убрать ФИО из справочника людей: доп. — из extra_people,
+    базовое — в hidden_people. Сохраняет настройки."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    cur = list(settings.get("extra_people", []) or [])
+    nxt = [x for x in cur if (x or "").strip().casefold() != name.casefold()]
+    hidden = list(settings.get("hidden_people", []) or [])
+    if len(nxt) != len(cur):
+        hidden = [h for h in hidden if (h or "").strip().casefold() != name.casefold()]
+    elif not any((h or "").strip().casefold() == name.casefold() for h in hidden):
+        hidden.append(name)
+    else:
+        return False
+    settings["extra_people"] = nxt
+    settings["hidden_people"] = hidden
+    save_settings(settings)
+    return True
+
+
+def rename_initiator(settings: dict, old: str, new: str) -> bool:
+    """Раунд 13: переименовать запись справочника инициаторов.
+
+    Пользовательский (custom_initiators) заменяется напрямую. Производный
+    канонический кластер («ГУК» из «ГУК СК» и т.п.) переименовывается на
+    уровне отображения: settings["init_renames"][old] = new — опции фильтра
+    показывают new, а сопоставление контролей идёт по канону old
+    (см. initiator_filter_group). Сохраняет настройки.
+    """
+    old = (old or "").strip()
+    new = (new or "").strip()
+    if not old or not new or old == new:
+        return False
+    cur = list(settings.get("custom_initiators", []) or [])
+    if old in cur:
+        settings["custom_initiators"] = [new if x == old else x for x in cur]
+        save_settings(settings)
+        return True
+    renames = dict(settings.get("init_renames", {}) or {})
+    # повторное переименование уже переименованного — тянем исходный ключ
+    for k, v in list(renames.items()):
+        if v == old:
+            del renames[k]
+            old = k
+            break
+    renames[old] = new
+    settings["init_renames"] = renames
+    save_settings(settings)
+    return True
+
+
+def remove_initiator(settings: dict, name: str) -> bool:
+    """Раунд 13: убрать инициатор из справочника: пользовательский — из
+    custom_initiators; производный кластер — скрывается через
+    hidden_init_groups. Сохраняет настройки."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    cur = list(settings.get("custom_initiators", []) or [])
+    if name in cur:
+        settings["custom_initiators"] = [x for x in cur if x != name]
+        save_settings(settings)
+        return True
+    hidden = list(settings.get("hidden_init_groups", []) or [])
+    renames = dict(settings.get("init_renames", {}) or {})
+    renames.pop(name, None)
+    if name not in hidden:
+        hidden.append(name)
+    settings["hidden_init_groups"] = hidden
+    settings["init_renames"] = renames
+    save_settings(settings)
+    return True
 
 
 def add_extra_person(settings: dict, name: str) -> bool:
@@ -377,12 +492,15 @@ def canonical_initiator_group(raw: str) -> str:
     return groups[0] if groups else ""
 
 
-def initiator_filter_options(raw_values) -> List[str]:
+def initiator_filter_options(raw_values, settings=None) -> List[str]:
     """Канонические опции фильтра «Инициаторы» (заглавными, без дублей, по алфавиту).
 
     Принимает все исходные значения (дефолтные + custom + distinct из данных),
     кластеризует их в группы и возвращает display-форму (upper).
     Склейки разбиваются на отдельные каноны («ГУК СК ГУК ЮФО» → «ГУК», «ГУК ЮФО»).
+    Раунд 13: при переданных settings применяются правки справочника —
+    скрытые кластеры (hidden_init_groups) убираются, переименованные
+    (init_renames) показываются под новым именем.
     """
     groups = {}
     for v in raw_values or []:
@@ -396,7 +514,29 @@ def initiator_filter_options(raw_values) -> List[str]:
             display = " ".join(t.upper() for t in part.split())
             if display not in groups:
                 groups[display] = True
+    if settings:
+        hidden = set(settings.get("hidden_init_groups", []) or [])
+        renames = dict(settings.get("init_renames", {}) or {})
+        out = set()
+        for display in groups:
+            if display in hidden:
+                continue
+            out.add(renames.get(display, display))
+        return sorted(out)
     return sorted(groups.keys())
+
+
+def initiator_filter_group(value: str, settings=None) -> str:
+    """Раунд 13: каноническая группа для ВЫБРАННОГО значения фильтра с учётом
+    переименований справочника: новое display-имя сопоставляется по канону
+    исходного кластера («ГУК РОСТОВ» -> канон «ГУК»)."""
+    val = (value or "").strip()
+    if settings and val:
+        renames = dict(settings.get("init_renames", {}) or {})
+        for old, new in renames.items():
+            if val == (new or "").strip():
+                return canonical_initiator_group(old)
+    return canonical_initiator_group(val)
 
 
 def get_criminalist_short_names() -> List[str]:
@@ -405,7 +545,9 @@ def get_criminalist_short_names() -> List[str]:
 
 
 def get_initiators(settings: dict) -> List[str]:
-    """Список инициаторов: встроенные + пользовательские из настроек."""
+    """Список инициаторов: встроенные + пользовательские из настроек.
+    Раунд 13: правки справочника (переименование/скрытие кластеров) применяются
+    на уровне опций фильтра — см. initiator_filter_options(settings=...)."""
     return list(DEFAULT_INITIATORS) + list(settings.get("custom_initiators", []) or [])
 
 
@@ -443,7 +585,10 @@ def copy_attachment_to_local(control_id: str, source_path: str) -> Optional[str]
     """Скопировать файл в локальную папку вложений контроля.
 
     Возвращает относительный путь (`<control_id>/<filename>`) или None.
+    Раунд 13: пустой control_id — сразу None (защита от TypeError Path/None).
     """
+    if not control_id:
+        return None
     try:
         src = Path(source_path)
         if not src.exists():
@@ -462,7 +607,11 @@ def copy_attachment_to_shared(control_id: str, source_path: str, settings: dict)
 
     Возвращает относительный путь или None. Shared-папка определяется как
     родитель общей папки/файла (shared_dir/controls_attachments/...).
+    Раунд 13: пустой control_id или недоступная shared-папка — сразу None,
+    вызывающая сторона переходит на локальное копирование (без TypeError).
     """
+    if not control_id:
+        return None
     shared_dir = _shared_dir(settings)
     if shared_dir is None:
         return None

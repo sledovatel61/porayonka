@@ -66,13 +66,25 @@
     overlay с масштабированием, кнопки «открыть/удалить/закрыть».
 
 Раунд 10 (PROMPT_контроли_доработка10.md):
-  * hover: bgcolor-only + throttle ~40 мс (без очереди round-trip при быстром
-    движении курсора), повторные события с тем же состоянием без update;
   * «Действия»: Row иконок с width=колонки и alignment=END (прижаты вправо);
   * справочники: поля ввода expand на всю ширину, инлайн-редактирование записей
     (карандаш → поле + галочка/крестик) без вложенных диалогов;
   * карточка: clip_behavior=HARD_EDGE — скругление по всем 4 углам;
   * предпросмотр: ~90% ширины и ~85% высоты окна, изображение масштабируется.
+
+Раунд 13 (PROMPT_контроли_доработка13.md):
+  * hover УБРАН полностью со строк таблицы (и календарей/хэндлов) — оставлен
+    только mouse_cursor=CLICK: нет on_hover => нет update() => нет лага;
+  * таблица при 1280 помещается: сумма ширин колонок + spacing/разделители/
+    padding/scrollbar <= 1240; сохранённые «раздутые» col_widths клампятся;
+    на широких окнах «Содержание» <= 480, «Исполнители» <= 220;
+  * справочники: редактирование/удаление сохраняется для ЛЮБОЙ записи (базовые
+    ФИО/инициаторы — через extra_people/custom_initiators + hidden_*),
+    записи пишутся в controls_settings.json, фильтры перестраиваются;
+    строки списков компактные (кнопки 26px, spacing 2) — скролл построчный;
+  * прикрепление к НОВОЙ карточке не падает с NoneType: control_id = uuid при
+    открытии + страховка в обработчике; сеть недоступна — локальное копирование;
+    copy_* с пустым control_id возвращают None без TypeError.
 
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
@@ -460,7 +472,7 @@ def main():
             check("точка добавлена (поле точки в правой колонке)", len(fields) >= 1,
                   f"{len(fields)} полей")
 
-    # ── 7. Hover строки ВЕРНУТ и БЫСТРЫЙ (раунд 6): on_hover меняет рамку на #4f8cff и фон #2c3650 ──
+    # ── 7. Раунд 13 (задача 1): hover строк УБРАН полностью, курсор CLICK остался ──
     page, tab, _ = build()
     allc = walk(tab)
     rows = [c for c in allc if isinstance(c, ft.Container)
@@ -469,22 +481,11 @@ def main():
     if rows:
         cur = {getattr(r, "mouse_cursor", None) for r in rows}
         check("курсор CLICK остался", ft.MouseCursor.CLICK in cur)
-        # Раунд 9 (БАГ 1): hover возвращён на саму строку (hover_layer в Stack
-        # ломал события в реальном GUI). Проверяем подсветку строки.
-        r = rows[0]
-        try:
-            r.on_hover(type("E", (), {"data": "true"})())
-            check("hover: фон строки #2c3650", getattr(r, "bgcolor", None) == "#2c3650", f"bg={r.bgcolor}")
-            # повторный enter с тем же состоянием — без исключений
-            r.on_hover(type("E", (), {"data": "true"})())
-            check("hover: повторный enter без исключений",
-                  getattr(r, "bgcolor", None) == "#2c3650")
-            # выход
-            r.on_hover(type("E", (), {"data": "false"})())
-            check("hover off: фон вернулся #2a3247", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
-        except Exception:
-            traceback.print_exc()
-            check("hover вызов без исключения", False)
+        # Раунд 13: on_hover нет вовсе => update() не дёргается => лаг невозможен
+        check("hover13: у строк нет on_hover",
+              all(getattr(r, "on_hover", None) is None for r in rows))
+        check("hover13: фон строк статичен #2a3247",
+              all(getattr(r, "bgcolor", None) == TILE_BG for r in rows))
 
     # ── 8. плашка строки — серый графит ──
     page, tab, _ = build()
@@ -1054,24 +1055,19 @@ def main():
     saved = load_settings().get("col_widths") or {}
     check("resize: drag «Содержания» сохранил ширину", len(saved) > 0, f"{saved}")
 
-    # ── 24. Раунд 9, БАГ 1: hover на самой строке (быстрый прогон) ──
+    # ── 24. Раунд 13: hover отсутствует на строках, календарях и хэндлах таблицы ──
     page, tab, _ = build()
     rows8 = _visible_rows(tab)
-    check("hover9: строки есть", len(rows8) >= 1)
+    check("hover13: строки есть", len(rows8) >= 1)
     if rows8:
-        ok = True
-        for r8 in rows8[:3]:
-            try:
-                r8.on_hover(type("E", (), {"data": "true"})())
-                r8.on_hover(type("E", (), {"data": "false"})())
-            except Exception:
-                ok = False
-        check("hover9: быстрый прогон по 3 строкам без исключений", ok)
-        r8 = rows8[0]
-        r8.on_hover(type("E", (), {"data": "true"})())
-        check("hover9: строка подсвечена", getattr(r8, "bgcolor", None) == "#2c3650", f"bg={r8.bgcolor}")
-        r8.on_hover(type("E", (), {"data": "false"})())
-        check("hover9: строка сброшена", getattr(r8, "bgcolor", None) == TILE_BG, f"bg={r8.bgcolor}")
+        check("hover13: строки без on_hover",
+              all(getattr(r8, "on_hover", None) is None for r8 in rows8))
+    # ячейки календарей (фильтр-календарь собирается при init) — тоже без hover
+    cal_cells = [c for c in walk(tab) if isinstance(c, ft.Container)
+                 and getattr(c, "width", None) == 34 and getattr(c, "height", None) == 32]
+    check("hover13: ячейки календарей без on_hover",
+          all(getattr(c, "on_hover", None) is None for c in cal_cells),
+          f"{len(cal_cells)} ячеек")
 
     # ── 25. Раунд 9, задача 3: редактор справочников ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
@@ -1190,22 +1186,17 @@ def main():
                   not any(getattr(c, "visible", False) for c in walk(tab)
                           if getattr(c, "bgcolor", None) == "#e604070f"))
 
-    # ── 29. Раунд 10, задача 1: hover (bgcolor + throttle, без исключений) ──
+    # ── 29. Раунд 13, задача 1: hover отсутствует или не использует update() ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("h1", "Х-1", executors=["Семисенко И.Ю."])])
     page, tab, _ = build()
     rows10 = _visible_rows(tab)
-    check("hover10: строки есть", len(rows10) >= 1)
+    check("hover13: строки есть", len(rows10) >= 1)
     if rows10:
-        r10 = rows10[0]
-        check("hover10: on_hover установлен", getattr(r10, "on_hover", None) is not None)
-        r10.on_hover(type("E", (), {"data": "true"})())
-        check("hover10: enter подсветил строку", getattr(r10, "bgcolor", None) == "#2c3650", f"bg={r10.bgcolor}")
-        r10.on_hover(type("E", (), {"data": "true"})())
-        r10.on_hover(type("E", (), {"data": "false"})())
-        check("hover10: leave вернул фон", getattr(r10, "bgcolor", None) == TILE_BG, f"bg={r10.bgcolor}")
+        check("hover13: on_hover у строк отсутствует (тормоза исключены)",
+              all(getattr(r10, "on_hover", None) is None for r10 in rows10))
 
     # ── 30. Раунд 10, задача 2: «Действия» прижаты к правому краю ──
     page, tab, _ = build()
@@ -1295,6 +1286,268 @@ def main():
         if bodies:
             check("preview10: ширина >= 90% окна (1280 -> >= 1000)",
                   bodies[0].width >= 1000, f"w={bodies[0].width}")
+
+    # ── 34. Раунд 13, задача 2: таблица помещается при 1280 (сумма <= 1240) ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("w1", "Ш-1", executors=["Семисенко И.Ю."])])
+    st_w = load_settings()
+    st_w.pop("col_widths", None)
+    save_settings(st_w)
+
+    def _header_row_of(tab_):
+        hdrs = [c for c in walk(tab_) if isinstance(c, ft.Container)
+                and getattr(c, "height", None) == 34
+                and isinstance(getattr(c, "content", None), ft.Row)
+                and len(getattr(c.content, "controls", []) or []) >= 20]
+        return hdrs[0].content if hdrs else None
+
+    def _row_total(row_, extra_padding):
+        ctrls = row_.controls
+        tot = sum((getattr(c, "width", 0) or 0) for c in ctrls)
+        tot += (row_.spacing or 0) * (len(ctrls) - 1)
+        return tot + extra_padding
+
+    page, tab, _ = build(1280)
+    hdr = _header_row_of(tab)
+    check("width13: заголовок таблицы найден", hdr is not None)
+    if hdr:
+        tot_h = _row_total(hdr, 16)  # padding заголовка 8*2
+        check("width13: заголовок + отступы <= 1240 при 1280", tot_h <= 1240, f"sum={tot_h}")
+    rows_w = _visible_rows(tab)
+    check("width13: строки есть", len(rows_w) >= 1)
+    if rows_w:
+        tot_r = _row_total(rows_w[0].content, 16 + 2)  # padding 8*2 + рамка 2
+        check("width13: строка + отступы <= 1240 при 1280", tot_r <= 1240, f"sum={tot_r}")
+    # раздутые сохранённые ширины (как после ручного resize) клампятся
+    st_w = load_settings()
+    st_w["col_widths"] = {"bar": 4, "num": 120, "incoming": 400, "receive": 200,
+                          "initiator": 300, "controller": 300, "type": 200, "due": 250,
+                          "status": 300, "actions": 250, "content": 1200, "executors": 700}
+    save_settings(st_w)
+    page, tab, _ = build(1280)
+    hdr = _header_row_of(tab)
+    if hdr:
+        tot_h2 = _row_total(hdr, 16)
+        check("width13: раздутые col_widths из settings ужаты <= 1240",
+              tot_h2 <= 1240, f"sum={tot_h2}")
+    rows_w2 = _visible_rows(tab)
+    if rows_w2:
+        tot_r2 = _row_total(rows_w2[0].content, 18)
+        check("width13: строка с раздутыми col_widths <= 1240", tot_r2 <= 1240, f"sum={tot_r2}")
+    # широкий экран: гибкие колонки не раздуваются
+    page, tab, _ = build(1920)
+    hdr = _header_row_of(tab)
+    if hdr:
+        ctrls = hdr.controls
+        # порядок: [bar][num][sep][incoming][sep][receive][sep][initiator][sep]
+        #          [content][sep][executors]...  => индексы 9 и 11
+        content_w = getattr(ctrls[9], "width", 0) or 0
+        exec_w = getattr(ctrls[11], "width", 0) or 0
+        check("width13: при 1920 «Содержание» <= 480", content_w <= 480, f"w={content_w}")
+        check("width13: при 1920 «Исполнители» <= 220", exec_w <= 220, f"w={exec_w}")
+        tot_h3 = _row_total(hdr, 16)
+        check("width13: при 1920 сумма <= доступной (1880)", tot_h3 <= 1880, f"sum={tot_h3}")
+
+    # ── 35. Раунд 13, задача 3: редактирование БАЗОВОЙ записи справочника сохраняется ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "custom_initiators": [],
+                   "hidden_people": [], "hidden_initiators": []})
+    _b14 = _ctrl("b14", "Б-14", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")
+    _b14["initiator"] = "ГУК СК"
+    _seed_raw([_ctrl("b13", "Б-13", executors=["Семисенко И.Ю."], controller="Потемкин С.А."), _b14])
+    page, tab, _ = build()
+    ref_btns13 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                  and getattr(c, "text", None) == "Справочники"]
+    check("ref13: кнопка «Справочники» есть", len(ref_btns13) == 1)
+    ref_btns13[0].on_click(None)
+    dlg13 = page.dialogs[-1]
+    # компактные строки: кнопки 26px, spacing списков 2
+    ref_lists = [c for c in walk(dlg13) if isinstance(c, ft.Column)
+                 and getattr(c, "height", None) == 180]
+    check("ref13: списки компактные (spacing=2)",
+          len(ref_lists) >= 2 and all(c.spacing == 2 for c in ref_lists),
+          f"{[c.spacing for c in ref_lists]}")
+    ref_btns_small = [c for c in walk(dlg13) if isinstance(c, ft.IconButton)
+                      and getattr(c, "tooltip", None) in ("Переименовать", "Удалить")]
+    check("ref13: кнопки записей компактные (26px)",
+          len(ref_btns_small) >= 2 and all(getattr(b, "height", 0) == 26 for b in ref_btns_small))
+    base_name = "Авакян Арсен Артурович"
+    base_rows = [c for c in walk(dlg13) if isinstance(c, ft.Container)
+                 and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
+                 and any(isinstance(t, ft.Text) and t.value == base_name for t in walk(c))]
+    check("ref13: базовая запись в списке", len(base_rows) >= 1)
+    if base_rows:
+        pencil13 = [c for c in walk(base_rows[0]) if isinstance(c, ft.IconButton)
+                    and getattr(c, "tooltip", None) == "Переименовать"]
+        pencil13[0].on_click(None)
+        efields13 = [c for c in walk(dlg13) if isinstance(c, ft.TextField)
+                     and (getattr(c, "value", "") or "") == base_name]
+        check("ref13: открылось поле редактирования", len(efields13) >= 1)
+        if efields13:
+            efields13[0].value = base_name + "!!!"
+            save_ic13 = [c for c in walk(dlg13) if isinstance(c, ft.IconButton)
+                         and getattr(c, "tooltip", None) == "Сохранить"]
+            save_ic13[0].on_click(None)
+            st13 = load_settings()
+            check("ref13: новое значение в extra_people (controls_settings.json)",
+                  (base_name + "!!!") in (st13.get("extra_people") or []),
+                  f"{st13.get('extra_people')}")
+            check("ref13: базовое старое скрыто (hidden_people)",
+                  base_name in (st13.get("hidden_people") or []))
+            from core.controls_data import get_controller_names as _gcn
+            cn13 = _gcn(st13)
+            check("ref13: канон — новое есть, старого нет",
+                  (base_name + "!!!") in cn13 and base_name not in cn13)
+            texts13 = {t.value for t in walk(dlg13) if isinstance(t, ft.Text)}
+            check("ref13: список перестроен с новым именем",
+                  (base_name + "!!!") in texts13 and base_name not in texts13)
+    apply13 = [c for c in getattr(dlg13, "actions", []) if isinstance(c, ft.ElevatedButton)
+               and getattr(c, "text", None) == "Применить"]
+    apply13[0].on_click(None)
+    ex13 = _find_dd(tab, "Все исполнители")
+    opts13 = [o.key for o in (ex13.options or [])]
+    check("ref13: после «Применить» новое ФИО в фильтре", (base_name + "!!!") in opts13)
+    check("ref13: старое базовое ФИО из фильтра ушло", base_name not in opts13)
+
+    # базовый инициатор: переименование сохраняется
+    ref_btns13 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                  and getattr(c, "text", None) == "Справочники"]
+    ref_btns13[0].on_click(None)
+    dlg13b = page.dialogs[-1]
+    init_rows = [c for c in walk(dlg13b) if isinstance(c, ft.Container)
+                 and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
+                 and any(isinstance(t, ft.Text) and t.value == "ГУК" for t in walk(c))]
+    check("ref13: базовый инициатор «ГУК» в списке", len(init_rows) >= 1)
+    if init_rows:
+        pencil_i = [c for c in walk(init_rows[0]) if isinstance(c, ft.IconButton)
+                    and getattr(c, "tooltip", None) == "Переименовать"]
+        pencil_i[0].on_click(None)
+        efields_i = [c for c in walk(dlg13b) if isinstance(c, ft.TextField)
+                     and (getattr(c, "value", "") or "") == "ГУК"]
+        if efields_i:
+            efields_i[0].value = "ГУК РОСТОВ"
+            save_i = [c for c in walk(dlg13b) if isinstance(c, ft.IconButton)
+                      and getattr(c, "tooltip", None) == "Сохранить"]
+            save_i[0].on_click(None)
+            st_i = load_settings()
+            check("ref13: переименование кластера сохранено в init_renames (json)",
+                  (st_i.get("init_renames") or {}).get("ГУК") == "ГУК РОСТОВ",
+                  f"{st_i.get('init_renames')}")
+        apply_i = [c for c in getattr(dlg13b, "actions", []) if isinstance(c, ft.ElevatedButton)
+                   and getattr(c, "text", None) == "Применить"]
+        apply_i[0].on_click(None)
+        idd13 = _find_dd(tab, "Все инициаторы")
+        iopts = [o.key for o in (idd13.options or [])]
+        check("ref13: «ГУК РОСТОВ» в фильтре инициаторов", "ГУК РОСТОВ" in iopts, f"{iopts}")
+        check("ref13: переименованный кластер «ГУК» из опций ушёл", "ГУК" not in iopts)
+        # фильтр по переименованному кластеру находит контроли исходного канона
+        check("ref13: фильтр «ГУК РОСТОВ» применился",
+          _set_filter(tab, "Все инициаторы", "ГУК РОСТОВ"))
+        vis13 = _visible_texts(tab)
+        check("ref13: «ГУК РОСТОВ» находит контроль «ГУК СК»",
+              "Б-14" in vis13 and "Б-13" not in vis13, f"видно: {sorted(vis13)}")
+
+    # ── 36. Раунд 13, задача 5: прикрепление к НОВОЙ карточке без TypeError ──
+    from core.controls_data import copy_attachment_to_local, copy_attachment_to_shared
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("a13", "А-13", executors=["Семисенко И.Ю."])])
+    # страховка уровня данных: пустой control_id -> None, без TypeError
+    src_dir13 = tempfile.mkdtemp(prefix="porayonka_src_")
+    src13 = os.path.join(src_dir13, "scan.png")
+    with open(src13, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"1" * 32)
+    check("attach13: copy_attachment_to_local(None) = None без TypeError",
+          copy_attachment_to_local(None, src13) is None)
+    check("attach13: copy_attachment_to_shared(None) = None без TypeError",
+          copy_attachment_to_shared(None, src13, {"network_enabled": True,
+                                                  "network_shared_path": src_dir13}) is None)
+    page, tab, _ = build()
+    _open_card(tab, via_add=True)
+    picker13 = getattr(page, "_controls_attach_picker", None)
+    check("attach13: пикер вложений зарегистрирован", picker13 is not None)
+
+    class _F13:
+        def __init__(self, path, name):
+            self.path = path
+            self.name = name
+
+    def _fire_picker(picker_, ev_):
+        eh = getattr(picker_, "on_result", None)
+        if eh is None:
+            return False
+        if callable(eh) and not hasattr(eh, "_EventHandler__handlers"):
+            eh(ev_)
+            return True
+        return _invoke_event_handler(eh, ev_)
+
+    ok13 = True
+    try:
+        _fire_picker(picker13, type("E", (), {"files": [_F13(src13, "scan.png")]})())
+    except Exception:
+        ok13 = False
+        traceback.print_exc()
+    check("attach13: прикрепление к новой карточке без исключений", ok13)
+    att_texts13 = [t.value for t in walk(tab) if isinstance(t, ft.Text) and t.value == "scan.png"]
+    check("attach13: файл сразу виден в списке вложений", len(att_texts13) >= 1)
+    att_root13 = os.path.join(os.environ["APPDATA"], "porayonka", "controls_attachments")
+    copied13 = []
+    if os.path.isdir(att_root13):
+        for d in os.listdir(att_root13):
+            pth = os.path.join(att_root13, d)
+            if os.path.isdir(pth) and any(f.startswith("scan") for f in os.listdir(pth)):
+                copied13.append(d)
+    check("attach13: файл скопирован в папку вложений (uuid новой карточки)",
+          len(copied13) >= 1, f"{copied13}")
+
+    # ── 37. Раунд 13, задача 5: сеть включена — в shared; shared недоступен — локально ──
+    shared_dir13 = tempfile.mkdtemp(prefix="porayonka_shared_att_")
+    save_settings({"network_enabled": True, "network_role": "admin", "network_user": "",
+                   "network_shared_path": os.path.join(shared_dir13, "controls.json"),
+                   "notify_log": {}, "notify_sound": True, "extra_people": []})
+    _seed_raw([_ctrl("a14", "А-14", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    _open_card(tab, via_add=True)
+    src14 = os.path.join(src_dir13, "scan2.png")
+    with open(src14, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"2" * 32)
+    ok14 = True
+    try:
+        _fire_picker(page._controls_attach_picker,
+                     type("E", (), {"files": [_F13(src14, "scan2.png")]})())
+    except Exception:
+        ok14 = False
+        traceback.print_exc()
+    check("attach13: при сети — без исключений", ok14)
+    shared_att13 = os.path.join(shared_dir13, "controls_attachments")
+    in_shared = False
+    if os.path.isdir(shared_att13):
+        for d in os.listdir(shared_att13):
+            if any(f.startswith("scan2") for f in os.listdir(os.path.join(shared_att13, d))):
+                in_shared = True
+    check("attach13: при включённой сети файл ушёл в shared", in_shared)
+    # shared недоступен (путь поверх файла) — фолбэк в локальную папку, без TypeError
+    block_dir13 = tempfile.mkdtemp(prefix="porayonka_block_")
+    block_file13 = os.path.join(block_dir13, "block")
+    with open(block_file13, "w", encoding="utf-8") as f:
+        f.write("x")
+    bad_settings = {"network_enabled": True,
+                    "network_shared_path": os.path.join(block_file13, "controls.json")}
+    rel_bad = None
+    ok_bad = True
+    try:
+        rel_bad = copy_attachment_to_shared("cid13", src13, bad_settings)
+    except Exception:
+        ok_bad = False
+        traceback.print_exc()
+    check("attach13: shared недоступен — copy_to_shared вернул None без TypeError",
+          ok_bad and rel_bad is None)
+    rel_loc = copy_attachment_to_local("cid13", src13)
+    check("attach13: локальный фолбэк скопировал файл", rel_loc is not None)
 
     print()
     if FAILURES:
