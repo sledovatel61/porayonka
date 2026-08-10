@@ -1,0 +1,305 @@
+Microsoft Windows [Version 10.0.26200.8875]
+(c) Корпорация Майкрософт (Microsoft Corporation). Все права защищены.
+
+C:\Users\User>cd "C:/Users/User/Documents/Исходная программа/porayonka-variant-R12-A2/porayonka-app"
+
+C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app>python main.py
+[OK] Departments loaded: 29
+[EXPORT_MODAL] Создаю модальное окно экспорта...
+[EXPORT_MODAL] Статистика: получено=2, в работе=0, пусто=27
+[EXPORT_MODAL] Модальное окно создано, page.open_export_modal установлен
+[MAIN] Создаю вкладку Зональные...
+[ZONAL_TAB] Initializing zonal tab (phase 2: compact tiles)
+[ZONAL_DATA] SHablon zagruzhen: Ежемесячный отчет, punktov: 4
+[ZONAL_DATA] Zagruzheno dannyh: 52
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Kollekciya zagruzhena: Ежемесячный отчет, submissions: 52, криминалистов: 16
+[ZONAL_TAB] Criminalists: 16
+[ZONAL_TAB] Active: 13
+[ZONAL_TAB] Template items: 4
+[ZONAL_TAB] Initial tiles per row: 3 (page width=1264.0)
+[TILE] Creating tile: 1
+[TILE] Creating tile: 2
+[TILE] Creating tile: 3
+[TILE] Creating tile: 4
+[TILE] Creating tile: 5
+[TILE] Creating tile: 6
+[TILE] Creating tile: 7
+[TILE] Creating tile: 8
+[TILE] Creating tile: 9
+[TILE] Creating tile: 10
+[TILE] Creating tile: 11
+[TILE] Creating tile: 13
+[TILE] Creating tile: 12
+[TILE] Creating tile: 14
+[TILE] Creating tile: 15
+[TILE] Creating tile: 16
+[CRIM_SUMMARY] expanded=False active=13 submitted=42 overall=81
+[ZONAL_TAB] Zonal tab created successfully (phase 2)
+[MAIN] [OK] Vkladka Zonalnye sozdana
+[MAIN] Создаю вкладку Контроли...
+[CONTROLS_TAB] Glass Dark v2 - init
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[CONTROLS_TAB] Glass Dark v2 ready
+[MAIN] [OK] Vkladka Kontroli sozdana
+[ZONAL_TAB] Resize: tiles_per_row -> 6 (w=1920.0)
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+log4cplus:ERROR No appenders could be found for logger (DSL).
+log4cplus:ERROR Please initialize the log4cplus system properly.
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Future exception was never retrieved
+future: <Future finished exception=TypeError("unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'")>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 941, in wrapper
+    handler(*args)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\ui\controls\controls_tab.py", line 2204, in _on_attach_picked
+    rel = copy_attachment_to_shared(detail_state["control_id"], fpath, settings)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-variant-R12-A2\porayonka-app\core\controls_data.py", line 473, in copy_attachment_to_shared
+    target_dir = shared_dir / "controls_attachments" / control_id
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
