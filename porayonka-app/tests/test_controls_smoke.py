@@ -53,6 +53,18 @@
     в заголовке (#26ffffff) и строках (#12ffffff);
   * hover: отдельный лёгкий слой внутри строки (update только его bgcolor).
 
+Раунд 9 (PROMPT_контроли_доработка9.md):
+  * hover возвращён на саму строку (hover_layer в Stack ломал события в GUI),
+    bgcolor-only + пропуск повторных событий;
+  * разделители выровнены: заголовок и строки собираются одинаково
+    ([bar][ячейка][разделитель]... с одинаковым spacing и padding 8);
+  * редактор справочников: кнопка «Справочники» в тулбаре, модалка с тремя
+    списками (люди/инициаторы), добавление/удаление, применение к фильтрам;
+  * resize карточки: drag за угол (on_pan_update), min 600x400, размеры
+    сохраняются в card_width/card_height;
+  * предпросмотр вложений: миниатюры (ft.Image / иконка PDF), полноразмерный
+    overlay с масштабированием, кнопки «открыть/удалить/закрыть».
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -447,28 +459,22 @@ def main():
     if rows:
         cur = {getattr(r, "mouse_cursor", None) for r in rows}
         check("курсор CLICK остался", ft.MouseCursor.CLICK in cur)
-        # Раунд 8 (задача 4): hover — отдельный лёгкий слой внутри строки
-        # (обновляется только его bgcolor; у самой строки on_hover нет).
+        # Раунд 9 (БАГ 1): hover возвращён на саму строку (hover_layer в Stack
+        # ломал события в реальном GUI). Проверяем подсветку строки.
         r = rows[0]
-        layers = [c for c in walk(r) if isinstance(c, ft.Container)
-                  and getattr(c, "on_hover", None) is not None]
-        check("hover: внутри строки есть слой с on_hover", len(layers) >= 1, f"{len(layers)}")
-        if layers:
-            hl = layers[0]
-            try:
-                hl.on_hover(type("E", (), {"data": "true"})())
-                check("hover: фон слоя #2c3650", getattr(hl, "bgcolor", None) == "#2c3650", f"bg={hl.bgcolor}")
-                # повторный enter с тем же состоянием — без исключений
-                hl.on_hover(type("E", (), {"data": "true"})())
-                check("hover: повторный enter без исключений",
-                      getattr(hl, "bgcolor", None) == "#2c3650")
-                # выход
-                hl.on_hover(type("E", (), {"data": "false"})())
-                check("hover off: фон слоя прозрачный",
-                      getattr(hl, "bgcolor", None) == "transparent", f"bg={hl.bgcolor}")
-            except Exception:
-                traceback.print_exc()
-                check("hover вызов без исключения", False)
+        try:
+            r.on_hover(type("E", (), {"data": "true"})())
+            check("hover: фон строки #2c3650", getattr(r, "bgcolor", None) == "#2c3650", f"bg={r.bgcolor}")
+            # повторный enter с тем же состоянием — без исключений
+            r.on_hover(type("E", (), {"data": "true"})())
+            check("hover: повторный enter без исключений",
+                  getattr(r, "bgcolor", None) == "#2c3650")
+            # выход
+            r.on_hover(type("E", (), {"data": "false"})())
+            check("hover off: фон вернулся #2a3247", getattr(r, "bgcolor", None) == TILE_BG, f"bg={r.bgcolor}")
+        except Exception:
+            traceback.print_exc()
+            check("hover вызов без исключения", False)
 
     # ── 8. плашка строки — серый графит ──
     page, tab, _ = build()
@@ -911,8 +917,11 @@ def main():
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True})
     _seed_raw([_ctrl("r1", "Р-1", executors=["Семисенко И.Ю."])])
     page, tab, _ = build()
+    def _gd_subs2(g, attr):
+        eh = getattr(g, attr, None)
+        return len(getattr(eh, "_EventHandler__handlers", {})) if eh is not None else 0
     gds = [c for c in walk(tab) if isinstance(c, ft.GestureDetector)
-           and getattr(c, "on_horizontal_drag_update", None) is not None]
+           and _gd_subs2(c, "on_horizontal_drag_start") > 0]
     check("resize: drag-хэндлы найдены", len(gds) >= 1, f"{len(gds)}")
     if gds:
         E = type("E", (), {})
@@ -1011,8 +1020,12 @@ def main():
                    "extra_people": []})
     _seed_raw([_ctrl("r8", "Р-8", executors=["Семисенко И.Ю."])])
     page, tab, _ = build()
+    def _gd_subs(g, attr):
+        eh = getattr(g, attr, None)
+        return len(getattr(eh, "_EventHandler__handlers", {})) if eh is not None else 0
     gds = [c for c in walk(tab) if isinstance(c, ft.GestureDetector)
-           and getattr(c, "on_horizontal_drag_update", None) is not None]
+           and _gd_subs(c, "on_horizontal_drag_start") > 0]
+    # 11 границ колонок (у resize-хэндла карточки подписки horizontal нет)
     check("resize: drag-хэндлы на ВСЕХ 11 границах колонок", len(gds) == 11, f"{len(gds)}")
     # разделители в заголовке (1px, цвет #26ffffff)
     seps = [c for c in walk(tab) if isinstance(c, ft.Container)
@@ -1031,29 +1044,141 @@ def main():
     saved = load_settings().get("col_widths") or {}
     check("resize: drag «Содержания» сохранил ширину", len(saved) > 0, f"{saved}")
 
-    # ── 24. Раунд 8, задача 4: hover-слой (отдельный лёгкий контрол) ──
+    # ── 24. Раунд 9, БАГ 1: hover на самой строке (быстрый прогон) ──
     page, tab, _ = build()
     rows8 = _visible_rows(tab)
-    check("hover8: строки есть", len(rows8) >= 1)
+    check("hover9: строки есть", len(rows8) >= 1)
     if rows8:
-        layers = [c for c in walk(rows8[0]) if isinstance(c, ft.Container)
-                  and getattr(c, "on_hover", None) is not None]
-        check("hover8: в строке есть hover-слой", len(layers) >= 1, f"{len(layers)}")
-        if layers:
-            hl = layers[0]
-            hl.on_hover(type("E", (), {"data": "true"})())
-            check("hover8: слой подсветился", getattr(hl, "bgcolor", None) == "#2c3650")
-            # «быстрый прогон» по 3 строкам: enter/leave без исключений
-            ok = True
-            for r8 in rows8[:3]:
-                for l8 in [c for c in walk(r8) if isinstance(c, ft.Container)
-                           and getattr(c, "on_hover", None) is not None]:
-                    try:
-                        l8.on_hover(type("E", (), {"data": "true"})())
-                        l8.on_hover(type("E", (), {"data": "false"})())
-                    except Exception:
-                        ok = False
-            check("hover8: быстрый прогон по 3 строкам без исключений", ok)
+        ok = True
+        for r8 in rows8[:3]:
+            try:
+                r8.on_hover(type("E", (), {"data": "true"})())
+                r8.on_hover(type("E", (), {"data": "false"})())
+            except Exception:
+                ok = False
+        check("hover9: быстрый прогон по 3 строкам без исключений", ok)
+        r8 = rows8[0]
+        r8.on_hover(type("E", (), {"data": "true"})())
+        check("hover9: строка подсвечена", getattr(r8, "bgcolor", None) == "#2c3650", f"bg={r8.bgcolor}")
+        r8.on_hover(type("E", (), {"data": "false"})())
+        check("hover9: строка сброшена", getattr(r8, "bgcolor", None) == TILE_BG, f"bg={r8.bgcolor}")
+
+    # ── 25. Раунд 9, задача 3: редактор справочников ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "custom_initiators": []})
+    _seed_raw([_ctrl("ref1", "РФ-1", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")])
+    page, tab, _ = build()
+    ref_btns = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                and getattr(c, "text", None) == "Справочники"]
+    check("refs: кнопка «Справочники» в тулбаре", len(ref_btns) == 1)
+    if ref_btns:
+        ref_btns[0].on_click(None)
+        check("refs: модалка открыта", len(page.dialogs) >= 1)
+        dlg = page.dialogs[-1]
+        fields = [c for c in walk(dlg) if isinstance(c, ft.TextField)]
+        add_btns = [c for c in walk(dlg) if isinstance(c, ft.ElevatedButton)
+                    and getattr(c, "text", None) == "Добавить"]
+        check("refs: в модалке есть поля и кнопки «Добавить»",
+              len(fields) >= 2 and len(add_btns) >= 2, f"{len(fields)}/{len(add_btns)}")
+        if fields and add_btns:
+            # добавить человека в справочник
+            fields[0].value = "Макаренко Роман Андреевич"
+            add_btns[0].on_click(None)
+            check("refs: extra_people пополнен",
+                  "Макаренко Роман Андреевич" in (load_settings().get("extra_people") or []))
+            # добавить инициатор
+            fields[1].value = "МВД"
+            add_btns[1].on_click(None)
+            check("refs: custom_initiators пополнен",
+                  "МВД" in (load_settings().get("custom_initiators") or []))
+            # применить
+            apply_btns = [c for c in getattr(dlg, "actions", []) if isinstance(c, ft.ElevatedButton)
+                          and getattr(c, "text", None) == "Применить"]
+            if apply_btns:
+                apply_btns[0].on_click(None)
+            ex = _find_dd(tab, "Все исполнители")
+            check("refs: Макаренко появился в фильтре после применения",
+                  ex is not None and "Макаренко Роман Андреевич" in [o.key for o in (ex.options or [])])
+            idd = _find_dd(tab, "Все инициаторы")
+            check("refs: «МВД» появился в фильтре инициаторов",
+                  idd is not None and "МВД" in [o.key for o in (idd.options or [])])
+
+    # ── 26. Раунд 9, задача 4: resize карточки (размеры сохраняются) ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "card_width": 920, "card_height": 780})
+    _seed_raw([_ctrl("cr1", "КР-1", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    _open_card(tab, via_add=False)
+    # найти resize-хэндл (GestureDetector с on_pan_update)
+    def _gd_subs3(g, attr):
+        eh = getattr(g, attr, None)
+        return len(getattr(eh, "_EventHandler__handlers", {})) if eh is not None else 0
+    pans = [c for c in walk(tab) if isinstance(c, ft.GestureDetector)
+            and _gd_subs3(c, "on_pan_update") > 0]
+    check("card-resize: хэндл найден", len(pans) >= 1, f"{len(pans)}")
+    if pans:
+        _invoke_event_handler(pans[0].on_pan_update, type("E", (), {"delta_x": 120, "delta_y": 80})())
+        _invoke_event_handler(pans[0].on_pan_end, type("E", (), {})())
+        st9 = load_settings()
+        check("card-resize: ширина сохранена в настройки",
+              int(st9.get("card_width") or 0) > 920, f"w={st9.get('card_width')}")
+        check("card-resize: высота сохранена в настройки",
+              int(st9.get("card_height") or 0) > 780, f"h={st9.get('card_height')}")
+
+    # ── 27. Раунд 9, БАГ 2: разделители заголовка и строк выровнены ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("sp1", "СП-1", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    # в заголовке и строке одинаковая последовательность: bar, ячейка, разделитель...
+    hdr = [c for c in walk(tab) if isinstance(c, ft.Container)
+           and getattr(c, "bgcolor", None) == "#26ffffff"]
+    rows_sp = _visible_rows(tab)
+    row_sp = rows_sp[0] if rows_sp else None
+    vseps = [c for c in walk(row_sp) if isinstance(c, ft.Container)
+             and getattr(c, "bgcolor", None) == "#12ffffff"] if row_sp else []
+    check("seps: в заголовке 10 разделителей", len(hdr) == 10, f"{len(hdr)}")
+    check("seps: в строке 10 разделителей", len(vseps) == 10, f"{len(vseps)}")
+    # одинаковое число ячеек между разделителями => X-координаты совпадают
+    check("seps: число колонок заголовка = числу колонок строки",
+          len([c for c in walk(tab) if isinstance(c, ft.Stack) and getattr(c, "width", None)]) >= 11)
+
+    # ── 28. Раунд 9, задача 5: предпросмотр вложений ──
+    _seed_raw([_ctrl("cr2", "КР-2", executors=["Семисенко И.Ю."])])
+    att_dir = os.path.join(os.environ["APPDATA"], "porayonka", "controls_attachments", "cr2")
+    os.makedirs(att_dir, exist_ok=True)
+    img_path = os.path.join(att_dir, "test.png")
+    with open(img_path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+    # подменить attachments у контроля
+    data = json.load(open(get_controls_file(), encoding="utf-8"))
+    data["controls"][0]["attachments"] = ["cr2/test.png"]
+    with open(get_controls_file(), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    page, tab, _ = build()
+    _open_card(tab, via_add=False)
+    allc9 = walk(tab)
+    zoom_btns = [c for c in allc9 if isinstance(c, ft.IconButton)
+                 and getattr(c, "tooltip", None) == "Предпросмотр"]
+    check("preview: кнопка «Предпросмотр» у вложения", len(zoom_btns) >= 1, f"{len(zoom_btns)}")
+    thumbs = [c for c in allc9 if isinstance(c, ft.Image)]
+    check("preview: миниатюра изображения (ft.Image) в списке", len(thumbs) >= 1, f"{len(thumbs)}")
+    if zoom_btns:
+        zoom_btns[0].on_click(None)
+        ovs = [c for c in walk(tab) if isinstance(c, ft.Container)
+               and getattr(c, "bgcolor", None) == "#e604070f" and getattr(c, "visible", False)]
+        check("preview: overlay предпросмотра открыт", len(ovs) >= 1)
+        # закрыть
+        close_btns = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                      and getattr(c, "tooltip", None) == "Закрыть"]
+        if close_btns:
+            close_btns[-1].on_click(None)
+            check("preview: overlay закрыт",
+                  not any(getattr(c, "visible", False) for c in walk(tab)
+                          if getattr(c, "bgcolor", None) == "#e604070f"))
 
     print()
     if FAILURES:

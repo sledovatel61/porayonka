@@ -212,6 +212,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         "known_ids": set(),              # снимок id для персональных уведомлений (задача 2)
         "my_status_map": {},             # id -> deadline_status для моих контролей (задача 2)
         "known_attachments": {},         # id -> tuple(attachments) для синка вложений (задача 5)
+        "card_w": int(settings.get("card_width", 0) or 920),
+        "card_h": int(settings.get("card_height", 0) or 780),
     }
 
     rows_column = ft.Column(spacing=6, tight=True)  # Bug 2: gap 6px между плашками
@@ -480,7 +482,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         height=34,
         bgcolor="transparent",
         border=ft.border.only(bottom=ft.BorderSide(1, GLASS["border_divider"])),
-        padding=ft.padding.symmetric(horizontal=4, vertical=2),
+        # Раунд 9 (БАГ 2): padding заголовка = padding строк, чтобы разделители
+        # колонок стояли строго на одних X-координатах
+        padding=ft.padding.symmetric(horizontal=8, vertical=2),
     )
 
     # Раунд 7 (задача 5): ссылки на контейнеры заголовков для resize без пересоздания
@@ -489,17 +493,17 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _header_cell(text: str, width: int, key: str, center=False):
         arrow = "▲" if (state["sort_key"]==key and not state["sort_reverse"]) else ("▼" if (state["sort_key"]==key and state["sort_reverse"]) else "")
         lbl = f"{text} {arrow}".strip().upper()
-        # Text part
+        # Раунд 9 (БАГ 2): ячейка заголовка — Stack: текст (ширина W) + drag-хэндл
+        # поверх правого края. Разделители добавляются в _rebuild_header ОТДЕЛЬНЫМИ
+        # контролами между ячейками — точно как в строках, поэтому X-координаты
+        # линий заголовка и строк совпадают 1-в-1.
         text_cont = ft.Container(
             content=ft.Text(lbl, size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True, tooltip="Сортировка"),
-            width=max(20, width-12),
+            width=width,
             padding=ft.padding.only(left=6, right=4),
             alignment=ft.alignment.center if center else ft.alignment.center_left,
             on_click=lambda e, k=key: _sort_by(k),
         )
-        # Раунд 8 (задача 3): у КАЖДОЙ колонки есть хэндл на правой границе.
-        # В update-фазе меняем ширину живого контейнера (без пересоздания header),
-        # по завершении — rebuild таблицы + сохранение. Разделитель 1px + хэндл 7px.
         def _make_drag(k):
             def _on_drag_start(e):
                 pass
@@ -534,7 +538,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     if refs is not None:
                         cell, tcont = refs
                         cell.width = _W[k]
-                        tcont.width = max(20, _W[k] - 12)
+                        tcont.width = _W[k]
                         _safe_update(cell)
                 except Exception:
                     traceback.print_exc()
@@ -549,15 +553,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             return _on_drag_start, _on_drag_update, _on_drag_end
 
         _ds, _du, _de = _make_drag(key)
-        # Видимый разделитель (1px) + зона захвата (7px) + hover-подсветка #4f8cff
-        sep_bar = ft.Container(width=1, height=30, bgcolor="#26ffffff")
         drag_handle = ft.GestureDetector(
             mouse_cursor=ft.MouseCursor.RESIZE_LEFT_RIGHT,
             on_horizontal_drag_start=_ds,
             on_horizontal_drag_update=_du,
             on_horizontal_drag_end=_de,
             content=ft.Container(
-                width=7,
+                width=10,
                 height=34,
                 bgcolor="transparent",
                 border_radius=2,
@@ -575,16 +577,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 traceback.print_exc()
         drag_handle.on_hover = _on_hover
 
-        # Combine: [текст, разделитель, хэндл] — ширина контейнера = width
-        cell = ft.Container(
+        # Stack: текст на всю ширину, хэндл прижат к правому краю (поверх границы)
+        cell = ft.Stack(
+            controls=[text_cont, drag_handle],
             width=width,
-            content=ft.Row(
-                controls=[text_cont, sep_bar, drag_handle],
-                spacing=0,
-                tight=True,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
         )
+        cell.alignment = ft.alignment.center_right
         header_cell_refs[key] = (cell, text_cont)
         return cell
 
@@ -599,20 +597,32 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _rebuild_header():
         is_archive = state["mode"] == "archive"
-        # Раунд 8: ВСЕ колонки — через _header_cell (drag-хэндл + разделитель),
-        # включая «Содержание», «Исполнители», «За кем», «Статус», «Действия».
+        # Раунд 9 (БАГ 2): та же последовательность контролов, что и в строках —
+        # [bar][ячейка][разделитель][ячейка][разделитель]... с одинаковым spacing,
+        # поэтому вертикальные линии заголовка и строк стоят на одних X.
+        _hsep = ft.Container(width=1, height=30, bgcolor="#26ffffff")
         controls = [
             ft.Container(width=_W["bar"]),
             _header_cell("№", _W["num"], "num", center=True),
+            _hsep,
             _header_cell("вх. №", _W["incoming"], "incoming"),
+            _hsep,
             _header_cell("Дата пост.", _W["receive"], "receive"),
+            _hsep,
             _header_cell("Инициатор", _W["initiator"], "initiator"),
+            _hsep,
             _header_cell("Содержание", _W["content"], "content"),
+            _hsep,
             _header_cell("Исполнители", _W["executors"], "executors"),
+            _hsep,
             _header_cell("За кем", _W["controller"], "controller"),
+            _hsep,
             _header_cell("Причина" if is_archive else "Тип", _W["type"], "type"),
+            _hsep,
             _header_cell("Срок исполн.", _W["due"], "due"),
+            _hsep,
             _header_cell("Статус", _W["status"], "status"),
+            _hsep,
             _header_cell("Действия", _W["actions"], "actions", center=True),
         ]
         header_row.content = ft.Row(controls=controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
@@ -752,40 +762,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         )
         row.mouse_cursor = ft.MouseCursor.CLICK
 
-        # Раунд 8 (задача 4): hover без задержек.
-        # Причина лага: page.update(row) на строке с десятками детей сериализует
-        # ВСЁ дерево строки на каждое событие. Решение — hover-подсветка отдельным
-        # верхним слоем (Container внутри строки): меняем только его bgcolor и
-        # шлём update ТОЛЬКО этого лёгкого контрола (1 атрибут, без детей).
-        # Сам row.on_hover не используем — обработчик вешаем на hover-слой.
-        hover_layer = ft.Container(
-            expand=True,
-            bgcolor="transparent",
-            border_radius=10,
-        )
-        row.content = ft.Stack(
-            controls=[
-                ft.Row(controls=row_controls, spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                hover_layer,
-            ],
-            expand=True,
-        )
-        row.expand = None  # не растягивать строку — высота по контенту
+        # Раунд 9 (БАГ 1): hover возвращён на сам row (hover_layer в Stack ломал
+        # события в реальном GUI). Чтобы не лагало: меняем ТОЛЬКО bgcolor,
+        # рамка статична; повторные события с тем же состоянием не шлют update;
+        # update() — напрямую (минуя _safe_update), с проверкой page.
         def _hover(e):
-            # горячий обработчик: минимум кода, без try/except и traceback.
-            # update() только лёгкого слоя; немонтированный контрол пропускаем
-            # (headless/инициализация) — без исключений.
             if e.data == "true":
-                if hover_layer.bgcolor != GLASS["hover_bg"]:
-                    hover_layer.bgcolor = GLASS["hover_bg"]
-                    if hover_layer.page is not None:
-                        hover_layer.update()
+                if row.bgcolor != GLASS["hover_bg"]:
+                    row.bgcolor = GLASS["hover_bg"]
+                    if row.page is not None:
+                        row.update()
             else:
-                if hover_layer.bgcolor != "transparent":
-                    hover_layer.bgcolor = "transparent"
-                    if hover_layer.page is not None:
-                        hover_layer.update()
-        hover_layer.on_hover = _hover
+                if row.bgcolor != GLASS["card"]:
+                    row.bgcolor = GLASS["card"]
+                    if row.page is not None:
+                        row.update()
+        row.on_hover = _hover
         return row
 
     def _rebuild_table():
@@ -1478,9 +1470,81 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         content=ft.Column(controls=[ft.Text("Загрузка…")], scroll=ft.ScrollMode.AUTO, expand=True),
     )
 
-    # Detail overlay Stack: card + global calendar dropdown (top layer to avoid clipping)
+    # Раунд 9 (задача 4): resize карточки — уголок в правом нижнем углу.
+    def _make_card_resize():
+        def _on_drag_update(e):
+            try:
+                delta_x = int(getattr(e, "delta_x", 0) or 0)
+                delta_y = int(getattr(e, "delta_y", 0) or 0)
+                if delta_x == 0 and delta_y == 0:
+                    return
+                try:
+                    win_h = page.window.height or 860
+                except Exception:
+                    win_h = 860
+                try:
+                    win_w = page.width or 1280
+                except Exception:
+                    win_w = 1280
+                cw = max(600, min(int(win_w * 0.95), state.get("card_w", 920) + delta_x))
+                ch = max(400, min(int(win_h * 0.92), state.get("card_h", 780) + delta_y))
+                state["card_w"] = cw
+                state["card_h"] = ch
+                detail_card.width = cw
+                detail_card.height = ch
+                try:
+                    _safe_update(detail_card)
+                except Exception:
+                    traceback.print_exc()
+            except Exception:
+                traceback.print_exc()
+
+        def _on_drag_end(e=None):
+            # сохранить размеры в настройки
+            try:
+                settings["card_width"] = state.get("card_w", 920)
+                settings["card_height"] = state.get("card_h", 780)
+                save_settings(settings)
+            except Exception:
+                traceback.print_exc()
+
+        handle = ft.GestureDetector(
+            mouse_cursor=ft.MouseCursor.RESIZE_DOWN_RIGHT,
+            on_pan_update=_on_drag_update,
+            on_pan_end=_on_drag_end,
+            content=ft.Container(
+                width=22,
+                height=22,
+                bgcolor="transparent",
+            ),
+        )
+        handle.on_hover = lambda e: None
+        return handle
+
+    card_resize_handle = _make_card_resize()
+
+    # Раунд 9 (задача 5): полноразмерный предпросмотр вложений (поверх карточки)
+    preview_root = ft.Container(
+        visible=False,
+        expand=True,
+        bgcolor="#e604070f",
+        alignment=ft.alignment.center,
+        padding=ft.padding.all(24),
+    )
+    preview_body = ft.Container(
+        width=800,
+        height=560,
+        bgcolor=GLASS["surface_solid"],
+        border=ft.border.all(1, GLASS["border"]),
+        border_radius=12,
+        padding=ft.padding.all(12),
+        content=ft.Column(controls=[ft.Text("Загрузка…")], spacing=8, tight=True),
+    )
+    preview_root.content = preview_body
+
+    # Detail overlay Stack: card + global calendar dropdown + preview (top layer)
     detail_overlay = ft.Stack(
-        controls=[detail_card, global_cal_root],
+        controls=[detail_card, global_cal_root, card_resize_handle, preview_root],
     )
 
     # Overlay container: dim background covering the whole tab, card centred at top.
@@ -1520,6 +1584,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         detail_overlay_container.visible = False
         state["editing"] = False
         _close_global_cal()
+        # раунд 9: закрыть предпросмотр вложений вместе с карточкой
+        try:
+            if preview_root.visible:
+                preview_root.visible = False
+        except Exception:
+            traceback.print_exc()
         if state["pending_shared"] is not None:
             _apply_pending_on_close()
         else:
@@ -1828,20 +1898,117 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 detail_state["milestones"].append({"date_ref": {"value": m.date}, "note": m.note, "is_done": m.is_done})
         _rebuild_milestones()
 
-        # Attachments
+        # Attachments — раунд 9 (задача 5): миниатюра для изображений/PDF,
+        # клик по миниатюре/имени — полноразмерный предпросмотр в overlay
+        # (preview_root/preview_body объявлены на уровне detail_overlay)
         attach_col = ft.Column(spacing=6, tight=True)
+
+        def _resolve_abs(rel: str):
+            import os as _os
+            try:
+                path = resolve_attachment(detail_state["control_id"], rel, settings)
+                return str(path) if (path and _os.path.exists(str(path))) else None
+            except Exception:
+                return None
+
+        def _close_preview(e=None):
+            preview_root.visible = False
+            try:
+                _safe_update(preview_root)
+            except Exception:
+                traceback.print_exc()
+
+        def _open_preview(rel: str):
+            abs_path = _resolve_abs(rel)
+            if not abs_path:
+                from ui.toast import show_error_toast
+                show_error_toast(page, "Файл вложения не найден")
+                return
+            fn = rel.split("/")[-1]
+            low = fn.lower()
+            is_img = low.endswith((".png", ".jpg", ".jpeg"))
+            controls = []
+            header_row = ft.Row(controls=[
+                ft.Icon(ft.icons.IMAGE if is_img else ft.icons.PICTURE_AS_PDF, size=18, color=GLASS["accent"]),
+                ft.Text(fn, size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"], expand=True,
+                        no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=fn),
+                ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=16, icon_color=GLASS["accent"],
+                              tooltip="Открыть в программе", on_click=lambda e: _open_attach(rel)),
+                ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"],
+                              tooltip="Удалить", on_click=lambda e: (_close_preview(), _confirm_remove_attach(rel))),
+                ft.IconButton(icon=ft.icons.CLOSE, icon_size=16, icon_color=GLASS["text_secondary"],
+                              tooltip="Закрыть", on_click=_close_preview),
+            ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            controls.append(header_row)
+            if is_img:
+                try:
+                    img = ft.Image(src=abs_path, fit=ft.ImageFit.CONTAIN,
+                                   width=760, height=470, border_radius=8)
+                    controls.append(img)
+                except Exception:
+                    traceback.print_exc()
+                    controls.append(ft.Text("Не удалось загрузить изображение", size=12, color=GLASS["text_secondary"]))
+            else:
+                controls.append(ft.Container(
+                    content=ft.Column(controls=[
+                        ft.Icon(ft.icons.PICTURE_AS_PDF, size=64, color=GLASS["text_muted"]),
+                        ft.Text("PDF — предпросмотр недоступен, откройте в программе", size=12,
+                                color=GLASS["text_secondary"]),
+                    ], spacing=10, tight=True, alignment=ft.MainAxisAlignment.CENTER,
+                       horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    expand=True,
+                ))
+            preview_body.content = ft.Column(controls=controls, spacing=10, tight=True)
+            preview_root.visible = True
+            try:
+                _safe_update(preview_root)
+            except Exception:
+                traceback.print_exc()
+
+        def _thumb_for(rel: str):
+            """Миниатюра 44x44: изображение — ft.Image, PDF — иконка."""
+            abs_path = _resolve_abs(rel)
+            fn = rel.split("/")[-1]
+            low = fn.lower()
+            if low.endswith((".png", ".jpg", ".jpeg")):
+                if abs_path:
+                    try:
+                        return ft.Container(
+                            content=ft.Image(src=abs_path, width=44, height=44,
+                                             fit=ft.ImageFit.COVER, border_radius=6),
+                            width=44, height=44, border_radius=6,
+                            border=ft.border.all(1, GLASS["border"]),
+                        )
+                    except Exception:
+                        traceback.print_exc()
+            if low.endswith(".pdf"):
+                return ft.Container(
+                    content=ft.Icon(ft.icons.PICTURE_AS_PDF, size=26, color=GLASS["overdue"]),
+                    width=44, height=44, border_radius=6, bgcolor=with_alpha(GLASS["overdue"], "18"),
+                    alignment=ft.alignment.center,
+                )
+            return ft.Container(
+                content=ft.Icon(ft.icons.DESCRIPTION_OUTLINED, size=22, color=GLASS["text_muted"]),
+                width=44, height=44, border_radius=6, bgcolor=GLASS["surface_alt"],
+                alignment=ft.alignment.center,
+            )
+
         def _rebuild_attach():
             attach_col.controls.clear()
             for rel in detail_state["attachments"]:
                 fn = rel.split("/")[-1]
-                icon = ft.icons.PICTURE_AS_PDF if fn.lower().endswith(".pdf") else ft.icons.IMAGE_OUTLINED if fn.lower().endswith((".png",".jpg",".jpeg")) else ft.icons.DESCRIPTION_OUTLINED
                 attach_col.controls.append(
                     glass_panel(
                         content=ft.Row(controls=[
-                            ft.Icon(icon, size=14, color=GLASS["accent"]),
-                            ft.Text(fn, size=11, color=GLASS["text"], expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=fn),
-                            ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=14, icon_color=GLASS["accent"], tooltip="Открыть", on_click=lambda e, r=rel: _open_attach(r)),
-                            ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=14, icon_color=GLASS["overdue"], tooltip="Удалить", on_click=lambda e, r=rel: _confirm_remove_attach(r)),
+                            _thumb_for(rel),
+                            ft.Text(fn, size=11, color=GLASS["text"], expand=True, no_wrap=True,
+                                    overflow=ft.TextOverflow.ELLIPSIS, tooltip=fn),
+                            ft.IconButton(icon=ft.icons.ZOOM_IN, icon_size=16, icon_color=GLASS["accent"],
+                                          tooltip="Предпросмотр", on_click=lambda e, r=rel: _open_preview(r)),
+                            ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=14, icon_color=GLASS["text_secondary"],
+                                          tooltip="Открыть", on_click=lambda e, r=rel: _open_attach(r)),
+                            ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=14, icon_color=GLASS["overdue"],
+                                          tooltip="Удалить", on_click=lambda e, r=rel: _confirm_remove_attach(r)),
                         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         radius=8, padding=ft.padding.all(8), bgcolor=GLASS["surface_alt"],
                     )
@@ -2158,8 +2325,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             win_h = 860
         card_max_h = min(780, int(win_h * 0.9))
-        detail_card.width = 920
-        detail_card.height = card_max_h
+        # Раунд 9 (задача 4): размеры из настроек (сохранённые пользователем),
+        # с ограничениями по окну
+        cw = max(600, min(int(win_h * 1.6), state.get("card_w", 920)))
+        ch = max(400, min(card_max_h, state.get("card_h", 780)))
+        detail_card.width = cw
+        detail_card.height = ch
+        state["card_w"] = cw
+        state["card_h"] = ch
+        # resize-хэндл — в правый нижний угол карточки
+        try:
+            card_resize_handle.left = cw - 24
+            card_resize_handle.top = ch - 24
+            _safe_update(card_resize_handle)
+        except Exception:
+            traceback.print_exc()
         detail_overlay_container.visible = True
         try:
             _safe_update(detail_overlay_container)
@@ -2379,6 +2559,160 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         page.open(dialog)
 
     # Settings
+    def _open_references(e=None):
+        """Раунд 9 (задача 3): редактор справочников — исполнители, контролёры, инициаторы."""
+        from core.controls_data import add_extra_person, remove_extra_person
+
+        def _build_list_col(source_getter, on_add, on_remove, empty_text):
+            col = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=180)
+            field = _glass_textfield(hint="Новое значение…", width=220)
+            field.height = 36
+
+            def _rebuild():
+                col.controls.clear()
+                items = source_getter()
+                if not items:
+                    col.controls.append(ft.Text(empty_text, size=11, color=GLASS["text_muted"]))
+                for it in items:
+                    col.controls.append(ft.Container(
+                        content=ft.Row(controls=[
+                            ft.Text(it, size=12, color=GLASS["text"], expand=True,
+                                   no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=it),
+                            ft.IconButton(icon=ft.icons.CLOSE, icon_size=14,
+                                          icon_color=GLASS["overdue"], tooltip="Удалить",
+                                          on_click=lambda e, n=it: _del(n)),
+                        ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]),
+                        border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                    ))
+                try:
+                    _safe_update(col)
+                except Exception:
+                    traceback.print_exc()
+
+            def _add(e=None):
+                val = (field.value or "").strip()
+                if val:
+                    on_add(val)
+                    field.value = ""
+                    try:
+                        _safe_update(field)
+                    except Exception:
+                        traceback.print_exc()
+                    _rebuild()
+
+            def _del(name):
+                on_remove(name)
+                _rebuild()
+
+            add_btn = ft.ElevatedButton("Добавить", bgcolor=GLASS["surface_alt"], color=GLASS["accent"],
+                                        height=34, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]),
+                                        shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add)
+            col._rebuild = _rebuild
+            col._get_items = source_getter
+            return col, field, add_btn
+
+        # Источники: базовые (криминалисты/контролёры — read-only) + extra_people (редактируемое)
+        def _people_items():
+            return list(get_controller_names(settings))
+
+        def _people_add(name):
+            add_extra_person(settings, name)
+
+        def _people_remove(name):
+            # из справочника можно удалять только доп. ФИО (extra_people),
+            # базовых криминалистов/контролёров не трогаем
+            remove_extra_person(settings, name)
+
+        def _init_items():
+            return initiator_filter_options(set(initiators) | {c.initiator for c in state["controls"] if c.initiator})
+
+        def _init_add(name):
+            cur = list(settings.get("custom_initiators", []) or [])
+            if name not in cur:
+                cur.append(name)
+            settings["custom_initiators"] = cur
+            save_settings(settings)
+            initiators.clear()
+            initiators.extend(get_initiators(settings))
+
+        def _init_remove(name):
+            cur = list(settings.get("custom_initiators", []) or [])
+            settings["custom_initiators"] = [x for x in cur if x != name]
+            save_settings(settings)
+            initiators.clear()
+            initiators.extend(get_initiators(settings))
+
+        people_col, people_field, people_add = _build_list_col(
+            _people_items, _people_add, _people_remove, "Нет доп. ФИО (базовые — криминалисты и контролёры)")
+        init_col, init_field, init_add = _build_list_col(
+            _init_items, _init_add, _init_remove, "Нет инициаторов")
+
+        def _apply(e=None):
+            nonlocal executor_canonical, controller_canonical
+            try:
+                page.close(dlg)
+            except Exception:
+                traceback.print_exc()
+            # пересобрать каноны и фильтры
+            executor_canonical = get_controller_names(settings)
+            controller_canonical = get_controller_names(settings)
+            _refresh_filter_options()
+            _rebuild_table()
+            _refresh_counters()
+
+        def _close(e=None):
+            try:
+                page.close(dlg)
+            except Exception:
+                traceback.print_exc()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Row(controls=[ft.Icon(ft.icons.BOOK_OUTLINED, size=20, color=GLASS["text"]),
+                                   ft.Text("Справочники", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"])],
+                         spacing=8, tight=True),
+            content=ft.Container(
+                width=640,
+                height=520,
+                content=ft.Column(controls=[
+                    ft.Container(
+                        content=ft.Column(controls=[
+                            ft.Text("Исполнители / контролёры (канонические ФИО для фильтров)", size=12,
+                                    weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+                            ft.Row(controls=[people_field, people_add], spacing=6, tight=True,
+                                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            people_col,
+                        ], spacing=6, tight=True),
+                        bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border"]),
+                        border_radius=10, padding=ft.padding.all(10),
+                    ),
+                    ft.Container(
+                        content=ft.Column(controls=[
+                            ft.Text("Инициаторы (канонические названия для фильтра)", size=12,
+                                    weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+                            ft.Row(controls=[init_field, init_add], spacing=6, tight=True,
+                                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            init_col,
+                        ], spacing=6, tight=True),
+                        bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border"]),
+                        border_radius=10, padding=ft.padding.all(10),
+                    ),
+                ], spacing=10, scroll=ft.ScrollMode.AUTO),
+            ),
+            actions=[
+                ft.TextButton("Отмена", on_click=_close, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+                ft.ElevatedButton("Применить", bgcolor=GLASS["accent"], color="#ffffff", on_click=_apply),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        try:
+            page.open(dlg)
+        except Exception:
+            print("[CONTROLS_TAB] references dialog error")
+
     def _open_settings(e=None):
         from .controls_settings_modal import create_controls_settings_modal
         def on_apply_inner(new_settings):
@@ -2496,6 +2830,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     export_btn = ft.ElevatedButton(text="Экспорт Excel", icon=ft.icons.FILE_DOWNLOAD_OUTLINED, bgcolor=GLASS["in_progress"], color=GLASS["surface_solid"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=14)), on_click=_export)
     delete_all_btn = ft.ElevatedButton(text="Удалить все", icon=ft.icons.DELETE_FOREVER, bgcolor=with_alpha(GLASS["overdue"], "22"), color=GLASS["overdue"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["overdue"]), padding=ft.padding.symmetric(horizontal=12)), on_click=_delete_all, visible=(network_role == "admin"))
     settings_btn = ft.IconButton(icon=ft.icons.SETTINGS_OUTLINED, icon_size=20, icon_color=GLASS["text_secondary"], tooltip="Настройки", style=ft.ButtonStyle(bgcolor=GLASS["surface"], shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["border"])), on_click=_open_settings)
+    refs_btn = ft.ElevatedButton(text="Справочники", icon=ft.icons.BOOK_OUTLINED, bgcolor=GLASS["surface"], color=GLASS["text"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["border"]), padding=ft.padding.symmetric(horizontal=12)), on_click=_open_references)
 
     title_content = ft.Row(controls=[
         ft.Icon(ft.icons.RULE_FOLDER, size=20, color=GLASS["text"]),
@@ -2503,7 +2838,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         ft.Container(width=10),
         sync_dot, ft.Container(width=4), sync_label,
         ft.Container(expand=True),
-        add_btn, import_btn, export_mode_dd, export_btn, delete_all_btn, settings_btn,
+        add_btn, import_btn, export_mode_dd, export_btn, delete_all_btn, refs_btn, settings_btn,
     ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
     title_row = glass_panel(content=title_content, height=60, radius=12, padding=ft.padding.symmetric(horizontal=16, vertical=8))
