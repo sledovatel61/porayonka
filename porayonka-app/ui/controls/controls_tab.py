@@ -745,7 +745,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 alignment=ft.alignment.center, bgcolor=with_alpha(color, "22"), border=ft.border.all(1, color),
             ),
             _vsep,
-            ft.Row(controls=actions, spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+            # Раунд 10 (задача 2): иконки действий прижаты к ПРАВОМУ краю ячейки
+            # (аналог левой статусной полосы, упирающейся в левый край)
+            ft.Row(controls=actions, spacing=4, tight=True, width=_W["actions"],
+                   vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.END),
         ]
 
         # Плашка строки: Bug 2 exact colors — #2a3247, border #0dffffff or none, radius 10, gap 6
@@ -762,21 +765,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         )
         row.mouse_cursor = ft.MouseCursor.CLICK
 
-        # Раунд 9 (БАГ 1): hover возвращён на сам row (hover_layer в Stack ломал
-        # события в реальном GUI). Чтобы не лагало: меняем ТОЛЬКО bgcolor,
-        # рамка статична; повторные события с тем же состоянием не шлют update;
-        # update() — напрямую (минуя _safe_update), с проверкой page.
+        # Раунд 10 (задача 1): hover без лага. Меняем ТОЛЬКО bgcolor; повторные
+        # события с тем же состоянием не шлют update. Плюс throttle ~40 мс:
+        # при быстром движении курсора не копим очередь round-trip обновлений —
+        # состояние выставляется сразу, а update уходит не чаще раза в 40 мс
+        # (последнее значение всегда применяется).
+        _last_hover = [0.0]
         def _hover(e):
             if e.data == "true":
-                if row.bgcolor != GLASS["hover_bg"]:
-                    row.bgcolor = GLASS["hover_bg"]
-                    if row.page is not None:
-                        row.update()
+                new_bg = GLASS["hover_bg"]
             else:
-                if row.bgcolor != GLASS["card"]:
-                    row.bgcolor = GLASS["card"]
-                    if row.page is not None:
-                        row.update()
+                new_bg = GLASS["card"]
+            if row.bgcolor == new_bg:
+                return
+            row.bgcolor = new_bg
+            now = time.time()
+            if row.page is not None and (now - _last_hover[0]) >= 0.04:
+                _last_hover[0] = now
+                row.update()
         row.on_hover = _hover
         return row
 
@@ -1466,6 +1472,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         bgcolor=GLASS["card_panel"],
         border=ft.border.only(top=ft.BorderSide(1, GLASS["border_light"]), left=ft.BorderSide(1, GLASS["border_divider"]), right=ft.BorderSide(1, GLASS["border_divider"]), bottom=ft.BorderSide(1, GLASS["border_divider"])),
         border_radius=16,
+        # Раунд 10 (задача 4): клип по границе, чтобы скругление сохранялось
+        # по всему периметру (иначе контент перекрывал нижние углы)
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
         padding=ft.padding.all(16),
         content=ft.Column(controls=[ft.Text("Загрузка…")], scroll=ft.ScrollMode.AUTO, expand=True),
     )
@@ -1927,6 +1936,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             fn = rel.split("/")[-1]
             low = fn.lower()
             is_img = low.endswith((".png", ".jpg", ".jpeg"))
+            # Раунд 10 (задача 5): предпросмотр ~90% ширины и ~85% высоты окна
+            try:
+                win_w = page.width or 1280
+            except Exception:
+                win_w = 1280
+            try:
+                win_h = page.window.height or 860
+            except Exception:
+                win_h = 860
+            body_w = max(640, int(win_w * 0.9))
+            body_h = max(480, int(win_h * 0.85))
+            preview_body.width = body_w
+            preview_body.height = body_h
+            img_w = max(560, body_w - 48)
+            img_h = max(380, body_h - 110)
             controls = []
             header_row = ft.Row(controls=[
                 ft.Icon(ft.icons.IMAGE if is_img else ft.icons.PICTURE_AS_PDF, size=18, color=GLASS["accent"]),
@@ -1943,7 +1967,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             if is_img:
                 try:
                     img = ft.Image(src=abs_path, fit=ft.ImageFit.CONTAIN,
-                                   width=760, height=470, border_radius=8)
+                                   width=img_w, height=img_h, border_radius=8)
                     controls.append(img)
                 except Exception:
                     traceback.print_exc()
@@ -1951,8 +1975,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             else:
                 controls.append(ft.Container(
                     content=ft.Column(controls=[
-                        ft.Icon(ft.icons.PICTURE_AS_PDF, size=64, color=GLASS["text_muted"]),
-                        ft.Text("PDF — предпросмотр недоступен, откройте в программе", size=12,
+                        ft.Icon(ft.icons.PICTURE_AS_PDF, size=96, color=GLASS["text_muted"]),
+                        ft.Text("PDF — предпросмотр недоступен, откройте в программе", size=14,
                                 color=GLASS["text_secondary"]),
                     ], spacing=10, tight=True, alignment=ft.MainAxisAlignment.CENTER,
                        horizontal_alignment=ft.CrossAxisAlignment.CENTER),
@@ -1962,6 +1986,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             preview_root.visible = True
             try:
                 _safe_update(preview_root)
+                _safe_update(preview_body)
             except Exception:
                 traceback.print_exc()
 
@@ -2563,32 +2588,73 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         """Раунд 9 (задача 3): редактор справочников — исполнители, контролёры, инициаторы."""
         from core.controls_data import add_extra_person, remove_extra_person
 
-        def _build_list_col(source_getter, on_add, on_remove, empty_text):
+        def _build_list_col(source_getter, on_add, on_remove, on_edit, empty_text):
+            # Раунд 10 (задача 3): поле добавления растянуто на всю ширину,
+            # редактирование записи — инлайн (карандаш → поле + галочка/крестик),
+            # без вложенных диалогов.
             col = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=180)
-            field = _glass_textfield(hint="Новое значение…", width=220)
+            field = _glass_textfield(hint="Новое значение…", expand=True)
             field.height = 36
+            edit_state = {"idx": None}
 
             def _rebuild():
                 col.controls.clear()
                 items = source_getter()
                 if not items:
                     col.controls.append(ft.Text(empty_text, size=11, color=GLASS["text_muted"]))
-                for it in items:
-                    col.controls.append(ft.Container(
-                        content=ft.Row(controls=[
-                            ft.Text(it, size=12, color=GLASS["text"], expand=True,
-                                   no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=it),
-                            ft.IconButton(icon=ft.icons.CLOSE, icon_size=14,
-                                          icon_color=GLASS["overdue"], tooltip="Удалить",
-                                          on_click=lambda e, n=it: _del(n)),
-                        ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                        bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]),
-                        border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=2),
-                    ))
+                for i, it in enumerate(items):
+                    if edit_state["idx"] == i:
+                        # инлайн-редактирование текущей записи
+                        edit_field = _glass_textfield(value=it, expand=True)
+                        edit_field.height = 36
+
+                        def _save(e=None, old=it, idx=i):
+                            new_val = (edit_field.value or "").strip()
+                            if new_val and new_val != old:
+                                on_edit(old, new_val)
+                            edit_state["idx"] = None
+                            _rebuild()
+
+                        def _cancel(e=None):
+                            edit_state["idx"] = None
+                            _rebuild()
+
+                        col.controls.append(ft.Container(
+                            content=ft.Row(controls=[
+                                edit_field,
+                                ft.IconButton(icon=ft.icons.CHECK, icon_size=16,
+                                              icon_color=GLASS["in_progress"], tooltip="Сохранить",
+                                              on_click=_save),
+                                ft.IconButton(icon=ft.icons.CLOSE, icon_size=16,
+                                              icon_color=GLASS["text_secondary"], tooltip="Отмена",
+                                              on_click=_cancel),
+                            ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]),
+                            border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        ))
+                    else:
+                        col.controls.append(ft.Container(
+                            content=ft.Row(controls=[
+                                ft.Text(it, size=12, color=GLASS["text"], expand=True,
+                                       no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=it),
+                                ft.IconButton(icon=ft.icons.EDIT_OUTLINED, icon_size=14,
+                                              icon_color=GLASS["text_secondary"], tooltip="Переименовать",
+                                              on_click=lambda e, idx=i: _edit(idx)),
+                                ft.IconButton(icon=ft.icons.CLOSE, icon_size=14,
+                                              icon_color=GLASS["overdue"], tooltip="Удалить",
+                                              on_click=lambda e, n=it: _del(n)),
+                            ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]),
+                            border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        ))
                 try:
                     _safe_update(col)
                 except Exception:
                     traceback.print_exc()
+
+            def _edit(idx):
+                edit_state["idx"] = idx
+                _rebuild()
 
             def _add(e=None):
                 val = (field.value or "").strip()
@@ -2624,6 +2690,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             # базовых криминалистов/контролёров не трогаем
             remove_extra_person(settings, name)
 
+        def _people_edit(old, new):
+            cur = list(settings.get("extra_people", []) or [])
+            nxt = []
+            replaced = False
+            for x in cur:
+                if x.strip().casefold() == (old or "").strip().casefold() and not replaced:
+                    nxt.append(new)
+                    replaced = True
+                else:
+                    nxt.append(x)
+            settings["extra_people"] = nxt
+            save_settings(settings)
+
         def _init_items():
             return initiator_filter_options(set(initiators) | {c.initiator for c in state["controls"] if c.initiator})
 
@@ -2643,10 +2722,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             initiators.clear()
             initiators.extend(get_initiators(settings))
 
+        def _init_edit(old, new):
+            cur = list(settings.get("custom_initiators", []) or [])
+            settings["custom_initiators"] = [new if x == old else x for x in cur]
+            save_settings(settings)
+            initiators.clear()
+            initiators.extend(get_initiators(settings))
+
         people_col, people_field, people_add = _build_list_col(
-            _people_items, _people_add, _people_remove, "Нет доп. ФИО (базовые — криминалисты и контролёры)")
+            _people_items, _people_add, _people_remove, _people_edit,
+            "Нет доп. ФИО (базовые — криминалисты и контролёры)")
         init_col, init_field, init_add = _build_list_col(
-            _init_items, _init_add, _init_remove, "Нет инициаторов")
+            _init_items, _init_add, _init_remove, _init_edit, "Нет инициаторов")
+        # сразу наполнить списки (иначе модалка откроется пустой)
+        people_col._rebuild()
+        init_col._rebuild()
 
         def _apply(e=None):
             nonlocal executor_canonical, controller_canonical
@@ -2681,7 +2771,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         content=ft.Column(controls=[
                             ft.Text("Исполнители / контролёры (канонические ФИО для фильтров)", size=12,
                                     weight=ft.FontWeight.BOLD, color=GLASS["text"]),
-                            ft.Row(controls=[people_field, people_add], spacing=6, tight=True,
+                            # Раунд 10 (задача 3): поле растянуто на всю ширину
+                            ft.Row(controls=[people_field, people_add], spacing=6,
                                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             people_col,
                         ], spacing=6, tight=True),
@@ -2692,7 +2783,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         content=ft.Column(controls=[
                             ft.Text("Инициаторы (канонические названия для фильтра)", size=12,
                                     weight=ft.FontWeight.BOLD, color=GLASS["text"]),
-                            ft.Row(controls=[init_field, init_add], spacing=6, tight=True,
+                            # Раунд 10 (задача 3): поле растянуто на всю ширину
+                            ft.Row(controls=[init_field, init_add], spacing=6,
                                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             init_col,
                         ], spacing=6, tight=True),

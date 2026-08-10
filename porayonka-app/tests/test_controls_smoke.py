@@ -65,6 +65,15 @@
   * предпросмотр вложений: миниатюры (ft.Image / иконка PDF), полноразмерный
     overlay с масштабированием, кнопки «открыть/удалить/закрыть».
 
+Раунд 10 (PROMPT_контроли_доработка10.md):
+  * hover: bgcolor-only + throttle ~40 мс (без очереди round-trip при быстром
+    движении курсора), повторные события с тем же состоянием без update;
+  * «Действия»: Row иконок с width=колонки и alignment=END (прижаты вправо);
+  * справочники: поля ввода expand на всю ширину, инлайн-редактирование записей
+    (карандаш → поле + галочка/крестик) без вложенных диалогов;
+  * карточка: clip_behavior=HARD_EDGE — скругление по всем 4 углам;
+  * предпросмотр: ~90% ширины и ~85% высоты окна, изображение масштабируется.
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -96,6 +105,7 @@ from core.controls_models import (  # noqa: E402
     Control, OVERDUE, TODAY, name_matches,
 )
 from core.controls_exporter import ControlsExcelExporter, import_from_excel  # noqa: E402
+from ui.controls.glass_theme import GLASS  # noqa: E402
 from ui.controls.controls_tab import create_controls_tab  # noqa: E402
 
 FILTER_OTHER = "__other__"
@@ -118,7 +128,7 @@ def walk(c):
     if c is None:
         return res
     res.append(c)
-    for attr in ("content", "controls"):
+    for attr in ("content", "controls", "title", "actions"):
         v = getattr(c, attr, None)
         if isinstance(v, (list, tuple)):
             for x in v:
@@ -1179,6 +1189,112 @@ def main():
             check("preview: overlay закрыт",
                   not any(getattr(c, "visible", False) for c in walk(tab)
                           if getattr(c, "bgcolor", None) == "#e604070f"))
+
+    # ── 29. Раунд 10, задача 1: hover (bgcolor + throttle, без исключений) ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("h1", "Х-1", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    rows10 = _visible_rows(tab)
+    check("hover10: строки есть", len(rows10) >= 1)
+    if rows10:
+        r10 = rows10[0]
+        check("hover10: on_hover установлен", getattr(r10, "on_hover", None) is not None)
+        r10.on_hover(type("E", (), {"data": "true"})())
+        check("hover10: enter подсветил строку", getattr(r10, "bgcolor", None) == "#2c3650", f"bg={r10.bgcolor}")
+        r10.on_hover(type("E", (), {"data": "true"})())
+        r10.on_hover(type("E", (), {"data": "false"})())
+        check("hover10: leave вернул фон", getattr(r10, "bgcolor", None) == TILE_BG, f"bg={r10.bgcolor}")
+
+    # ── 30. Раунд 10, задача 2: «Действия» прижаты к правому краю ──
+    page, tab, _ = build()
+    allc10 = walk(tab)
+    action_rows = [c for c in allc10 if isinstance(c, ft.Row)
+                   and getattr(c, "alignment", None) == ft.MainAxisAlignment.END
+                   and getattr(c, "width", None) is not None]
+    check("actions10: Row действий с alignment=END и шириной колонки", len(action_rows) >= 1, f"{len(action_rows)}")
+
+    # ── 31. Раунд 10, задача 3: редактирование записи в справочнике ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": ["Макаренко Роман Андреевич"], "custom_initiators": ["МВД"]})
+    _seed_raw([_ctrl("r10", "Р-10", executors=["Макаренко Р.А."], controller="Потемкин С.А.")])
+    page, tab, _ = build()
+    ref_btns10 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                  and getattr(c, "text", None) == "Справочники"]
+    ref_btns10[0].on_click(None)
+    dlg10 = page.dialogs[-1]
+    edit_icons = [c for c in walk(dlg10) if isinstance(c, ft.IconButton)
+                  and getattr(c, "tooltip", None) == "Переименовать"]
+    check("refs10: иконки «Переименовать» есть", len(edit_icons) >= 1, f"{len(edit_icons)}")
+    # найти КОНКРЕТНУЮ запись «Макаренко Роман Андреевич» (контейнер с фоном
+    # surface_alt, содержащий текст и иконки) и кликнуть её карандаш
+    mak_rows = [c for c in walk(dlg10) if isinstance(c, ft.Container)
+                and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
+                and any(isinstance(t, ft.Text) and t.value == "Макаренко Роман Андреевич"
+                        for t in walk(c) if isinstance(t, ft.Text))]
+    check("refs10: запись Макаренко в списке", len(mak_rows) >= 1, f"{len(mak_rows)}")
+    if mak_rows:
+        mak_edit = [c for c in walk(mak_rows[0]) if isinstance(c, ft.IconButton)
+                    and getattr(c, "tooltip", None) == "Переименовать"]
+        if mak_edit:
+            mak_edit[0].on_click(None)
+        fields10 = [c for c in walk(dlg10) if isinstance(c, ft.TextField)
+                    and (getattr(c, "value", "") or "") == "Макаренко Роман Андреевич"]
+        check("refs10: поле редактирования с текущим значением", len(fields10) >= 1)
+        if fields10:
+            fields10[0].value = "Макаренко Р.А."
+            save_icons = [c for c in walk(dlg10) if isinstance(c, ft.IconButton)
+                          and getattr(c, "tooltip", None) == "Сохранить"]
+            if save_icons:
+                save_icons[0].on_click(None)
+            st10 = load_settings()
+            check("refs10: значение переименовано в extra_people",
+                  "Макаренко Р.А." in (st10.get("extra_people") or [])
+                  and "Макаренко Роман Андреевич" not in (st10.get("extra_people") or []),
+                  f"{st10.get('extra_people')}")
+
+    # ── 32. Раунд 10, задача 4: уголки карточки (clip_behavior) ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("c10", "К-10", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    _open_card(tab, via_add=False)
+    cards = [c for c in walk(tab) if isinstance(c, ft.Container)
+             and getattr(c, "bgcolor", None) == "#242a3e"]
+    check("card10: карточка найдена", len(cards) >= 1)
+    if cards:
+        card10 = cards[0]
+        check("card10: clip_behavior=HARD_EDGE",
+              getattr(card10, "clip_behavior", None) == ft.ClipBehavior.HARD_EDGE,
+              f"clip={getattr(card10, 'clip_behavior', None)}")
+        check("card10: border_radius > 0", (getattr(card10, "border_radius", 0) or 0) > 0)
+
+    # ── 33. Раунд 10, задача 5: предпросмотр занимает ~90% окна ──
+    att_dir10 = os.path.join(os.environ["APPDATA"], "porayonka", "controls_attachments", "c10")
+    os.makedirs(att_dir10, exist_ok=True)
+    with open(os.path.join(att_dir10, "test.png"), "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+    data10 = json.load(open(get_controls_file(), encoding="utf-8"))
+    data10["controls"][0]["attachments"] = ["c10/test.png"]
+    with open(get_controls_file(), "w", encoding="utf-8") as f:
+        json.dump(data10, f, ensure_ascii=False, indent=2)
+    page, tab, _ = build()
+    _open_card(tab, via_add=False)
+    zoom10 = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+              and getattr(c, "tooltip", None) == "Предпросмотр"]
+    if zoom10:
+        zoom10[0].on_click(None)
+        bodies = [c for c in walk(tab) if isinstance(c, ft.Container)
+                  and getattr(c, "bgcolor", None) == GLASS["surface_solid"]
+                  and getattr(c, "width", None) is not None and getattr(c, "width", 0) > 640]
+        check("preview10: окно предпросмотра > 640 px шириной",
+              len(bodies) >= 1, f"{[getattr(b, 'width', 0) for b in bodies]}")
+        if bodies:
+            check("preview10: ширина >= 90% окна (1280 -> >= 1000)",
+                  bodies[0].width >= 1000, f"w={bodies[0].width}")
 
     print()
     if FAILURES:
