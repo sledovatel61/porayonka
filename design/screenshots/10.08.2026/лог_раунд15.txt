@@ -1,0 +1,1823 @@
+Microsoft Windows [Version 10.0.26200.8875]
+(c) Корпорация Майкрософт (Microsoft Corporation). Все права защищены.
+
+C:\Users\User>cd "C:/Users/User/Documents/Исходная программа/porayonka-app v2 DARK final/porayonka-app"
+
+C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app>python main.py
+[OK] Departments loaded: 29
+[EXPORT_MODAL] Создаю модальное окно экспорта...
+[EXPORT_MODAL] Статистика: получено=2, в работе=0, пусто=27
+[EXPORT_MODAL] Модальное окно создано, page.open_export_modal установлен
+[MAIN] Создаю вкладку Зональные...
+[ZONAL_TAB] Initializing zonal tab (phase 2: compact tiles)
+[ZONAL_DATA] SHablon zagruzhen: Ежемесячный отчет, punktov: 4
+[ZONAL_DATA] Zagruzheno dannyh: 52
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Kollekciya zagruzhena: Ежемесячный отчет, submissions: 52, криминалистов: 16
+[ZONAL_TAB] Criminalists: 16
+[ZONAL_TAB] Active: 13
+[ZONAL_TAB] Template items: 4
+[ZONAL_TAB] Initial tiles per row: 3 (page width=1264.0)
+[TILE] Creating tile: 1
+[TILE] Creating tile: 2
+[TILE] Creating tile: 3
+[TILE] Creating tile: 4
+[TILE] Creating tile: 5
+[TILE] Creating tile: 6
+[TILE] Creating tile: 7
+[TILE] Creating tile: 8
+[TILE] Creating tile: 9
+[TILE] Creating tile: 10
+[TILE] Creating tile: 11
+[TILE] Creating tile: 13
+[TILE] Creating tile: 12
+[TILE] Creating tile: 14
+[TILE] Creating tile: 15
+[TILE] Creating tile: 16
+[CRIM_SUMMARY] expanded=False active=13 submitted=42 overall=81
+[ZONAL_TAB] Zonal tab created successfully (phase 2)
+[MAIN] [OK] Vkladka Zonalnye sozdana
+[MAIN] Создаю вкладку Контроли...
+[CONTROLS_TAB] Glass Dark v2 - init
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[CONTROLS_TAB] Glass Dark v2 ready
+[MAIN] [OK] Vkladka Kontroli sozdana
+[ZONAL_TAB] Resize: tiles_per_row -> 6 (w=1920.0)
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+Task exception was never retrieved
+future: <Task finished name='Task-577' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-578' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-579' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-580' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-581' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-582' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-583' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-584' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-585' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-586' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-587' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-588' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-589' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-590' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-591' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-592' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-593' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-594' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-595' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-596' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-597' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-598' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-599' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-600' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-601' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-602' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-603' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-604' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-605' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-606' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-607' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-608' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-651' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-652' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-653' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-654' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-655' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-656' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-657' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-658' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-659' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-660' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-661' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-662' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-663' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-664' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-665' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-666' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+Task exception was never retrieved
+future: <Task finished name='Task-672' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-673' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-674' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-675' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-676' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-677' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-678' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-679' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+Task exception was never retrieved
+future: <Task finished name='Task-682' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-683' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-684' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-685' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-686' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-687' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-688' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-689' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+Task exception was never retrieved
+future: <Task finished name='Task-693' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-694' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-695' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-696' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-697' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-698' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-699' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-700' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-701' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-702' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-703' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-704' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-705' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-706' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-707' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-708' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-709' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-710' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-711' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-712' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-713' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-714' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-715' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-716' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-717' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-718' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-719' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-720' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-721' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-722' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-723' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-724' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-725' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-726' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-727' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-728' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-741' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-742' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+Task exception was never retrieved
+future: <Task finished name='Task-743' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('dir')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 135, in __init__
+    self.direction: Optional[str] = d["dir"]
+                                    ~^^^^^^^
+KeyError: 'dir'
+Task exception was never retrieved
+future: <Task finished name='Task-744' coro=<__run_socket_server.<locals>.on_event() done, defined at C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py:217> exception=KeyError('sd')>
+Traceback (most recent call last):
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_runtime\app.py", line 219, in on_event
+    await conn.sessions[e.sessionID].on_event_async(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 905, in on_event_async
+    await handler(ce)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\event_handler.py", line 18, in fn
+    ce = self.__result_converter(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 22, in <lambda>
+    self.__on_scroll = EventHandler(lambda e: OnScrollEvent(e))
+                                              ^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\scrollable_control.py", line 134, in __init__
+    self.scroll_delta: Optional[float] = d["sd"]
+                                         ~^^^^^^
+KeyError: 'sd'
+log4cplus:ERROR No appenders could be found for logger (DSL).
+log4cplus:ERROR Please initialize the log4cplus system properly.
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
