@@ -16,15 +16,18 @@ from .controls_models import (
 # Заголовки в формате пользователя — 1:1 с эталоном «Контроли ОКРИМ.xlsx»
 # (строка 2 листа «текущее»; строка 1 — объединённый заголовок «КОНТРОЛИ ОТДЕЛА
 # КРИМИНАЛИСТИКИ»). Импорт устойчив к расположению шапки (ищет строку с заголовками).
+# Раунд 18 (задача 3): хвостовые/множественные пробелы убраны — заголовки
+# приведены к ТОЧНОМУ виду исходной таблицы; приложение берёт их же (см.
+# _rebuild_header в ui/controls/controls_tab.py) — единый источник истины.
 TABLE_HEADERS = [
     "№",
     "вх. № ВХСОП-____-__",
     "Дата поступления",
-    "Инициатор ",
+    "Инициатор",
     "Содержание (если один из нескольких пунктов - указать пункт)",
     "Исполнитель (ФИО)",
-    "За кем контроль                       (Потёмкин С.А. / Чащин Э.А.)",
-    "Разовый / постоянный ",
+    "За кем контроль (Потёмкин С.А. / Чащин Э.А.)",
+    "Разовый / постоянный",
     "Следующая дата исполнения",
     "Исполнено + дата",
 ]
@@ -52,13 +55,50 @@ def _fmt(iso: Optional[str]) -> str:
     return d.strftime("%d.%m.%Y") if d else ""
 
 
-def _type_text(ctl: Control) -> str:
-    """Человекочитаемый текст типа для колонки «Разовый/постоянный»."""
-    if ctl.control_type != PERIODIC:
-        return "разовый"
+def _months_plural(n: int) -> str:
+    """Русская плюрализация «месяц»: 1 месяц, 2-4 месяца, 5+ месяцев."""
+    if n % 10 == 1 and n % 100 != 11:
+        return "месяц"
+    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "месяца"
+    return "месяцев"
+
+
+def _period_label(days: int) -> str:
+    """Человекочитаемая периодичность: «еженедельно», «каждые 3 месяца»..."""
     labels = {1: "ежедневно", 7: "еженедельно", 30: "ежемесячно",
               91: "ежеквартально", 365: "ежегодно"}
-    return labels.get(ctl.period_days, f"каждые {ctl.period_days} дней")
+    if days in labels:
+        return labels[days]
+    if days > 0 and days % 30 == 0:
+        n = days // 30
+        return f"каждые {n} {_months_plural(n)}"
+    if days > 0 and days % 7 == 0:
+        n = days // 7
+        return f"каждые {n} нед." if n != 1 else "еженедельно"
+    return f"каждые {days} дней"
+
+
+def control_type_text(ctl: Control) -> str:
+    """Раунд 18 (задача 2): текст колонки «Разовый / постоянный» — как в исходной
+    таблице Excel:
+    - разовый контроль → КОНЕЧНАЯ дата исполнения (end_date, fallback due_date),
+      а не слово «разовый» («разовый» — только если дат нет вовсе);
+    - периодический → «<end_date> далее <периодичность>», если задана конечная
+      дата, иначе просто периодичность («еженедельно», «каждые 3 месяца»...).
+    """
+    if ctl.control_type != PERIODIC:
+        return _fmt(ctl.end_date) or _fmt(ctl.due_date) or "разовый"
+    label = _period_label(ctl.period_days)
+    end = _fmt(ctl.end_date)
+    return f"{end} далее {label}" if end else label
+
+
+def _type_text(ctl: Control) -> str:
+    """Человекочитаемый текст типа для колонки «Разовый/постоянный».
+
+    Раунд 18: делегирует control_type_text() (с конечной датой)."""
+    return control_type_text(ctl)
 
 
 def _done_text(ctl: Control) -> str:
@@ -429,8 +469,25 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
     content = str(_get(4) or "").strip()
     executors = split_executors(_get(5))
     controller = str(_get(6) or "").strip()
-    ctype, period_days = parse_periodicity(str(_get(7) or ""))
-    due = parse_excel_date(_get(8))
+    # Раунд 18 (задача 2): колонка H «Разовый / постоянный» используется
+    # КОМБИНИРОВАННО (эталон пользователя):
+    #   * «01.09.2026» — дата => разовый контроль, это КОНЕЧНАЯ дата исполнения
+    #     (end_date); раньше дата молча выбрасывалась parse_periodicity — терялась.
+    #   * «10.05.2026 далее каждые 3 месяца» — периодический с конечной датой:
+    #     ведущая дата -> end_date, хвост -> period_days (существующая эвристика).
+    # due_date — колонка I «Следующая дата исполнения» (для разового без I —
+    # fallback на end_date).
+    type_raw = _get(7)
+    type_text = str(type_raw or "").strip()
+    end_date = parse_excel_date(type_raw)
+    if end_date is not None:
+        ctype, period_days = ONE_TIME, 0
+    else:
+        ctype, period_days = parse_periodicity(type_text)
+        m = re.search(r"\d{1,2}\.\d{1,2}\.\d{4}", type_text)
+        if m:
+            end_date = parse_excel_date(m.group(0))
+    due = parse_excel_date(_get(8)) or end_date
     done_text = _get(9)
 
     done = False
@@ -459,6 +516,7 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
         controller=controller,
         control_type=ctype,
         period_days=period_days,
+        end_date=end_date,   # Раунд 18: конечная дата исполнения больше не теряется
         due_date=due,
         done=done,
         done_date=done_date,
