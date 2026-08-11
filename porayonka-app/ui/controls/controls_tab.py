@@ -22,6 +22,7 @@ from core.controls_data import (
     load_controls, save_controls, load_settings, save_settings,
     get_criminalist_names, get_controller_names, get_executor_names,
     get_all_people_names, get_person_roles, set_person_roles,
+    DEFAULT_CONTROLLERS,
     get_initiators, canonical_initiator_group, initiator_filter_options,
     initiator_filter_group,
     archive_control, restore_control,
@@ -52,22 +53,64 @@ STATUS_ICONS = {
 def _safe_update(control):
     """Вызвать control.update() только если контрол смонтирован в page.
     Убирает шум 'AssertionError: Control must be added to the page first.'
-    при инициализации, когда контролы ещё не добавлены в дерево page."""
+    при инициализации, когда контролы ещё не добавлены в дерево page.
+    Раунд 19 (задача 5): второй гард — контрол без __uid (ещё не подтверждён
+    клиентом / удалён из дерева) пропускаем молча: в Flet 0.23.2 update() по
+    такому контролу падает gluboko в диффе патча (flet_core/control.py ~
+    build_update_commands: assert self.__uid is not None, строки 448/480) и
+    убивает ВСЮ транзакцию page.update() — симптомы раунда 19 «фильтры не
+    работают, карточки не открываются» (лог design/screenshots/11.08.2026/
+    ЛОГ.txt). Контрол без uid доедет до клиента следующим rebuild'ом родителя."""
     try:
-        if control is not None and getattr(control, "page", None) is not None:
-            control.update()
+        if control is None or getattr(control, "page", None) is None:
+            return
+        if getattr(control, "_Control__uid", None) is None:
+            return
+        control.update()
     except Exception:
         traceback.print_exc()
 
 
 def _quiet_update(control):
     """Раунд 14 (задача 1): update для ГОРЯЧИХ hover-обработчиков — без печати
-    ошибок (print/traceback в горячем пути запрещены: AGENTS мангуст.md §hover)."""
+    ошибок (print/traceback в горячем пути запрещены: AGENTS мангуст.md §hover).
+    Раунд 19 (задача 5): гард __uid — как в _safe_update."""
     try:
-        if control is not None and getattr(control, "page", None) is not None:
-            control.update()
+        if control is None or getattr(control, "page", None) is None:
+            return
+        if getattr(control, "_Control__uid", None) is None:
+            return
+        control.update()
     except Exception:
         pass
+
+
+def _scrollbar_theme() -> ft.Theme:
+    """Раунд 19 (задача 4): локальная тема с ЯРКИМ видимым скроллбаром для тёмной
+    палитры — тот же приём, что у справочников в раунде 17 (клиент Flet 0.23.2
+    оборачивает контрол с атрибутом .theme в Theme(...) поверх page-темы,
+    theme.dart: parseScrollBarTheme). Дефолтный бегунок светлой темы не читается
+    на тёмном фоне; interactive=True — бегунок можно тянуть мышью."""
+    th = ft.Theme(use_material3=True)
+    th.scrollbar_theme = ft.ScrollbarTheme(
+        thumb_visibility=True,
+        track_visibility=True,
+        interactive=True,
+        thumb_color="#66ffffff",
+        track_color="#14ffffff",
+        thickness=8,
+        radius=4,
+        cross_axis_margin=2,
+    )
+    return th
+
+
+# Раунд 19 (задача 2): минимальные ширины колонок таблицы. «№» — узкая (дефолт
+# 32), гибкие «Содержание»/«Исполнители» — 60, остальные фиксированные — 40.
+_COL_MIN_W = {"num": 28, "content": 60, "executors": 60}
+
+def _col_min_w(key: str) -> int:
+    return _COL_MIN_W.get(key, 40)
 
 
 # Раунд 16 (задача 2): _make_row_scroller УДАЛЁН полностью. Причина ошибок
@@ -92,6 +135,9 @@ def _play_notify_sound():
 
 # Раунд 14 (задача 2): ширины чуть шире раунда 13, но сумма + отступы всё ещё
 # <= 1240 при окне 1280 (точную раскладку см. в _ROW_EXTRA).
+# Раунд 19 (задача 1): колонка «Действия» (actions, 90 px) УДАЛЕНА — её кнопки
+# дублировали карточку (открывается кликом по строке). Освободившиеся пиксели
+# уходят в гибкие «Содержание»/«Исполнители» через _fit_widths.
 _FIXED = {
     "bar": 4,
     "num": 32,
@@ -102,7 +148,6 @@ _FIXED = {
     "type": 82,
     "due": 100,
     "status": 116,
-    "actions": 90,  # 2 иконки 30+30+spacing 4 = 64; заголовок «ДЕЙСТВИЯ» ~68
 }
 _ROW_HEIGHT = 56
 # Раунд 15 (задача 2): РЕАЛЬНЫЕ внешние отступы контента вкладки: обёртка в main.py
@@ -112,10 +157,12 @@ _ROW_HEIGHT = 56
 _TAB_OUTER_PADDING = 64
 _ROW_SPACING = 6
 # Раунд 15 (задача 2): «не-колоночные» пиксели панели/строки таблицы:
-#   рамка панели 2 + рамка строки 2 + padding строки 2*6=12 + spacing 21*1=21 +
-#   10 разделителей*1=10 + запас 1 => 48. Скроллбар ширины НЕ занимает — во Flutter
-#   Scrollbar это overlay поверх контента (см. scrollable_control.dart Flet 0.23.2).
-_ROW_EXTRA = 48
+#   рамка панели 2 + рамка строки 2 + padding строки 2*6=12 + spacing 19*1=19 +
+#   9 разделителей*1=9 + запас 1 => 45 (раунд 19: колонка «Действия» убрана —
+#   стало 19 отступов и 9 разделителей вместо 21/10). Скроллбар ширины НЕ
+#   занимает — во Flutter Scrollbar это overlay поверх контента (см.
+#   scrollable_control.dart Flet 0.23.2).
+_ROW_EXTRA = 45
 # Раунд 15 (задача 2): верхние кэпы гибких колонок (480/220) УБРАНЫ — они и давали
 # пустое место справа: теперь «Содержание»/«Исполнители» растягиваются на широком
 # окне (промпт раунда 15, §2.2).
@@ -359,15 +406,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # max(40, v) превращал сохранённые 4 px в 40 — отсюда «большие цветные блоки
     # слева» на приёмке. Устаревший ключ из настроек удаляем и сохраняем чистый
     # json один раз при старте.
+    # Раунд 19 (задача 1): то же для удалённой колонки «actions».
     try:
         saved_widths = settings.get("col_widths") or {}
-        if "bar" in saved_widths:
-            saved_widths = {k: v for k, v in saved_widths.items() if k != "bar"}
+        # Раунд 19: ключи удалённых колонок («bar», «actions» раундов <=18)
+        # вычищаем из настроек один раз при старте — файл остаётся чистым.
+        legacy = {"bar", "actions"}
+        if legacy & set(saved_widths):
+            saved_widths = {k: v for k, v in saved_widths.items() if k not in legacy}
             settings["col_widths"] = saved_widths
             save_settings(settings)
         for k, v in saved_widths.items():
             if k in _W and k != "bar":
-                _W[k] = max(40, int(v))
+                # Раунд 19 (задача 2): нижний кламп ПО КОЛОНКЕ (_col_min_w), а не
+                # универсальные 40 — иначе «№» (мин. 28/дефолт 32) после
+                # перезапуска «отрастал» до 40 и ручная ширина не восстанавливалась.
+                _W[k] = max(_col_min_w(k), int(v))
     except Exception:
         traceback.print_exc()
     _W["bar"] = 4  # страховка от любых старых путей
@@ -608,8 +662,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             alignment=ft.alignment.center if center else ft.alignment.center_left,
         )
 
-    def _action_icon(icon, color, tooltip, handler, size=18):
-        return ft.IconButton(icon=icon, icon_size=size, icon_color=color, tooltip=tooltip, width=30, height=30, padding=0, on_click=handler)
+    # Раунд 19 (задача 1): _action_icon удалён — колонка «Действия» убрана.
 
     # Header
     # Раунд 17 (задача 3): заголовок ДВУХСТРОЧНЫЙ — высота 34 -> 50 px, текст
@@ -650,8 +703,65 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             on_click=lambda e, k=key: _sort_by(k),
         )
         def _make_drag(k):
+            # Раунд 19 (задача 2): перетаскивание разделителя «как в Excel» —
+            # в ОБЕ стороны. Раньше delta применялась к уже менявшемуся _W с
+            # «rubber»-компенсацией из content: при упоре content в минимум
+            # движение вправо глушилось no-op'ом, а для гибких колонок переполнение
+            # бюджета тут же вычитало добавленное — отсюда «тянется только влево»
+            # у пользователя. Теперь при старте жеста снимается СНИМОК ширин, а
+            # каждое update-событие накапливает дельту в аккумулятор: итоговая
+            # ширина колонки = стартовая + суммарная дельта (детерминированно).
+            # Сумма таблицы НЕ «пляшет»: встречная дельта компенсируется гибкими
+            # колонками («Содержание»/«Исполнители», мин. 60) — как в Excel, где
+            # растягиваемая колонка забирает место у соседней.
+            drag = {"start": None, "acc": 0}
+
             def _on_drag_start(e):
-                pass
+                drag["start"] = dict(_W)
+                drag["acc"] = 0
+
+            def _flex_donors():
+                # сама колонка k исключается из компенсаторов
+                return [f for f in ("content", "executors") if f != k]
+
+            def _apply_acc():
+                start = drag["start"]
+                if start is None:
+                    return
+                new = int(start[k]) + drag["acc"]
+                mn = _col_min_w(k)
+                if new < mn:
+                    new = mn
+                delta = new - int(start[k])
+                donors = _flex_donors()
+                _W.clear()
+                _W.update(start)
+                if delta > 0:
+                    # колонка растёт — отбираем у гибких (до их минимума)
+                    avail = sum(max(0, int(start[f]) - 60) for f in donors)
+                    if delta > avail:
+                        delta = avail
+                        new = int(start[k]) + delta
+                    _W[k] = new
+                    rem = delta
+                    for f in donors:
+                        take = min(rem, max(0, int(start[f]) - 60))
+                        if take > 0:
+                            _W[f] = int(start[f]) - take
+                            rem -= take
+                elif delta < 0:
+                    # колонка жмётся — отданное отдаётся первой гибкой
+                    _W[k] = new
+                    if donors:
+                        _W[donors[0]] = int(start[donors[0]]) - delta
+                # применяем ширины к живым контролам заголовка (без rebuild)
+                for kk, refs in header_cell_refs.items():
+                    cell, tcont = refs
+                    w = _W[kk]
+                    if cell.width != w:
+                        cell.width = w
+                        tcont.width = w
+                        _quiet_update(cell)
 
             def _on_drag_update(e):
                 try:
@@ -662,46 +772,17 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         delta = 0
                     if delta == 0:
                         return
-                    old = _W.get(k, width)
-                    new = max(60, old + delta)
-                    prev = dict(_W)
-                    # Rubber content logic: увеличение фиксированных колонок
-                    # компенсируется сжатием «Содержания» (min 60)
-                    if k not in ("content", "executors", "actions"):
-                        delta_actual = new - old
-                        content_old = _W.get("content", 100)
-                        content_new = max(60, content_old - delta_actual)
-                        if content_new < 60:
-                            delta_actual = content_old - 60
-                            new = old + delta_actual
-                            content_new = 60
-                        _W[k] = new
-                        _W["content"] = content_new
-                    else:
-                        _W[k] = new
-                    # Раунд 13 (задача 2): drag не должен распирать таблицу
-                    # шире окна — при переполнении жмём гибкую колонку или откат.
-                    over = int(sum(_W.values()) - _width_budget())
-                    if over > 0:
-                        if k in ("content", "executors"):
-                            _W[k] = max(60, _W[k] - over)
-                        elif _W.get("content", 60) - over >= 60:
-                            _W["content"] -= over
-                        else:
-                            _W.clear()
-                            _W.update(prev)
-                    # применяем ширину к живым контролам заголовка (без rebuild)
-                    refs = header_cell_refs.get(k)
-                    if refs is not None:
-                        cell, tcont = refs
-                        cell.width = _W[k]
-                        tcont.width = _W[k]
-                        _safe_update(cell)
+                    if drag["start"] is None:
+                        drag["start"] = dict(_W)
+                    drag["acc"] += delta
+                    _apply_acc()
                 except Exception:
                     traceback.print_exc()
 
             def _on_drag_end(e):
                 try:
+                    drag["start"] = None
+                    drag["acc"] = 0
                     _rebuild_header()
                     _rebuild_table()
                     _save_col_widths()
@@ -716,8 +797,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             on_horizontal_drag_update=_du,
             on_horizontal_drag_end=_de,
             # Раунд 17 (задача 3): хэндл на всю высоту двухстрочного заголовка.
+            # Раунд 19 (задача 2): зона захвата чуть шире (12 px) — как в Excel,
+            # за разделитель удобно цепляться с любой стороны.
             content=ft.Container(
-                width=10,
+                width=12,
                 height=50,
                 bgcolor="transparent",
                 border_radius=2,
@@ -753,8 +836,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Раунд 18 (задача 3): заголовки колонок — ТОЧНО как в исходной
         # Excel-таблице (TABLE_HEADERS из core.controls_exporter — единый
         # источник). Длинные названия переносятся на 2 строки (раунд 17).
-        # Дополнительные колонки приложения («Статус», «Действия», а в архиве —
-        # «Причина» вместо типа) — без изменений.
+        # Дополнительная колонка приложения — «Статус» (в архиве вместо типа —
+        # «Причина»). Раунд 19 (задача 1): колонка «Действия» удалена.
         _H = [h.strip() for h in TABLE_HEADERS]
         _hsep = ft.Container(width=1, height=42, bgcolor="#26ffffff")
         controls = [
@@ -778,8 +861,6 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _header_cell(_H[8], _W["due"], "due"),
             _hsep,
             _header_cell("Статус", _W["status"], "status"),
-            _hsep,
-            _header_cell("Действия", _W["actions"], "actions", center=True),
         ]
         header_row.content = ft.Row(controls=controls, spacing=1, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         try:
@@ -816,7 +897,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if t.due_date:
                     line += " — " + _display_date(t.due_date)
                 if t.is_done:
-                    line += " (исполнено)"
+                    # Раунд 19 (задача 3.2): в содержании — фактическая дата исполнения
+                    line += f" (исполнен {_display_date(t.done_date)})" if t.done_date else " (исполнено)"
                 content_lines.append(line)
         content_text = "\n".join(content_lines)
         content_tooltip = content_text
@@ -838,14 +920,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 reason_text = f"{reason_text} · {_display_date(ctl.archived_at)}"
             type_cell = _cell(reason_text, _W["type"], color=GLASS["text_secondary"], size=12, tooltip=reason)
 
-        # Bug 4: только 2 кнопки — Редактировать и Удалить (в архив). Галку Исполнено убрать — вводила в заблуждение (выглядела отмеченной у всех)
-        actions = []
-        if is_archive:
-            actions.append(_action_icon(ft.icons.RESTORE, GLASS["in_progress"], "Восстановить", lambda e, c=ctl: _restore(c), size=18))
-            actions.append(_action_icon(ft.icons.DELETE_FOREVER, GLASS["overdue"], "Удалить навсегда", lambda e, c=ctl: _delete_forever(c), size=18))
-        else:
-            actions.append(_action_icon(ft.icons.EDIT_OUTLINED, GLASS["accent"], "Редактировать", lambda e, c=ctl: _open_detail(c), size=18))
-            actions.append(_action_icon(ft.icons.DELETE_OUTLINE, GLASS["overdue"], "Удалить (в архив)", lambda e, c=ctl: _confirm_delete(c), size=18))
+        # Раунд 19 (задача 1): колонка «Действия» с иконками УДАЛЕНА полностью —
+        # карточка открывается кликом по строке, а внутри карточки есть все
+        # действия (редактирование, удаление в архив, исполнение; для архивных —
+        # «Восстановить»/«Удалить навсегда» в футере карточки).
 
         eff_due = effective_due_date(ctl)
         due_str = _display_date(eff_due.isoformat() if eff_due else ctl.due_date)
@@ -905,11 +983,6 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 width=_W["status"], height=26, border_radius=13, padding=ft.padding.symmetric(horizontal=8),
                 alignment=ft.alignment.center, bgcolor=with_alpha(color, "22"), border=ft.border.all(1, color),
             ),
-            _vsep,
-            # Раунд 10 (задача 2): иконки действий прижаты к ПРАВОМУ краю ячейки
-            # (аналог левой статусной полосы, упирающейся в левый край)
-            ft.Row(controls=actions, spacing=4, tight=True, width=_W["actions"],
-                   vertical_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.END),
         ]
 
         # Плашка строки: Bug 2 exact colors — #2a3247, border #0dffffff or none, radius 10, gap 6
@@ -1425,6 +1498,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
         scroll=ft.ScrollMode.AUTO, expand=True,
     )
+    # Раунд 19 (задача 5): у НАРУЖНОГО Row убран tight=True. В Flet 0.23.2
+    # tight=True -> MainAxisSize.min, и flex-ребёнок (filter_inner_row с expand)
+    # внутри min-Row — недопустимая комбинация для Flutter-клиента
+    # («RenderFlex children have non-zero flex...» — клиентский layout error,
+    # строка фильтров визуально «умирала», отсюда «фильтры вообще не работают»).
+    # Без tight Row занимает всю ширину панели (width задаётся в
+    # _apply_table_geometry) — expand внутри легален.
     filter_row = glass_panel(
         content=ft.Row(
             controls=[
@@ -1438,7 +1518,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 reset_filters_btn,
                 mode_row,
             ],
-            spacing=10, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         height=52, radius=12, padding=ft.padding.symmetric(horizontal=12, vertical=8),
     )
@@ -1499,7 +1579,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         search_field_ms = _glass_textfield(hint=f"Поиск {title.lower()}…")
         search_field_ms.height = 34
         search_field_ms.visible = False
-        list_col = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, height=140 if not compact else 120, visible=False)
+        # Раунд 19 (задача 4): scroll=ALWAYS вместо AUTO — у ADAPTIVE/ALWAYS-
+        # вариантов с thumbVisibility на Windows в Flet 0.23.2 бегунок получался
+        # невидимым (round 17, scrollable_control.dart), а колесо мыши жёстко
+        # шагает ~140 px (adjustable_scroll_controller.dart) — отсюда «сильно
+        # прокручивает при добавлении исполнителя». Видимый draggable-бегунок
+        # (локальная ScrollbarTheme на container ниже) — как в справочниках.
+        list_col = ft.Column(spacing=2, scroll=ft.ScrollMode.ALWAYS, height=140 if not compact else 120, visible=False)
         def _rebuild_list():
             q = search_val["value"].lower()
             filtered = [n for n in available if q in n.lower()] if q else list(available)
@@ -1577,7 +1663,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             content=ft.Column(controls=[header, summary, search_field_ms, list_wrapper], spacing=6, tight=True),
             bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]), border_radius=10, padding=ft.padding.all(8),
         )
+        # Раунд 19 (задача 4): яркий постоянный бегунок внутри мультивыбора —
+        # та же локальная тема, что и у справочников (раунд 17).
+        container.theme = _scrollbar_theme()
         container._get_selected = lambda: list(selected)
+        container._available = list(available)  # для тестов раунда 19
         return container
 
     detail_state: Dict = {"control_id": None, "is_new": True, "tasks": [], "milestones": [], "attachments": [], "receive_date": None, "due_date": None, "end_date": None}
@@ -1960,11 +2050,27 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         add_init_btn = ft.IconButton(icon=ft.icons.ADD, icon_size=18, icon_color=GLASS["accent"], tooltip="Добавить нового", on_click=_show_new_init, width=36, height=36)
 
         content_field = _glass_textfield(value=ctl.content if ctl else "", hint="Содержание контроля…", multiline=True, min_lines=3, max_lines=5)
-        exec_container = _build_inline_multi(available_names, list(ctl.executors) if ctl else [], "Исполнители")
+        # Раунд 19 (задача 4): списки людей в карточке — СТРОГО по ролям
+        # person_roles (раунд 18): исполнители/ответственные пунктов — роль
+        # «И» (executor_canonical), «За кем контроль» — роль «К»
+        # (controller_canonical), а не все люди справочника. Fallback:
+        # исполнители — полный справочник, контролёры — DEFAULT_CONTROLLERS
+        # («Потемкин С.А.», «Чашин Э.А.»), если никому роль не назначена.
+        # Текущие значения контроля (даже вне списка ролей) всегда добавляем
+        # опцией — иначе при сохранении они молча терялись бы.
+        exec_available = list(executor_canonical) or list(get_all_people_names(settings) or available_names)
+        ctrl_available = list(controller_canonical) or list(DEFAULT_CONTROLLERS)
+        if ctl:
+            for _nm in (ctl.executors or []):
+                if _nm and _nm not in exec_available:
+                    exec_available.append(_nm)
+            if ctl.controller and ctl.controller not in ctrl_available:
+                ctrl_available.append(ctl.controller)
+        exec_container = _build_inline_multi(exec_available, list(ctl.executors) if ctl else [], "Исполнители")
 
         # Раунд 5: ширины подогнаны под левую панель (500 - padding*2 ≈ 476), чтобы строка
         # «За кем контроль / Тип / Периодичность» не переполнялась и не клипировалась.
-        controller_dd = _glass_dropdown("За кем контроль", 180, [ft.dropdown.Option(n, short_name(n)) for n in available_names], value=ctl.controller if (ctl and ctl.controller in available_names) else None)
+        controller_dd = _glass_dropdown("За кем контроль", 180, [ft.dropdown.Option(n, short_name(n)) for n in ctrl_available], value=ctl.controller if (ctl and ctl.controller) else None)
         type_dd = _glass_dropdown("Тип", 120, [ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")], value=ctl.control_type if ctl else ONE_TIME)
         period_dd = _glass_dropdown("Периодичность", 140, [ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS], value=_period_key(ctl.period_days if ctl else 7))
         period_dd.visible = (ctl.control_type if ctl else ONE_TIME) == PERIODIC
@@ -2081,23 +2187,46 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     traceback.print_exc()
             task_due_box.on_click = lambda e, s=_set_task_due: _open_global_cal(lambda iso: s(iso), t_ui["due_ref"]["value"])
 
-            ass_container = _build_inline_multi(available_names, t_ui.get("assignees", []), f"Отв. {title_f.value[:10] or 'пункт'}", compact=True)
+            # Раунд 19 (задача 4): ответственные пункта — только роль «И»
+            ass_container = _build_inline_multi(exec_available, t_ui.get("assignees", []), f"Отв. {title_f.value[:10] or 'пункт'}", compact=True)
             t_ui["_ass_container"] = ass_container
 
             # Checkbox for done - normal size checkbox
-            is_done_check = ft.Checkbox(label="исполнено", value=t_ui["is_done"], active_color=GLASS["in_progress"], label_style=ft.TextStyle(size=11, color=GLASS["text_secondary"]), on_change=lambda e, ui=t_ui: ui.update({"is_done": bool(e.control.value)}), height=28)
+            # Раунд 19 (задача 3.2): галочка ставит/снимает и ДАТУ исполнения
+            # (раньше done_date терялась — is_done обновлялся без даты).
+            def _task_done_toggle(e, ui=t_ui):
+                v = bool(e.control.value)
+                ui["is_done"] = v
+                if v and not ui.get("done_date"):
+                    ui["done_date"] = date.today().isoformat()
+                elif not v:
+                    ui["done_date"] = None
+            is_done_check = ft.Checkbox(label="исполнено", value=t_ui["is_done"], active_color=GLASS["in_progress"], label_style=ft.TextStyle(size=11, color=GLASS["text_secondary"]), on_change=_task_done_toggle, height=28)
 
             comment_f = _glass_textfield(value=t_ui.get("comment",""), hint="Комментарий…")
             comment_f.height = 32
             t_ui["comment_field"] = comment_f
 
+            card_controls = [
+                ft.Row(controls=[ft.Icon(ft.icons.DRAG_INDICATOR, size=14, color=GLASS["text_muted"]), title_f, ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"], on_click=lambda e, ui=t_ui: _remove_task(ui))], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ass_container,
+                ft.Row(controls=[task_due_box, is_done_check], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ]
+            # Раунд 19 (задача 3.2): сводка исполнения пункта —
+            # «Исполнен: 11.08.2026 — Гайнутдинов С.И.» зелёной строкой-плашкой.
+            if t_ui.get("is_done"):
+                _ass = ", ".join(short_name(x) for x in t_ui.get("assignees", []) if x)
+                _done_label = f"Исполнен: {_display_date(t_ui.get('done_date'))}"
+                if _ass:
+                    _done_label += f" — {_ass}"
+                card_controls.append(ft.Row(controls=[
+                    ft.Icon(ft.icons.CHECK_CIRCLE, size=12, color=GLASS["in_progress"]),
+                    ft.Text(_done_label, size=11, color=GLASS["in_progress"], weight=ft.FontWeight.W_600, no_wrap=True, tooltip=f"{t_ui.get('title_field').value or 'Пункт'} исполнен — {_ass}, дата исполнения {_display_date(t_ui.get('done_date'))}"),
+                ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER))
+            card_controls.append(comment_f)
+
             return glass_panel(
-                content=ft.Column(controls=[
-                    ft.Row(controls=[ft.Icon(ft.icons.DRAG_INDICATOR, size=14, color=GLASS["text_muted"]), title_f, ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"], on_click=lambda e, ui=t_ui: _remove_task(ui))], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    ass_container,
-                    ft.Row(controls=[task_due_box, is_done_check], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    comment_f,
-                ], spacing=6, tight=True),
+                content=ft.Column(controls=card_controls, spacing=6, tight=True),
                 radius=10, padding=ft.padding.all(10), bgcolor=GLASS["card"],  # раунд 6: как строка таблицы #2a3247
             )
 
@@ -2113,7 +2242,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 "assignees": [],
                 "due_ref": {"value": None},
                 "is_done": False,
+                "done_date": None,
                 "comment": "",
+                "task_id": None,
             }
             detail_state["tasks"].append(new_ui)
             _rebuild_task_cards()
@@ -2125,7 +2256,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     "assignees": list(t.assignees),
                     "due_ref": {"value": t.due_date},
                     "is_done": t.is_done,
+                    # Раунд 19 (задача 3.2): дата исполнения пункта проброшена в
+                    # черновик; task_id связывает черновик с живой моделью для
+                    # диалога «Исполнен пункт» (иначе каждый save перевыдавал uuid
+                    # и отметки исполнения теряли связь).
+                    "done_date": getattr(t, "done_date", None),
                     "comment": getattr(t, "comment", ""),
+                    "task_id": t.id,
                 })
         _rebuild_task_cards()
 
@@ -2458,7 +2595,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         ass = ui["_ass_container"]._get_selected()
                     except Exception:
                         traceback.print_exc()
-                new_tasks.append(ControlTask(id=str(uuid4()), title=title, assignees=list(ass), due_date=ui["due_ref"]["value"], is_done=ui["is_done"], comment=ui.get("comment_field", ft.TextField()).value if "comment_field" in ui else ""))
+                # Раунд 19 (задача 3.2): сохраняем ИСХОДНЫЙ id пункта и
+                # done_date (раньше id перевыдавался при каждом сохранении, а
+                # дата исполнения терялась).
+                new_tasks.append(ControlTask(id=ui.get("task_id") or str(uuid4()), title=title, assignees=list(ass), due_date=ui["due_ref"]["value"], is_done=ui["is_done"], done_date=ui.get("done_date"), comment=ui.get("comment_field", ft.TextField()).value if "comment_field" in ui else ""))
             new_miles = []
             for ui in detail_state["milestones"]:
                 if not ui["date_ref"]["value"] and not ui["note"]:
@@ -2534,6 +2674,122 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             dlg = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Переместить в архив", size=14, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Text(f"Переместить «{ctl.incoming_number}» в архив?", size=12, color=GLASS["text"]), actions=[ft.TextButton("Отмена", on_click=_cancel), ft.ElevatedButton("В архив", bgcolor=GLASS["accent"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
             page.open(dlg)
 
+        def _open_task_done_dlg(e=None):
+            """Раунд 19 (задача 3.2): диалог «Исполнен пункт» — админ выбирает
+            пункт задания и дату его фактического исполнения. Работаем с ЖИВОЙ
+            моделью ctl (а не с черновиком detail_state), после подтверждения
+            синхронизируем черновик и перестраиваем плашки пунктов — остальные
+            поля карточки (несохранённые) не затрагиваются."""
+            if not ctl or not ctl.tasks:
+                return
+            sel = {"id": None}
+            for t in ctl.tasks:
+                if not t.is_done:
+                    sel["id"] = t.id
+                    break
+            if sel["id"] is None:
+                sel["id"] = ctl.tasks[0].id
+            done_ref = {"iso": date.today().isoformat()}
+            radios = ft.RadioGroup(
+                value=sel["id"],
+                on_change=lambda e: sel.update({"id": e.control.value}),
+                content=ft.Column(
+                    controls=[
+                        ft.Radio(
+                            value=t.id,
+                            label=(t.title or "Пункт")
+                                  + (f" — {', '.join(short_name(a) for a in t.assignees)}" if t.assignees else "")
+                                  + (f" (исполнен {_display_date(t.done_date)})" if t.is_done else ""),
+                            label_style=ft.TextStyle(size=12, color=GLASS["text"] if not t.is_done else GLASS["text_muted"]),
+                        )
+                        for t in ctl.tasks
+                    ],
+                    spacing=2, scroll=ft.ScrollMode.ALWAYS,
+                ),
+            )
+            radios_block = ft.Container(
+                content=radios, height=min(200, 40 + 34 * len(ctl.tasks)),
+            )
+            radios_block.theme = _scrollbar_theme()
+            chosen_txt = ft.Text(f"Дата исполнения: {_display_date(done_ref['iso'])}",
+                                 size=12, color=GLASS["text"], weight=ft.FontWeight.W_600)
+            def _on_pick_done(iso):
+                if iso:
+                    done_ref["iso"] = iso
+                    chosen_txt.value = f"Дата исполнения: {_display_date(iso)}"
+                    _safe_update(chosen_txt)
+            cal_block = create_russian_calendar_expanded(page, done_ref["iso"], _on_pick_done)
+            def _cancel(e=None):
+                try:
+                    page.close(dlg)
+                except Exception:
+                    traceback.print_exc()
+            def _confirm(e=None):
+                task = None
+                for t in ctl.tasks:
+                    if t.id == sel["id"]:
+                        task = t
+                        break
+                if task is None:
+                    return
+                task.is_done = True
+                task.done_date = done_ref["iso"]
+                ctl.updated_at = datetime.now().isoformat()
+                try:
+                    _persist(state["controls"])
+                except Exception:
+                    traceback.print_exc()
+                try:
+                    page.close(dlg)
+                except Exception:
+                    traceback.print_exc()
+                # синк черновика открытой карточки + перестройка плашек пунктов
+                for ui in detail_state["tasks"]:
+                    if ui.get("task_id") == task.id:
+                        ui["is_done"] = True
+                        ui["done_date"] = task.done_date
+                try:
+                    _rebuild_task_cards()
+                    _rebuild_table()
+                except Exception:
+                    traceback.print_exc()
+                from ui.toast import show_toast
+                _ass = ", ".join(short_name(a) for a in task.assignees if a)
+                _msg = f"{task.title or 'Пункт'} исполнен"
+                if _ass:
+                    _msg += f" — {_ass}"
+                _msg += f", дата исполнения {_display_date(task.done_date)}"
+                show_toast(page, _msg, icon=ft.icons.DONE_ALL)
+                # все пункты исполнены — подсказать про закрытие контроля
+                if all(t.is_done for t in ctl.tasks):
+                    show_toast(page, "Все пункты исполнены — можно закрыть контроль кнопкой «Контроль исполнен»",
+                               icon=ft.icons.CHECK_CIRCLE_OUTLINE)
+            dlg = ft.AlertDialog(
+                modal=True,
+                bgcolor=GLASS["surface_solid"],
+                title=ft.Row(controls=[ft.Icon(ft.icons.DONE_ALL, size=18, color=GLASS["today"]),
+                                       ft.Text("Исполнение пункта задания", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"])],
+                             spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                content=ft.Container(
+                    width=340,
+                    content=ft.Column(controls=[
+                        ft.Text("Выберите пункт задания:", size=12, color=GLASS["text_secondary"]),
+                        radios_block,
+                        ft.Container(height=6),
+                        chosen_txt,
+                        cal_block,
+                    ], spacing=4, tight=True),
+                ),
+                actions=[
+                    ft.TextButton("Отмена", on_click=_cancel, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+                    ft.ElevatedButton("Отметить исполненным", bgcolor=GLASS["today"], color=GLASS["green_dark_text"],
+                                      on_click=_confirm, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+                shape=ft.RoundedRectangleBorder(radius=12),
+            )
+            page.open(dlg)
+
         # ── Build two-column layout ─────────────────────────────
         # Left column - Bug 8 fix: remove expand=True inside scroll column (classic collapse AGENTS 15.11), use fixed widths
         # Раунд 15 (задача 3): horizontal_alignment=STRETCH у колонок карточки —
@@ -2582,12 +2838,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                               horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
         # Section Сроки — no always open calendar (Bug 9 fix), only fields that open shared global calendar
-        sroki_content = ft.Column(controls=[
-            ft.Text("Сроки", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+        # Раунд 19 (задача 3.1): если контроль исполнен — зелёная сводка
+        # «Исполнен: <дата фактического исполнения>» в начале секции.
+        sroki_controls = [ft.Text("Сроки", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"])]
+        if ctl and ctl.done:
+            sroki_controls.append(ft.Container(
+                content=ft.Row(controls=[
+                    ft.Icon(ft.icons.CHECK_CIRCLE, size=14, color=GLASS["in_progress"]),
+                    ft.Text(f"Исполнен: {_display_date(ctl.done_date)}", size=12,
+                            color=GLASS["in_progress"], weight=ft.FontWeight.W_700, no_wrap=True),
+                ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor=with_alpha(GLASS["in_progress"], "18"),
+                border=ft.border.all(1, with_alpha(GLASS["in_progress"], "55")),
+                border_radius=8, padding=ft.padding.symmetric(horizontal=10, vertical=6),
+            ))
+        sroki_controls += [
             _field_with_label("Следующая дата исполнения", due_box),
             cycle_hint,
             _field_with_label("Конечная дата", end_box),
-        ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        ]
+        sroki_content = ft.Column(controls=sroki_controls, spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         right_col.controls.append(glass_panel(content=sroki_content, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Pункты задания
@@ -2661,9 +2931,54 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             border=ft.border.only(bottom=ft.BorderSide(1, GLASS["border_divider"])),
         )
 
+        # Раунд 19 (задачи 1, 3): футер карточки — быстрые действия слева.
+        # Для активного контроля: зелёная «Контроль исполнен» (диалог с датой
+        # фактического исполнения), жёлтая «Исполнен пункт» (диалог выбора
+        # пункта + даты, только если есть пункты), «Удалить». Для архивного
+        # (раньше действия были в колонке «Действия» таблицы): «Восстановить»
+        # и «Удалить навсегда».
+        left_footer = []
+        if not is_new and ctl is not None:
+            if ctl.archived:
+                def _restore_card(e=None):
+                    _restore(ctl)
+                    _hide_detail()
+                def _delete_forever_card(e=None):
+                    _hide_detail()
+                    _delete_forever(ctl)
+                left_footer.append(ft.ElevatedButton(
+                    "Восстановить", icon=ft.icons.RESTORE,
+                    bgcolor=with_alpha(GLASS["in_progress"], "22"), color=GLASS["in_progress"],
+                    style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["in_progress"]),
+                                         shape=ft.RoundedRectangleBorder(radius=10)),
+                    on_click=_restore_card))
+                left_footer.append(ft.ElevatedButton(
+                    "Удалить навсегда", icon=ft.icons.DELETE_FOREVER,
+                    bgcolor=with_alpha(GLASS["overdue"], "22"), color=GLASS["overdue"],
+                    style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["overdue"]),
+                                         shape=ft.RoundedRectangleBorder(radius=10)),
+                    on_click=_delete_forever_card))
+            else:
+                left_footer.append(ft.ElevatedButton(
+                    "Контроль исполнен", icon=ft.icons.CHECK_CIRCLE_OUTLINE,
+                    bgcolor=GLASS["in_progress"], color=GLASS["green_dark_text"], height=36,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+                    on_click=lambda e, c=ctl: _open_done_dialog(c)))
+                if ctl.tasks:
+                    left_footer.append(ft.ElevatedButton(
+                        "Исполнен пункт", icon=ft.icons.DONE_ALL,
+                        bgcolor=GLASS["today"], color=GLASS["green_dark_text"], height=36,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+                        on_click=_open_task_done_dlg))
+                left_footer.append(ft.ElevatedButton(
+                    "Удалить", icon=ft.icons.DELETE_FOREVER,
+                    bgcolor=with_alpha(GLASS["overdue"], "22"), color=GLASS["overdue"],
+                    style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["overdue"]),
+                                         shape=ft.RoundedRectangleBorder(radius=10)),
+                    on_click=_delete_detail))
+
         footer = ft.Container(
-            content=ft.Row(controls=[
-                ft.ElevatedButton("Удалить", icon=ft.icons.DELETE_FOREVER, bgcolor=with_alpha(GLASS["overdue"], "22"), color=GLASS["overdue"], style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["overdue"]), shape=ft.RoundedRectangleBorder(radius=10)), visible=not is_new, on_click=_delete_detail) if not is_new else ft.Container(),
+            content=ft.Row(controls=left_footer + [
                 ft.Container(expand=True),
                 ft.TextButton("Отмена", on_click=_hide_detail, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
                 ft.ElevatedButton("Сохранить", icon=ft.icons.SAVE, bgcolor=GLASS["accent"], color="#ffffff", style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)), on_click=_save_detail, height=40),
@@ -2711,101 +3026,79 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _refresh_cycle_hint()
 
     # Actions
-    def _complete(ctl: Control):
-        try:
-            _do_complete(ctl)
-        except Exception:
-            traceback.print_exc()
+    # Раунд 19 (задача 3.1): «Контроль исполнен» — единое закрытие контроля
+    # одним действием, с датой ФАКТИЧЕСКОГО исполнения, которую выбирает админ
+    # (по умолчанию — сегодня). Для обоих типов: done=True, done_date=<дата>,
+    # контроль уходит в архив как исполненный. Мёртвый код старой галки строки
+    # (_complete/_extend/_do_extend с продлением периодического) удалён —
+    # кнопок-источников больше нет (колонка «Действия» убрана, задача 1).
+    def _do_complete(ctl: Control, exec_iso: Optional[str] = None):
+        exec_d = parse_date(exec_iso) or date.today()
+        ctl.done = True
+        ctl.done_date = exec_d.isoformat()
+        ctl.updated_at = datetime.now().isoformat()
+        archive_control(ctl, ARCHIVE_DONE)
+        _persist(state["controls"])
+        from ui.toast import show_toast
+        show_toast(page, f"Контроль исполнен: {_display_date(exec_d.isoformat())}", icon=ft.icons.CHECK_CIRCLE)
 
-    def _do_complete(ctl: Control):
-        today = date.today()
-        if ctl.control_type == PERIODIC:
-            base = parse_date(ctl.due_date) or today
-            new_due = base + timedelta(days=ctl.period_days)
-            end = parse_date(ctl.end_date)
-            if end is not None and new_due > end:
-                ctl.done = True
-                ctl.done_date = today.isoformat()
-                archive_control(ctl, ARCHIVE_DONE)
-                ctl.updated_at = datetime.now().isoformat()
-                _persist(state["controls"])
-                from ui.toast import show_toast
-                show_toast(page, "Постоянный контроль завершён", icon=ft.icons.CHECK_CIRCLE)
-            else:
-                ctl.due_date = new_due.isoformat()
-                ctl.done_date = today.isoformat()
-                for t in ctl.tasks:
-                    t.is_done = False
-                    t.done_date = None
-                for m in ctl.milestones:
-                    m.is_done = False
-                ctl.updated_at = datetime.now().isoformat()
-                _persist(state["controls"])
-                from ui.toast import show_toast
-                show_toast(page, f"Срок продлён до {_display_date(ctl.due_date)}", icon=ft.icons.UPDATE)
-        else:
-            ctl.done = True
-            ctl.done_date = today.isoformat()
-            ctl.updated_at = datetime.now().isoformat()
-            archive_control(ctl, ARCHIVE_DONE)
-            _persist(state["controls"])
-            from ui.toast import show_toast
-            show_toast(page, "Контроль исполнен и в архив", icon=ft.icons.CHECK_CIRCLE)
-        _rebuild_table()
-        _refresh_counters()
-
-    def _extend(ctl: Control):
-        try:
-            _do_extend(ctl)
-        except Exception:
-            traceback.print_exc()
-
-    def _do_extend(ctl: Control):
-        days_field = _glass_textfield(value=str(ctl.period_days if ctl.control_type == PERIODIC else 7), hint="Продлить на (дней)", width=160)
+    def _open_done_dialog(ctl: Control):
+        """Раунд 19 (задача 3.1): AlertDialog «Подтверждение исполнения
+        контроля» с выбором даты (русский календарь) -> _do_complete."""
+        done_ref = {"iso": date.today().isoformat()}
+        chosen_txt = ft.Text(f"Дата исполнения: {_display_date(done_ref['iso'])}",
+                             size=13, color=GLASS["text"], weight=ft.FontWeight.W_600)
+        def _on_pick_done(iso):
+            if iso:
+                done_ref["iso"] = iso
+                chosen_txt.value = f"Дата исполнения: {_display_date(iso)}"
+                _safe_update(chosen_txt)
+        cal_block = create_russian_calendar_expanded(page, done_ref["iso"], _on_pick_done)
+        def _cancel(e=None):
+            try:
+                page.close(dlg)
+            except Exception:
+                traceback.print_exc()
         def _confirm(e=None):
             try:
-                try:
-                    n = max(1, int(days_field.value))
-                except ValueError:
-                    n = 7
-                base = parse_date(ctl.due_date) or date.today()
-                ctl.due_date = (base + timedelta(days=n)).isoformat()
-                ctl.updated_at = datetime.now().isoformat()
-                _persist(state["controls"])
-                page.close(dialog)
-                _rebuild_table()
-                _refresh_counters()
-                from ui.toast import show_toast
-                show_toast(page, f"Срок продлён до {_display_date(ctl.due_date)}", icon=ft.icons.UPDATE)
+                page.close(dlg)
             except Exception:
                 traceback.print_exc()
-        def _close(e=None):
             try:
-                page.close(dialog)
+                _do_complete(ctl, done_ref["iso"])
             except Exception:
                 traceback.print_exc()
-        dialog = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Продлить срок", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Container(content=days_field, width=220), actions=[ft.TextButton("Отмена", on_click=_close), ft.ElevatedButton("Продлить", bgcolor=GLASS["accent"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
-        page.open(dialog)
+            # закрыть карточку и обновить таблицу
+            try:
+                _hide_detail()
+            except Exception:
+                traceback.print_exc()
+        dlg = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Row(controls=[ft.Icon(ft.icons.CHECK_CIRCLE_OUTLINE, size=18, color=GLASS["in_progress"]),
+                                   ft.Text("Подтверждение исполнения контроля", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"])],
+                         spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            content=ft.Container(
+                width=300,
+                content=ft.Column(controls=[
+                    ft.Text("Дата фактического исполнения:", size=12, color=GLASS["text_secondary"]),
+                    chosen_txt,
+                    cal_block,
+                ], spacing=6, tight=True),
+            ),
+            actions=[
+                ft.TextButton("Отмена", on_click=_cancel, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+                ft.ElevatedButton("Исполнен", bgcolor=GLASS["in_progress"], color=GLASS["green_dark_text"],
+                                  on_click=_confirm, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        page.open(dlg)
 
-    def _confirm_delete(ctl: Control):
-        def _confirm(e=None):
-            try:
-                archive_control(ctl, ARCHIVE_DELETED)
-                _persist(state["controls"])
-                page.close(dialog)
-                _rebuild_table()
-                _refresh_counters()
-                from ui.toast import show_toast
-                show_toast(page, f"В архив: {ctl.incoming_number}", icon=ft.icons.ARCHIVE)
-            except Exception:
-                traceback.print_exc()
-        def _close(e=None):
-            try:
-                page.close(dialog)
-            except Exception:
-                traceback.print_exc()
-        dialog = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Переместить в архив", size=16, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Text(f"Переместить «{ctl.incoming_number}» в архив?", size=13, color=GLASS["text"]), actions=[ft.TextButton("Отмена", on_click=_close), ft.ElevatedButton("В архив", bgcolor=GLASS["accent"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
-        page.open(dialog)
+    # Раунд 19 (задача 1): _confirm_delete удалён вместе с колонкой «Действия» —
+    # удаление в архив теперь из карточки (_delete_detail).
 
     def _restore(ctl: Control):
         try:
@@ -3186,18 +3479,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # thumb_color/thickness/radius/track_*). Дефолтный бегунок светлой
         # page-темы незаметен на тёмном фоне — теперь яркий, толстый, с дорожкой
         # и draggable (interactive=True): точная прокрутка — за бегунок.
-        _refs_scroll_theme = ft.Theme(use_material3=True)
-        _refs_scroll_theme.scrollbar_theme = ft.ScrollbarTheme(
-            thumb_visibility=True,
-            track_visibility=True,
-            interactive=True,
-            thumb_color="#66ffffff",
-            track_color="#14ffffff",
-            thickness=8,
-            radius=4,
-            cross_axis_margin=2,
-        )
-        refs_card.theme = _refs_scroll_theme
+        # Раунд 19: вынесено в общий хелпер _scrollbar_theme() (та же тема
+        # теперь и у мультивыборов карточки — задача 4).
+        refs_card.theme = _scrollbar_theme()
 
         def _refs_on_pan_update(e):
             try:
@@ -3491,22 +3775,52 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     # Background polling
     _poll_stop = {"flag": False}
+
+    def _post_to_ui(fn):
+        """Раунд 19 (задача 5): выполнить fn в UI-потоке (event loop страницы),
+        а не в фоновом потоке поллинга. Причина регрессии из ЛОГ.txt (11.08.2026)
+        — AssertionError 'assert self.__uid is not None': page.update() в
+        flet_core 0.23.2 НЕ атомарен (page.py __update: сначала
+        build_update_commands в control.py ~448/480 читает __uid, потом
+        __update_control_ids присваивает новые uid по ответу клиента).
+        Конкурентный update из фонового потока (_poll_network/_notify_user ->
+        show_toast/page.update) вклинивался между prepare и assign — контрол
+        оставался без uid навсегда, и КАЖДЫЙ следующий update его предка падал
+        («фильтры не работают, карточки не открываются»). Все UI-вызовы
+        поллинга теперь маршаллизуются сюда и сериализуются с обработчиками
+        событий. Имя атрибута с манглингом — page.py 0.23.2: self.__loop=loop."""
+        def _run():
+            try:
+                fn()
+            except Exception:
+                traceback.print_exc()
+        loop = None
+        try:
+            loop = getattr(page, "_Page__loop", None)
+        except Exception:
+            loop = None
+        if loop is not None:
+            try:
+                if (not loop.is_closed()) and loop.is_running():
+                    loop.call_soon_threadsafe(_run)
+                    return
+            except Exception:
+                pass
+        # fallback: тестовый PageStub / loop ещё не запущен — выполняем напрямую
+        _run()
+
     def _background_loop():
         while not _poll_stop["flag"]:
             time.sleep(20)
-            try:
-                _poll_network()
-            except Exception as e:
-                print(f"[CONTROLS_TAB] poll error: {e}")
+            if _poll_stop["flag"]:
+                break
+            # Раунд 19 (задача 5): ВСЕ опросы — только через UI-поток
+            _post_to_ui(_poll_network)
             time.sleep(40)
-            try:
-                _poll_notifications()
-            except Exception as e:
-                print(f"[CONTROLS_TAB] notify error: {e}")
-            try:
-                _check_my_notifications()
-            except Exception as e:
-                print(f"[CONTROLS_TAB] my notify error: {e}")
+            if _poll_stop["flag"]:
+                break
+            _post_to_ui(_poll_notifications)
+            _post_to_ui(_check_my_notifications)
 
     def _notify_user(message: str):
         """Персональное уведомление: звук + toast (вызовы из фонового потока — в try/except)."""

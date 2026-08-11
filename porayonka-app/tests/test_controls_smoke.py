@@ -451,6 +451,30 @@ def _refs_apply_of(dlg):
             and getattr(c, "text", None) == "Применить"]
 
 
+def _header_row19(tab):
+    """Раунд 19: строка заголовка таблицы (20 контролов: bar + 10 ячеек +
+    9 разделителей; колонка «Действия» удалена)."""
+    hdrs = [c for c in walk(tab) if isinstance(c, ft.Container)
+            and getattr(c, "height", None) == 50
+            and isinstance(getattr(c, "content", None), ft.Row)
+            and len(getattr(c.content, "controls", []) or []) >= 20]
+    return hdrs[0].content if hdrs else None
+
+
+def _header_texts19(tab):
+    """Тексты ячеек заголовка таблицы (верхний регистр, без стрелок сортировки)."""
+    hdr = _header_row19(tab)
+    if hdr is None:
+        return []
+    out = []
+    for st in hdr.controls:
+        if isinstance(st, ft.Stack) and st.controls:
+            t = getattr(st.controls[0], "content", None)
+            if isinstance(t, ft.Text):
+                out.append((t.value or "").replace("▲", "").replace("▼", "").strip())
+    return out
+
+
 def main():
     _seed_controls()
 
@@ -1194,12 +1218,14 @@ def main():
         return len(getattr(eh, "_EventHandler__handlers", {})) if eh is not None else 0
     gds = [c for c in walk(tab) if isinstance(c, ft.GestureDetector)
            and _gd_subs(c, "on_horizontal_drag_start") > 0]
-    # 11 границ колонок (у resize-хэндла карточки подписки horizontal нет)
-    check("resize: drag-хэндлы на ВСЕХ 11 границах колонок", len(gds) == 11, f"{len(gds)}")
+    # 10 границ колонок (раунд 19: колонка «Действия» удалена — было 11; у
+    # resize-хэндла карточки подписки horizontal нет)
+    check("resize19: drag-хэндлы на ВСЕХ 10 границах колонок", len(gds) == 10, f"{len(gds)}")
     # разделители в заголовке (1px, цвет #26ffffff)
     seps = [c for c in walk(tab) if isinstance(c, ft.Container)
             and getattr(c, "width", None) == 1 and getattr(c, "bgcolor", None) == "#26ffffff"]
-    check("resize: видимые разделители в заголовке", len(seps) >= 10, f"{len(seps)}")
+    check("resize19: видимые разделители в заголовке (9 после удаления «Действий»)",
+          len(seps) == 9, f"{len(seps)}")
     # разделители в строках (#12ffffff)
     seps_r = [c for c in walk(tab) if isinstance(c, ft.Container)
               and getattr(c, "width", None) == 1 and getattr(c, "bgcolor", None) == "#12ffffff"]
@@ -1340,11 +1366,12 @@ def main():
     row_sp = rows_sp[0] if rows_sp else None
     vseps = [c for c in walk(row_sp) if isinstance(c, ft.Container)
              and getattr(c, "bgcolor", None) == "#12ffffff"] if row_sp else []
-    check("seps: в заголовке 10 разделителей", len(hdr) == 10, f"{len(hdr)}")
-    check("seps: в строке 10 разделителей", len(vseps) == 10, f"{len(vseps)}")
+    check("seps19: в заголовке 9 разделителей (колонка «Действия» удалена)",
+          len(hdr) == 9, f"{len(hdr)}")
+    check("seps19: в строке 9 разделителей", len(vseps) == 9, f"{len(vseps)}")
     # одинаковое число ячеек между разделителями => X-координаты совпадают
-    check("seps: число колонок заголовка = числу колонок строки",
-          len([c for c in walk(tab) if isinstance(c, ft.Stack) and getattr(c, "width", None)]) >= 11)
+    check("seps19: число колонок заголовка = числу колонок строки (10)",
+          len([c for c in walk(tab) if isinstance(c, ft.Stack) and getattr(c, "width", None)]) == 10)
 
     # ── 28. Раунд 9, задача 5: предпросмотр вложений ──
     _seed_raw([_ctrl("cr2", "КР-2", executors=["Семисенко И.Ю."])])
@@ -1396,13 +1423,24 @@ def main():
         check("hover15: на вложенных контролах строки on_hover тоже НЕТ", not nested,
               f"{len(nested)} вложенных")
 
-    # ── 30. Раунд 10, задача 2: «Действия» прижаты к правому краю ──
+    # ── 30. Раунд 19, задача 1: колонка «Действия» УДАЛЕНА ──
     page, tab, _ = build()
     allc10 = walk(tab)
     action_rows = [c for c in allc10 if isinstance(c, ft.Row)
                    and getattr(c, "alignment", None) == ft.MainAxisAlignment.END
                    and getattr(c, "width", None) is not None]
-    check("actions10: Row действий с alignment=END и шириной колонки", len(action_rows) >= 1, f"{len(action_rows)}")
+    check("actions19: в таблице НЕТ Row действий (колонка удалена)", len(action_rows) == 0,
+          f"{len(action_rows)}")
+    hdr30 = _header_texts19(tab)
+    check("actions19: в заголовке нет «ДЕЙСТВИЯ»",
+          "ДЕЙСТВИЯ" not in hdr30, f"{hdr30[-3:] if hdr30 else None}")
+    rows19 = _visible_rows(tab)
+    check("actions19: иконок редактирования/удаления в строках нет",
+          not any(isinstance(c, ft.IconButton)
+                  and getattr(c, "tooltip", None) in ("Редактировать", "Удалить (в архив)")
+                  for r in rows19 for c in walk(r)))
+    check("actions19: клик по строке по-прежнему открывает карточку",
+          _open_card(tab, via_add=False))
 
     # ── 31. Раунд 10, задача 3: редактирование записи в справочнике ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
@@ -2210,8 +2248,9 @@ def main():
                 if isinstance(t43, ft.Text):
                     v43 = (t43.value or "").replace("▲", "").replace("▼", "").strip()
                     cells43.append(v43)
-        expected43 = [h.strip().upper() for h in TABLE_HEADERS[:9]] + ["СТАТУС", "ДЕЙСТВИЯ"]
-        check("hdr18: заголовки 1:1 с исходной таблицей Excel (+ «Статус»/«Действия»)",
+        # Раунд 19 (задача 1): «ДЕЙСТВИЯ» больше нет — колонка удалена
+        expected43 = [h.strip().upper() for h in TABLE_HEADERS[:9]] + ["СТАТУС"]
+        check("hdr18: заголовки 1:1 с исходной таблицей Excel (+ «Статус», без «Действия»)",
               cells43 == expected43, f"{cells43[:4]}")
 
     # ── 44. Раунд 18, задача 4: роли person_roles + чипы «И»/«К» в справочнике ──
@@ -2336,6 +2375,494 @@ def main():
                           and getattr(ch, "height", None) == 22
                           and getattr(ch, "on_click", None) is not None]
                      for r in init44_rows))
+
+    # ══════════════════════════════════════════════════════════════════
+    # Раунд 19
+    # ══════════════════════════════════════════════════════════════════
+
+    # ── 45. Раунд 19, задача 5: AssertionError-регрессия — харнесс с НАСТОЯЩИМ Page ──
+    # Лог design/screenshots/11.08.2026/ЛОГ.txt: AssertionError
+    # 'assert self.__uid is not None' в _safe_update при работе с фильтрами и
+    # после «Добавить» — после этого карточки не открывались. Здесь вкладка
+    # монтируется в реальный flet_core.page.Page (FakeConn эмулирует клиента:
+    # каждой команде add возвращаются реальные id), и прогоняется точный
+    # сценарий пользователя: mount → resize (как в логе) → фильтры → открыть
+    # карточку → «Добавить контроль» → Сохранить → открыть карточку снова.
+    # Проверяем: ни одного контрола без uid и ни одного падения в логе.
+    import asyncio as _asyncio19
+    from flet_core.page import Page as _RealPage19
+    from flet_core.connection import Connection as _Conn19
+
+    class _FakeConn19(_Conn19):
+        """Эмуляция клиента: каждой топ-уровневой команде add отвечает пачкой id
+        (по одному на контрол поддерева — name=None записи внутри add)."""
+        def __init__(self):
+            super().__init__()
+            self.n = 0
+
+        def send_commands(self, session_id, commands):
+            def _subtree_size(cmd):
+                return 1 + sum(_subtree_size(c) for c in cmd.commands)
+            total = sum(_subtree_size(c) - 1 for c in commands if c.name == "add")
+            lines = []
+            i = 0
+            while i < total:
+                chunk = " ".join(str(self.n + j) for j in range(min(100, total - i)))
+                lines.append(chunk)
+                i += 100
+                self.n += 100
+            return type("R", (), {"results": lines})()
+
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": False,
+                   "extra_people": []})
+    _seed_raw([_ctrl("rl1", "РЛ-1", executors=["Семисенко Иван Юрьевич"], controller="Потемкин С.А."),
+               _ctrl("rl2", "РЛ-2", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")])
+    conn19 = _FakeConn19()
+    loop19 = _asyncio19.new_event_loop()
+    page19 = _RealPage19(conn19, "s1", loop19)
+    page19._set_attr("width", 1280)
+    page19._set_attr("height", 860)
+    buf19 = io.StringIO()
+    with contextlib.redirect_stdout(buf19), contextlib.redirect_stderr(buf19):
+        tab19 = create_controls_tab(page19)
+    try:
+        page19.add(tab19)
+        nouid19 = [c for c in walk(tab19) if getattr(c, "_Control__uid", None) is None]
+        check("harn19: после mount нет контролов без uid", len(nouid19) == 0,
+              f"{len(nouid19)}: {[type(c).__name__ for c in nouid19[:5]]}")
+        # resize (в логе пользователя — сразу перед первым падением)
+        page19._set_attr("width", 1920)
+        rsz19 = getattr(page19, "on_resize", None)
+        check("harn19: on_resize подписан", rsz19 is not None)
+        if rsz19 is not None:
+            _invoke_event_handler(rsz19, None)
+        # фильтры (исполнитель + контролёр + статус)
+        dd19 = _find_dd(tab19, "Все исполнители")
+        ok19 = dd19 is not None
+        if dd19 is not None:
+            opts19 = [o.key for o in (dd19.options or [])]
+            dd19.value = "Семисенко Иван Юрьевич" if "Семисенко Иван Юрьевич" in opts19 else opts19[min(1, len(opts19)-1)]
+            dd19.on_change(None)
+        check("harn19: фильтр «Исполнители» применился без ошибок", ok19
+              and "РЛ-1" in _visible_texts(tab19))
+        dd19c = _find_dd(tab19, "Все контролеры")
+        if dd19c is not None:
+            dd19c.value = "Потемкин С.А."
+            dd19c.on_change(None)
+        check("harn19: после двух фильтров обе строки видимы",
+              len(_visible_rows(tab19)) == 2, f"{len(_visible_rows(tab19))}")
+        # сброс через кнопку «Сбросить фильтры»
+        rst19 = [c for c in walk(tab19) if isinstance(c, ft.ElevatedButton)
+                 and getattr(c, "text", None) == "Сбросить фильтры"]
+        if rst19:
+            rst19[0].on_click(None)
+        # открыть карточку строкой и закрыть
+        rows19 = _visible_rows(tab19)
+        check("harn19: строки таблицы есть после сброса фильтров", len(rows19) == 2)
+        if rows19:
+            rows19[0].on_click(None)
+        ovs19 = [c for c in walk(tab19) if isinstance(c, ft.Container)
+                 and getattr(c, "bgcolor", None) == "#cc04070f"
+                 and getattr(c, "visible", False)]
+        check("harn19: карточка открылась (overlay видим)", len(ovs19) >= 1)
+        cls19 = [c for c in walk(tab19) if isinstance(c, ft.IconButton)
+                 and getattr(c, "icon", None) == ft.icons.CLOSE
+                 and not getattr(c, "tooltip", None)]
+        if cls19:
+            cls19[0].on_click(None)
+        # сценарий «добавил новую — сохранил — карточки перестали открываться»
+        add19 = [c for c in walk(tab19) if isinstance(c, ft.ElevatedButton)
+                 and getattr(c, "text", None) == "Добавить контроль"]
+        add19[0].on_click(None)
+        inc19 = [c for c in walk(tab19) if isinstance(c, ft.TextField)
+                 and (getattr(c, "hint_text", "") or "").startswith("Входящий")]
+        inc19[0].value = "РЛ-NEW"
+        save19 = [c for c in walk(tab19) if isinstance(c, ft.ElevatedButton)
+                  and getattr(c, "text", None) == "Сохранить"]
+        save19[0].on_click(None)
+        check("harn19: новый контроль сохранён и виден в таблице",
+              "РЛ-NEW" in _visible_texts(tab19))
+        rows19b = _visible_rows(tab19)
+        check("harn19: после добавления строк 3", len(rows19b) == 3, f"{len(rows19b)}")
+        if rows19b:
+            rows19b[0].on_click(None)
+        ovs19b = [c for c in walk(tab19) if isinstance(c, ft.Container)
+                  and getattr(c, "bgcolor", None) == "#cc04070f"
+                  and getattr(c, "visible", False)]
+        check("harn19: карточка ОТКРЫВАЕТСЯ после добавления нового контроля",
+              len(ovs19b) >= 1)
+        nouid19b = [c for c in walk(tab19) if getattr(c, "_Control__uid", None) is None]
+        check("harn19: после всех операций контролов без uid нет", len(nouid19b) == 0,
+              f"{len(nouid19b)}")
+    finally:
+        log19 = buf19.getvalue()
+        check("harn19: в логе нет AssertionError", "AssertionError" not in log19)
+        check("harn19: в логе нет Traceback", "Traceback" not in log19,
+              "\n".join(l for l in log19.splitlines() if "raceback" in l)[:200])
+        stop19 = getattr(page19, "_controls_poll_stop", None)
+        if stop19 is not None:
+            try:
+                stop19["flag"] = True
+            except Exception:
+                pass
+        try:
+            loop19.close()
+        except Exception:
+            pass
+        # вернуть чистый сид для следующих секций
+        _seed_controls()
+        save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                       "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                       "extra_people": []})
+
+    # ── 46. Раунд 19, задача 1: действия архива переехали в карточку ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _arch46 = _ctrl("ar46", "АРХ-1", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")
+    _arch46.update({"archived": True, "archived_at": "2026-08-10T10:00:00",
+                    "archive_reason": "done", "done": True, "done_date": "2026-08-10"})
+    _seed_raw([_arch46])
+    page, tab, _ = build()
+    # в активном режиме архивного контроля нет
+    check("arch19: в активных архивный контроль не виден",
+          "АРХ-1" not in _visible_texts(tab))
+    mode_btns46 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                   and getattr(c, "on_click", None) is not None
+                   and any(isinstance(t, ft.Text) and t.value == "Архив" for t in walk(c))]
+    check("arch19: кнопка режима «Архив» есть", len(mode_btns46) >= 1)
+    if mode_btns46:
+        mode_btns46[0].on_click(None)
+    check("arch19: архивный контроль виден в режиме «Архив»",
+          "АРХ-1" in _visible_texts(tab))
+    # в строках архива — ни иконок восстановления, ни удаления (колонки нет)
+    rows46 = _visible_rows(tab)
+    check("arch19: в строке архива нет иконок RESTORE/DELETE_FOREVER",
+          rows46 and not any(isinstance(c, ft.IconButton) for r in rows46 for c in walk(r)))
+    # открыть карточку архивного контроля — действия в футере
+    if rows46:
+        rows46[0].on_click(None)
+    rest46 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Восстановить"]
+    delf46 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Удалить навсегда"]
+    check("arch19: в карточке архивного — «Восстановить» и «Удалить навсегда»",
+          len(rest46) == 1 and len(delf46) == 1)
+    done_badge46 = [t for t in walk(tab) if isinstance(t, ft.Text)
+                    and t.value and str(t.value).startswith("Исполнен:")]
+    check("arch19: бейдж «Исполнен: <дата>» в карточке (сводка секции «Сроки»)",
+          any("10.08.2026" in str(t.value) for t in done_badge46),
+          f"{[t.value for t in done_badge46][:2]}")
+    if rest46:
+        rest46[0].on_click(None)
+        check("arch19: «Восстановить» из карточки вернул контроль в активные",
+              any(c.incoming_number == "АРХ-1" and not c.archived for c in load_controls()))
+        ov46 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                and getattr(c, "bgcolor", None) == "#cc04070f"
+                and getattr(c, "visible", False)]
+        check("arch19: карточка после восстановления закрыта", len(ov46) == 0)
+    # вернуться в «Активные» — АРХ-1 снова там; удалим его из карточки
+    mode_btns46b = [c for c in walk(tab) if isinstance(c, ft.Container)
+                    and getattr(c, "on_click", None) is not None
+                    and any(isinstance(t, ft.Text) and t.value == "Активные" for t in walk(c))]
+    if mode_btns46b:
+        mode_btns46b[0].on_click(None)  # вернуться в «Активные»
+    rows46b = _visible_rows(tab)
+    if rows46b:
+        rows46b[0].on_click(None)  # АРХ-1 в активных
+    delb46 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Удалить" ]
+    check("arch19: в активной карточке кнопка «Удалить»", len(delb46) == 1)
+    if delb46:
+        delb46[0].on_click(None)
+        dlg46 = page.dialogs[-1] if page.dialogs else None
+        conf46 = [c for c in getattr(dlg46, "actions", []) if isinstance(c, ft.ElevatedButton)]
+        check("arch19: диалог удаления в архив из карточки открыт", dlg46 is not None and len(conf46) >= 1)
+        if conf46:
+            conf46[-1].on_click(None)
+            check("arch19: контроль в архиве после удаления из карточки",
+                  any(c.incoming_number == "АРХ-1" and c.archived and c.archive_reason == "deleted"
+                      for c in load_controls()))
+
+    # ── 47. Раунд 19, задача 2: resize в ОБЕ стороны + сохранение после «перезапуска» ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("rs19", "РС-1", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build(1280)
+
+    def _drag_handles19(tab_):
+        return [c for c in walk(tab_) if isinstance(c, ft.GestureDetector)
+                and len(getattr(getattr(c, "on_horizontal_drag_start", None),
+                                 "_EventHandler__handlers", {}) or {}) > 0]
+
+    def _header_widths19(tab_):
+        hdr = _header_row19(tab_)
+        return [getattr(st, "width", None) for st in hdr.controls
+                if isinstance(st, ft.Stack)] if hdr else []
+
+    E47 = type("E", (), {})
+    gds47 = _drag_handles19(tab)
+    check("drag19: хэндлов ровно 10 (без колонки «Действия»)", len(gds47) == 10, f"{len(gds47)}")
+    hdr47 = _header_row19(tab)
+    stacks47 = [st for st in hdr47.controls if isinstance(st, ft.Stack)]
+    w_before = [st.width for st in stacks47]
+    sum_before = sum(w_before)
+    # тянем границу «Вх. №» (gds[1]) ВПРАВО +40 (раньше это глохло при упоре
+    # «Содержания» в минимум) — колонка растёт, «Содержание» компенсирует
+    _invoke_event_handler(gds47[1].on_horizontal_drag_start, E47())
+    _invoke_event_handler(gds47[1].on_horizontal_drag_update, type("E", (), {"delta_x": 40})())
+    w_after = [st.width for st in stacks47]
+    check("drag19: вправо +40 — колонка «Вх. №» выросла 160->200",
+          w_after[1] == 200, f"{w_after[1]}")
+    check("drag19: «Содержание» компенсировало -40 (сумма неизменна)",
+          w_after[4] == w_before[4] - 40 and sum(w_after) == sum_before,
+          f"content {w_before[4]}->{w_after[4]}, sum {sum_before}->{sum(w_after)}")
+    # тянем ТУ ЖЕ границу ВЛЕВО -70 — от стартовой точки жеста, не от текущей
+    _invoke_event_handler(gds47[1].on_horizontal_drag_update, type("E", (), {"delta_x": -70})())
+    w_after2 = [st.width for st in stacks47]
+    check("drag19: влево — суммарная дельта -30 от старта (160->170? нет, 160+40-70=130)",
+          w_after2[1] == 130, f"{w_after2[1]}")
+    _invoke_event_handler(gds47[1].on_horizontal_drag_end, E47())
+    # после rebuild хэндлы пересозданы — гибкая пара: «Содержание» (gds[4])
+    gds47b = _drag_handles19(tab)
+    _invoke_event_handler(gds47b[4].on_horizontal_drag_start, E47())
+    hdr47b = _header_row19(tab)
+    stacks47b = [st for st in hdr47b.controls if isinstance(st, ft.Stack)]
+    c_before, e_before = stacks47b[4].width, stacks47b[5].width
+    _invoke_event_handler(gds47b[4].on_horizontal_drag_update, type("E", (), {"delta_x": 30})())
+    check("drag19: «Содержание» +30 — «Исполнители» -30 (работает и для гибкой пары)",
+          stacks47b[4].width == c_before + 30 and stacks47b[5].width == e_before - 30,
+          f"{stacks47b[4].width}/{stacks47b[5].width}")
+    _invoke_event_handler(gds47b[4].on_horizontal_drag_update, type("E", (), {"delta_x": -30})())
+    check("drag19: «Содержание» -30 обратно — «Исполнители» восстановились",
+          stacks47b[4].width == c_before and stacks47b[5].width == e_before)
+    _invoke_event_handler(gds47b[4].on_horizontal_drag_end, E47())
+    # минимальный кламп: «№» влево до упора — 28 (не 40 и не 60)
+    gds47c = _drag_handles19(tab)
+    _invoke_event_handler(gds47c[0].on_horizontal_drag_start, E47())
+    _invoke_event_handler(gds47c[0].on_horizontal_drag_update, type("E", (), {"delta_x": -500})())
+    hdr47c = _header_row19(tab)
+    num_w47 = [st.width for st in hdr47c.controls if isinstance(st, ft.Stack)][0]
+    check("drag19: «№» упёрся в минимум 28 (не ушёл в 0/отрицательную)",
+          num_w47 == 28, f"{num_w47}")
+    _invoke_event_handler(gds47c[0].on_horizontal_drag_end, E47())
+    st47 = load_settings().get("col_widths") or {}
+    check("drag19: ширины сохранены в settings (incoming=130, num=28)",
+          st47.get("incoming") == 130 and st47.get("num") == 28, f"{st47}")
+    # «перезапуск приложения»: новая вкладка на тех же settings — ширины 1-в-1
+    page, tab, _ = build(1280)
+    hdr47d = _header_row19(tab)
+    stacks47d = [st for st in hdr47d.controls if isinstance(st, ft.Stack)]
+    check("drag19: после пересоздания вкладки num=28 восстановлен",
+          stacks47d[0].width == 28, f"{stacks47d[0].width}")
+    check("drag19: после пересоздания вкладки incoming=130 восстановлен",
+          stacks47d[1].width == 130, f"{stacks47d[1].width}")
+    check("drag19: сумма колонок после восстановления == исходной (без «пляски»)",
+          sum(st.width for st in stacks47d) == sum_before,
+          f"{sum(st.width for st in stacks47d)} vs {sum_before}")
+
+    # ── 48. Раунд 19, задача 3: «Контроль исполнен» и «Исполнен пункт» ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([
+        _ctrl("db19", "БК-1", executors=["Семисенко И.Ю."], tasks=[
+            {"id": "td1", "title": "п.1 Снять копию", "assignees": ["Семисенко Иван Юрьевич"],
+             "due_date": "2026-08-20", "is_done": False, "done_date": None, "comment": ""},
+            {"id": "td2", "title": "п.2 Доложить", "assignees": ["Гайнутдинов С.И."],
+             "due_date": "2026-08-21", "is_done": False, "done_date": None, "comment": ""},
+        ]),
+        _ctrl("db19b", "БК-2", executors=["Семисенко И.Ю."]),  # без пунктов
+    ])
+    page, tab, _ = build(1280)
+    rows48 = _visible_rows(tab)
+    check("done19: две строки в таблице", len(rows48) == 2)
+    rows48[0].on_click(None)  # БК-1 с пунктами
+    btns48 = {getattr(c, "text", None): c for c in walk(tab)
+              if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    check("done19: зелёная «Контроль исполнен» есть в футере карточки",
+          "Контроль исполнен" in btns48)
+    check("done19: жёлтая «Исполнен пункт» есть в футере карточки",
+          "Исполнен пункт" in btns48)
+    check("done19: «Удалить» осталась правее быстрых кнопок", "Удалить" in btns48)
+    grn48 = btns48.get("Контроль исполнен")
+    ylw48 = btns48.get("Исполнен пункт")
+    check("done19: «Контроль исполнен» зелёная (#2fd08b), «Исполнен пункт» жёлтая (#ffd166)",
+          getattr(grn48, "bgcolor", None) == "#2fd08b"
+          and getattr(ylw48, "bgcolor", None) == "#ffd166",
+          f"{getattr(grn48, 'bgcolor', None)}/{getattr(ylw48, 'bgcolor', None)}")
+    # 3.2. «Исполнен пункт» → диалог, выбор п.2, дата по умолчанию — сегодня
+    ylw48.on_click(None)
+    dlg48 = page.dialogs[-1] if page.dialogs else None
+    check("done19: диалог «Исполнен пункт» открыт (AlertDialog через page.open)",
+          dlg48 is not None)
+    rgs48 = [c for c in walk(dlg48) if isinstance(c, ft.RadioGroup)] if dlg48 else []
+    check("done19: в диалоге список пунктов (RadioGroup)", len(rgs48) == 1)
+    conf48 = [c for c in walk(dlg48) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Отметить исполненным"] if dlg48 else []
+    check("done19: кнопка «Отметить исполненным» есть", len(conf48) == 1)
+    if rgs48:
+        rg48 = rgs48[0]
+        # выбрать второй пункт (п.2), как в примере пользователя
+        rg48.value = "td2"
+        if getattr(rg48, "on_change", None) is not None:
+            rg48.on_change(type("E", (), {"control": type("C", (), {"value": "td2"})()})())
+    if conf48:
+        today_iso48 = datetime.now().date().isoformat()
+        conf48[0].on_click(None)
+        check("done19: диалог закрыт после подтверждения",
+              dlg48 not in page.dialogs)
+        ctl48 = next((c for c in load_controls() if c.incoming_number == "БК-1"), None)
+        t2_48 = next((t for t in (ctl48.tasks if ctl48 else []) if t.id == "td2"), None)
+        t1_48 = next((t for t in (ctl48.tasks if ctl48 else []) if t.id == "td1"), None)
+        check("done19: п.2 исполнен с датой (сегодня по умолчанию)",
+              t2_48 is not None and t2_48.is_done and t2_48.done_date == today_iso48,
+              f"{t2_48.is_done if t2_48 else None}/{t2_48.done_date if t2_48 else None}")
+        check("done19: п.1 НЕ тронут", t1_48 is not None and not t1_48.is_done)
+        # плашка пункта в ОТКРЫТОЙ карточке обновилась (без закрытия карточки)
+        done_lines48 = [t for t in walk(tab) if isinstance(t, ft.Text)
+                        and t.value and str(t.value).startswith("Исполнен:")]
+        check("done19: в плашке пункта появилась зелёная строка «Исполнен: …»",
+              len(done_lines48) >= 1, f"{[t.value for t in done_lines48][:2]}")
+        # карточка всё ещё открыта
+        ovs48 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                 and getattr(c, "bgcolor", None) == "#cc04070f"
+                 and getattr(c, "visible", False)]
+        check("done19: карточка осталась открытой после «Исполнен пункт»",
+              len(ovs48) >= 1)
+        # сохранение карточки не стирает done_date пункта
+        save48 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                  and getattr(c, "text", None) == "Сохранить"]
+        save48[0].on_click(None)
+        ctl48b = next((c for c in load_controls() if c.incoming_number == "БК-1"), None)
+        t2_48b = next((t for t in (ctl48b.tasks if ctl48b else []) if (t.title or "").startswith("п.2")), None)
+        check("done19: done_date пункта пережил «Сохранить» карточки",
+              t2_48b is not None and t2_48b.is_done and t2_48b.done_date == today_iso48)
+        # в таблице содержание показывает «(исполнен <дата>)»
+        vis48 = " ".join(_visible_texts(tab))
+        check("done19: в строке таблицы — «исполнен» с датой в содержании",
+              "исполнен" in vis48)
+    # 3.1. «Контроль исполнен» на БК-2 (без пунктов — жёлтой кнопки нет)
+    check("done19: БК-2 виден для второго сценария",
+          "БК-2" in _visible_texts(tab))
+    rows48b = _visible_rows(tab)
+    # открыть карточку БК-2 (вторая строка)
+    rows48b[-1].on_click(None)
+    btns48b = {getattr(c, "text", None): c for c in walk(tab)
+               if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    check("done19: у контроля без пунктов жёлтой «Исполнен пункт» нет",
+          "Исполнен пункт" not in btns48b)
+    check("done19: зелёная «Контроль исполнен» есть и без пунктов",
+          "Контроль исполнен" in btns48b)
+    if "Контроль исполнен" in btns48b:
+        btns48b["Контроль исполнен"].on_click(None)
+        dlg48b = page.dialogs[-1] if page.dialogs else None
+        check("done19: диалог «Подтверждение исполнения контроля» открыт",
+              dlg48b is not None and any(
+                  isinstance(t, ft.Text) and "Подтверждение исполнения контроля" in str(t.value or "")
+                  for t in walk(dlg48b)))
+        conf_done48 = [c for c in walk(dlg48b) if isinstance(c, ft.ElevatedButton)
+                       and getattr(c, "text", None) == "Исполнен"] if dlg48b else []
+        cancel48 = [c for c in walk(dlg48b) if isinstance(c, ft.TextButton)
+                    and getattr(c, "text", None) == "Отмена"] if dlg48b else []
+        check("done19: кнопки «Отмена»/«Исполнен» есть",
+              len(conf_done48) == 1 and len(cancel48) == 1)
+        if conf_done48:
+            conf_done48[0].on_click(None)
+            ctl48c = next((c for c in load_controls() if c.incoming_number == "БК-2"), None)
+            check("done19: контроль исполнен — done, done_date, архив reason=done",
+                  ctl48c is not None and ctl48c.done
+                  and ctl48c.done_date == datetime.now().date().isoformat()
+                  and ctl48c.archived and ctl48c.archive_reason == "done",
+                  f"{ctl48c.done if ctl48c else None}/{ctl48c.archive_reason if ctl48c else None}")
+            ovs48b = [c for c in walk(tab) if isinstance(c, ft.Container)
+                      and getattr(c, "bgcolor", None) == "#cc04070f"
+                      and getattr(c, "visible", False)]
+            check("done19: карточка закрылась после «Исполнен»", len(ovs48b) == 0)
+            check("done19: БК-2 исчез из активных", "БК-2" not in _visible_texts(tab))
+            # в архиве — с бейджем «Исполнен» в карточке
+            mode48 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                      and getattr(c, "on_click", None) is not None
+                      and any(isinstance(t, ft.Text) and t.value == "Архив" for t in walk(c))]
+            if mode48:
+                mode48[0].on_click(None)
+            check("done19: БК-2 появился в архиве", "БК-2" in _visible_texts(tab))
+            rows48c = _visible_rows(tab)
+            if rows48c:
+                rows48c[0].on_click(None)
+                badge48c = [t for t in walk(tab) if isinstance(t, ft.Text)
+                            and t.value and str(t.value).startswith("Исполнен:")]
+                check("done19: в архивной карточке сводка «Исполнен: <дата>»",
+                      len(badge48c) >= 1, f"{[t.value for t in badge48c][:2]}")
+                # в архивной карточке быстрых кнопок исполнения нет
+                btns48c = {getattr(c, "text", None) for c in walk(tab)
+                           if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+                check("done19: в архивной карточке нет «Контроль исполнен»/«Исполнен пункт»",
+                      "Контроль исполнен" not in btns48c and "Исполнен пункт" not in btns48c)
+
+    # ── 49. Раунд 19, задача 4: скролл списков карточки + списки строго по ролям ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("sc19", "СК-1", executors=["Семисенко И.Ю."], controller="Потемкин С.А.",
+                     tasks=[{"id": "ts1", "title": "п.1 Пункт", "assignees": ["Семисенко И.Ю."],
+                             "due_date": None, "is_done": False, "done_date": None, "comment": ""}])])
+    page, tab, _ = build(1280)
+    rows49 = _visible_rows(tab)
+    rows49[0].on_click(None)
+    multis49 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                and hasattr(c, "_get_selected")]
+    check("scroll19: в карточке два inline-мультивыбора (исполнители + ответственный)",
+          len(multis49) >= 2, f"{len(multis49)}")
+    if multis49:
+        scrollcols49 = [c for m in multis49 for c in walk(m)
+                        if isinstance(c, ft.Column)
+                        and getattr(c, "scroll", None) == ft.ScrollMode.ALWAYS]
+        check("scroll19: списки мультивыбора со scroll=ALWAYS (бегунок всегда виден)",
+              len(scrollcols49) >= 2, f"{len(scrollcols49)}")
+        check("scroll19: у мультивыборов локальная ScrollbarTheme",
+              all(getattr(getattr(m, "theme", None), "scrollbar_theme", None) is not None
+                  for m in multis49))
+        sbt49 = getattr(multis49[0].theme, "scrollbar_theme", None) if multis49 else None
+        check("scroll19: бегунок яркий, толстый, draggable (как в справочниках)",
+              sbt49 is not None
+              and getattr(sbt49, "thumb_color", None) == "#66ffffff"
+              and (getattr(sbt49, "thickness", 0) or 0) >= 6
+              and getattr(sbt49, "thumb_visibility", None) is True
+              and getattr(sbt49, "interactive", None) is True)
+        # список исполнителей — по роли executor (Семисенко есть, Потемкина нет)
+        ex49 = multis49[0]._available
+        check("scroll19: мультивыбор исполнителей — только роль «И»",
+              "Семисенко Иван Юрьевич" in ex49 and "Потемкин С.А." not in ex49,
+              f"{len(ex49)} опций")
+        # но текущее значение контроля (Семисенко И.Ю. — не канон) не потеряно
+        check("scroll19: нестандартное текущее значение добавлено опцией (не теряется)",
+              "Семисенко И.Ю." in ex49)
+    cdd49 = _find_dd(tab, "За кем контроль")
+    check("scroll19: dropdown «За кем контроль» найден", cdd49 is not None)
+    if cdd49 is not None:
+        opts49 = [o.key for o in (cdd49.options or [])]
+        check("scroll19: «За кем контроль» — только роль «К» (контролёры)",
+              "Потемкин С.А." in opts49 and "Семисенко Иван Юрьевич" not in opts49,
+              f"{opts49}")
+        check("scroll19: текущий контролёр выбран и не потерян",
+              cdd49.value == "Потемкин С.А.", f"{cdd49.value}")
+    # fallback ролей: если контролёров никто не отметил — DEFAULT_CONTROLLERS
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [],
+                   "person_roles": {"Потемкин С.А.": [], "Чашин Э.А.": []},
+                   "hidden_people": []})
+    page, tab, _ = build(1280)
+    rows49b = _visible_rows(tab)
+    if rows49b:
+        rows49b[0].on_click(None)
+        cdd49b = _find_dd(tab, "За кем контроль")
+        opts49b = [o.key for o in (cdd49b.options or [])] if cdd49b else []
+        check("scroll19: fallback — без отмеченных контролёров список из DEFAULT_CONTROLLERS",
+              "Потемкин С.А." in opts49b)
 
     print()
     if FAILURES:
