@@ -41,46 +41,199 @@
 [CONTROLS_TAB] Glass Dark v2 ready
 [MAIN] [OK] Vkladka Kontroli sozdana
 [ZONAL_TAB] Resize: tiles_per_row -> 6 (w=1920.0)
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
 Traceback (most recent call last):
-  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 58, in _safe_update
-    control.update()
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 315, in update
-    self.__page.update(self)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 720, in update
-    r = self.__update(*controls)
-        ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 832, in __update
-    commands, added_controls, removed_controls = self.__prepare_update(*controls)
-                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 848, in __prepare_update
-    control.build_update_commands(
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 464, in build_update_commands
-    ctrl.build_update_commands(
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 480, in build_update_commands
-    assert self.__uid is not None
-           ^^^^^^^^^^^^^^^^^^^^^^
-AssertionError
-Traceback (most recent call last):
-  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 58, in _safe_update
-    control.update()
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 315, in update
-    self.__page.update(self)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 720, in update
-    r = self.__update(*controls)
-        ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 832, in __update
-    commands, added_controls, removed_controls = self.__prepare_update(*controls)
-                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 848, in __prepare_update
-    control.build_update_commands(
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 464, in build_update_commands
-    ctrl.build_update_commands(
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 480, in build_update_commands
-    assert self.__uid is not None
-           ^^^^^^^^^^^^^^^^^^^^^^
-AssertionError
-Traceback (most recent call last):
-  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 58, in _safe_update
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 69, in _safe_update
     control.update()
   File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 315, in update
     self.__page.update(self)
