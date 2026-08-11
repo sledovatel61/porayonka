@@ -1,0 +1,100 @@
+[OK] Departments loaded: 29
+[EXPORT_MODAL] Создаю модальное окно экспорта...
+[EXPORT_MODAL] Статистика: получено=2, в работе=0, пусто=27
+[EXPORT_MODAL] Модальное окно создано, page.open_export_modal установлен
+[MAIN] Создаю вкладку Зональные...
+[ZONAL_TAB] Initializing zonal tab (phase 2: compact tiles)
+[ZONAL_DATA] SHablon zagruzhen: Ежемесячный отчет, punktov: 4
+[ZONAL_DATA] Zagruzheno dannyh: 52
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Kollekciya zagruzhena: Ежемесячный отчет, submissions: 52, криминалистов: 16
+[ZONAL_TAB] Criminalists: 16
+[ZONAL_TAB] Active: 13
+[ZONAL_TAB] Template items: 4
+[ZONAL_TAB] Initial tiles per row: 3 (page width=1264.0)
+[TILE] Creating tile: 1
+[TILE] Creating tile: 2
+[TILE] Creating tile: 3
+[TILE] Creating tile: 4
+[TILE] Creating tile: 5
+[TILE] Creating tile: 6
+[TILE] Creating tile: 7
+[TILE] Creating tile: 8
+[TILE] Creating tile: 9
+[TILE] Creating tile: 10
+[TILE] Creating tile: 11
+[TILE] Creating tile: 13
+[TILE] Creating tile: 12
+[TILE] Creating tile: 14
+[TILE] Creating tile: 15
+[TILE] Creating tile: 16
+[CRIM_SUMMARY] expanded=False active=13 submitted=43 overall=83
+[ZONAL_TAB] Zonal tab created successfully (phase 2)
+[MAIN] [OK] Vkladka Zonalnye sozdana
+[MAIN] Создаю вкладку Контроли...
+[CONTROLS_TAB] Glass Dark v2 - init
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[ZONAL_DATA] Zagruzheno kriminalistov: 16
+[CONTROLS_TAB] Glass Dark v2 ready
+[MAIN] [OK] Vkladka Kontroli sozdana
+[ZONAL_TAB] Resize: tiles_per_row -> 6 (w=1920.0)
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 58, in _safe_update
+    control.update()
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 315, in update
+    self.__page.update(self)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 720, in update
+    r = self.__update(*controls)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 832, in __update
+    commands, added_controls, removed_controls = self.__prepare_update(*controls)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 848, in __prepare_update
+    control.build_update_commands(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 464, in build_update_commands
+    ctrl.build_update_commands(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 480, in build_update_commands
+    assert self.__uid is not None
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 58, in _safe_update
+    control.update()
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 315, in update
+    self.__page.update(self)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 720, in update
+    r = self.__update(*controls)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 832, in __update
+    commands, added_controls, removed_controls = self.__prepare_update(*controls)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 848, in __prepare_update
+    control.build_update_commands(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 464, in build_update_commands
+    ctrl.build_update_commands(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 480, in build_update_commands
+    assert self.__uid is not None
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 58, in _safe_update
+    control.update()
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 315, in update
+    self.__page.update(self)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 720, in update
+    r = self.__update(*controls)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 832, in __update
+    commands, added_controls, removed_controls = self.__prepare_update(*controls)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 848, in __prepare_update
+    control.build_update_commands(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 464, in build_update_commands
+    ctrl.build_update_commands(
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 480, in build_update_commands
+    assert self.__uid is not None
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
