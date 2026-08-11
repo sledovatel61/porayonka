@@ -1976,9 +1976,11 @@ def main():
             st_conts[1].on_click(None)
             htexts2 = [t for t in walk(hdr17c[0]) if isinstance(t, ft.Text)
                        and getattr(t, "weight", None) == ft.FontWeight.BOLD]
-            check("hdr17: стрелка сортировки в тексте после клика",
+            vals = [t.value for t in htexts2][:4]
+            safe_vals = [v.replace("▲", "^").replace("▼", "v") if v else v for v in vals]
+            check("hdr17: strelka sortirovki v tekste posle klik",
                   any(("▲" in (t.value or "")) or ("▼" in (t.value or "")) for t in htexts2),
-                  f"{[t.value for t in htexts2][:4]}")
+                  f"{safe_vals}")
         # drag-ресайз сохранён: хэндлы GestureDetector на всю высоту заголовка
         handles17 = [c for c in walk(hdr17c[0]) if isinstance(c, ft.GestureDetector)]
         handle_sizes = [getattr(getattr(h, "content", None), "height", None) for h in handles17]
