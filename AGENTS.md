@@ -2873,3 +2873,361 @@ python main.py                          # живая проверка GUI Window
   на предмет `detail_card`/`clip_behavior`.
 - Скрины: `design/screenshots/10.08.2026/`.
 - Эталон макета: `design/mockups_portable/photo/01_glass_dark.png`.
+
+## 45. Вкладка «Контроли» — раунд 15 влит (hover/ширина/resize/справочники)
+
+**Дата:** 2026-08-10. **Статус:** раунд 15 выполнен, smoke ALL OK (283 проверки), влит в `main` (`52dda1b`).
+
+### 45.1 Найденные причины и решения
+
+1. **Hover строки — задержка и «хвосты».**
+   - Причина (подтверждено исходниками Flet 0.23.2, `container.dart`): `on_hover`
+     на `Container` — это `MouseRegion(onEnter/onExit)`, каждый enter/exit шлёт
+     событие в Python (`triggerControlEvent`) и ждёт `update()` обратно. При
+     быстром движении курсора по ~130 строкам — десятки round-trip в секунду,
+     очередь событий не успевает → подсветка отстаёт и оставляет «хвосты».
+     Никакая оптимизация Python-обработчика (`_quiet_update`, единый
+     `_hover_active`, без print) эту задержку не убирает — она в самом round-trip.
+   - Решение: Python-hover УДАЛЁН полностью. Подсветка — нативная:
+     `Container(on_click=..., ink=True)` в Flet 0.23.2 рендерится как
+     `Material(transparent, borderRadius)` + `InkWell`, который сам рисует
+     `hoverColor` мгновенно, в UI-потоке, без единого события в Python.
+   - Цвет подсветки — через ЛОКАЛЬНУЮ тему таблицы: у `ft.Theme` 0.23.2 нет поля
+     `hover_color`, но dataclass без `__slots__`, и `EmbedJsonEncoder`
+     сериализует `obj.__dict__` → `th.hover_color = "#12ffffff"` попадает в JSON;
+     клиент (`theme.dart`) парсит его в `ThemeData.hoverColor`; `create_control.dart`
+     оборачивает любой контрол с атрибутом `theme` в `Theme(...)`. Тема вешается
+     на `table_container` — глобальная `page.theme` (LIGHT в `main.py`) не
+     затрагивается. Курсор CLICK InkWell показывает сам; splash при клике —
+     `ink_color`.
+
+2. **Таблица — пустое место справа / клип при 1280.**
+   - Причины: (а) вся цепочка панель→колонка→строка была shrink-wrap — ширина
+     определялась суммой колонок, а не окном; (б) верхние кэпы гибких колонок
+     (480/220) останавливали рост на широком окне; (в) внешние отступы считались
+     40 px, а реально 64 (`tab3_content` 20+20 в `main.py` + `tab_bg` 12+12).
+   - Решение: `_TAB_OUTER_PADDING=64`, `_ROW_EXTRA=48` (рамки 2+2, padding 12,
+     spacing 21, разделители 10, запас 1). Явные ширины: панель = окно−64,
+     заголовок и строки = панель−2. `_fit_widths()` выравнивает `_W` ровно под
+     бюджет (окно−64−48): переполнение — кламп (сохранённые «раздутые»
+     `col_widths` жмутся), остаток — 65/35 в «Содержание»/«Исполнители».
+     Кэпов 480/220 больше нет. При 1280: панель 1216 ≤ 1240. `page.on_resize`
+     вызывает `_apply_table_geometry()` (а не пересоздание раскладки — ручные
+     ширины колонок после drag сохраняются).
+
+3. **Карточка — хэндл застывал, содержимое не тянулось.**
+   - Причина хэндла: `left/top` выставлялись один раз при открытии карточки
+     (или мутировались без `update()` у справочников) — при resize карточки
+     позиция хэндла не пересчитывалась.
+   - Решение хэндла: `GestureDetector` — `ConstrainedControl`, у него есть
+     `left/top/right/bottom`; в `ft.Stack` значения `right=0, bottom=0` —
+     это Positioned от правого нижнего угла стека. Стек размером с карточку,
+     поэтому хэндл ВСЕГДА в её углу без единой строчки кода в drag-обработчике.
+     Добавлен видимый глиф-уголок (две линии 2 px через `border.only` — внутри
+     хэндла, не на скруглённой карточке, поэтому запрет §42 не нарушен).
+   - Причина «не тянется»: колонки карточки были фиксированные 500/374 px.
+   - Решение: `Row` БЕЗ `tight` (`MainAxisSize.max`, занимает всю ширину
+     viewport'а внутри вертикального скролла — это легально, см.
+     `scrollable_control.dart`: поперечная ось ограничена) + обёртки колонок
+     `expand=11`/`expand=8` → колонки и поля тянутся вместе с карточкой.
+
+4. **Справочники — футер не виден, хэндл замер, списки не растут.**
+   - Причина футера: корневая колонка тела была `Column(scroll=AUTO)` — дети
+     раскладывались по внутренней высоте, футер «Применить» уезжал за нижний
+     край карточки при исходном размере 680×560.
+   - Решение: корневая колонка БЕЗ scroll, `expand=True` в ограниченной
+     `refs_card` → header и футер всегда видны, а две секции-Container с
+     `expand=1` делят середину пополам и растут при resize. Списки —
+     `Column(scroll=AUTO, expand=True)` внутри НЕ-скроллящейся секции (паттерн
+     «bounded column + scroll inside» — запрет §15.11 касается только expand
+     ВНУТРИ скроллящейся колонки). Хэндл — `right=0/bottom=0` (как у карточки),
+     min-высота карточки 420. Футер больше не в скролле — прибит к низу.
+
+### 45.2 Технические заметки
+
+- `ft.LayoutBuilder` в Flet 0.23.2 отсутствует (только `responsive_row.py`) —
+  ширина таблицы считается от `page.width` + `page.on_resize`.
+- Scrollbar во Flutter (`scrollable_control.dart`) — overlay поверх контента,
+  ширины НЕ занимает; в бюджете строки его учитывать не нужно.
+- Hover-ы календарей/хэндлов так и отсутствуют (раунд 13), курсоры сохранены.
+
+### 45.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py \
+  ui/controls/glass_theme.py ui/controls/control_card_modal.py \
+  ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # ALL OK (283 проверки)
+```
+
+
+## 46. Вкладка «Контроли» — раунд 16 влит в `main` (допил после живой приёмки)
+
+**Дата:** 2026-08-10. **Статус:** раунд 16 выполнен и влит в `main`
+(коммит после внедрения из `arena/019fec02-porayonka`). Полное описание
+результатов — в §47; промпт исторический: `PROMPT_контроли_доработка16.md`.
+
+### 46.1 Замечания пользователя после раунда 15
+
+1. **Hover строк** — мгновенный, без задержек. ✅
+2. **Таблица растянута на всю ширину** — ✅, но появились **большие цветные блоки
+   слева** (скрин `hover победа_ основной экран.png`). Должна быть тонкая 4 px
+   статусная полоса, а номер строки — на нейтральном фоне.
+3. **Ресайз карточки и «Справочников»** — работает. ✅
+4. **Скролл в «Справочниках»** — один щелчок колеса пролистывает слишком много
+   (почти страницу). Нужно 1–2 строки и **видимый бегунок (scrollbar)** справа.
+5. **Карточка и «Справочники»** — должны запоминать свои размеры после
+   закрытия/переоткрытия.
+6. **Консоль завалена ошибками** `KeyError: 'sd'` и `KeyError: 'dir'` из
+   `flet_core/scrollable_control.py` (лог `design/screenshots/10.08.2026/лог_раунд15.txt`).
+   Причина — кастомный `_make_row_scroller` в списках справочников.
+
+### 46.2 Цели раунда 16
+
+- Сделать левую статусную полосу **строго 4 px**, не ресайзабельной, не
+  сохраняемой в `col_widths`; номер строки на нейтральном фоне.
+- Убрать ошибки скролла (`KeyError: 'sd'`/`'dir'`): заменить кастомный
+  `_make_row_scroller` на нативный `ft.ListView` (или другой безопасный способ)
+  с шагом 1–2 строки и видимым scrollbar.
+- Запоминать и применять размеры карточки и «Справочников» из
+  `controls_settings.json` (`card_width`, `card_height`, `refs_width`,
+  `refs_height`).
+- Сохранить весь текущий функционал и layout-ограничения Flet 0.23.2.
+
+### 46.3 Промпт
+
+Полный текст: `PROMPT_контроли_доработка16.md`.
+
+### 46.4 Скрины и лог
+
+- `design/screenshots/10.08.2026/hover победа_ основной экран.png` — цветные блоки слева.
+- `design/screenshots/10.08.2026/Карточка контролей.png` — карточка.
+- `design/screenshots/10.08.2026/Справочники скролл1.png` — справочники до скролла.
+- `design/screenshots/10.08.2026/Справочники скролл2_1 прокрутка скроллом.png` — после одного щелчка.
+- `design/screenshots/10.08.2026/лог_раунд15.txt` — полный лог с ошибками.
+
+
+## 47. Вкладка «Контроли» — раунд 16 выполнен (полоса 4 px / KeyError скролла / память размеров)
+
+**Дата:** 2026-08-10. **Статус:** раунд 16 выполнен, smoke ALL OK (301 проверка).
+
+### 47.1 Найденные причины и решения
+
+1. **Большие цветные блоки слева (вместо полосы 4 px).**
+   - Причина: при загрузке `settings["col_widths"]` стоял общий кламп
+     `max(40, int(v))` для ВСЕХ ключей, включая `bar`. Сохранённые 4 px
+     превращались в 40 px при старте; полоса 28 px высотой по центру дорисовывала
+     эффект «цветной колонки» (скрин `hover победа_ основной экран.png`).
+   - Решение: `bar` вообще исключён из persistence: при старте сохранённый `bar`
+     игнорируется и ключ вычищается из `controls_settings.json` (сохраняем чистый
+     json один раз), `_save_col_widths()` пишет col_widths БЕЗ `bar`,
+     `_W["bar"] = 4` форсируется. Drag-хэндлов у полосы никогда не было.
+   - Отрисовка: полоса — отдельный слой `Container(width=4, left=0, top=0,
+     bottom=0)` в `Stack` строки (Positioned от краёв) → строго 4 px и ПОЛНАЯ
+     высота строки; на его месте в Row остался прозрачный спейсер 4 px, поэтому
+     раскладка/ширины колонок не изменились. `clip_behavior=HARD_EDGE` на плашке
+     обрезает полосу по радиусу углов. Номер строки — на нейтральном фоне
+     (ячейка без заливки).
+
+2. **KeyError: 'sd' / 'dir' при скролле в «Справочниках».**
+   - Причина (подтверждено flet_core 0.23.2 + апстрим-дискуссией flet-dev#3755):
+     `OnScrollEvent.__init__` безусловно читает `d["sd"]`, `d["dir"]`, `d["os"]`,
+     `d["v"]`, а клиент (`column.dart`/`list_view.dart` → `ScrollNotificationControl`)
+     присылает часть scroll-нотификаций БЕЗ этих ключей — падение в конвертере
+     EventHandler ещё до нашего обработчика. Наш `_make_row_scroller` (перехват
+     on_scroll + программный `scroll_to`) включал события и дополнительно сам
+     порождал «неполные» нотификации. Баг починен апстримом только в версиях
+     > 0.23.2 (апгрейд запрещён).
+   - Решение: ни один контрол вкладки НЕ подписывается на `on_scroll` —
+     `attrBool("onScroll")` у клиента = false → `ScrollNotificationControl` не
+     создаётся → scroll-события в Python не отправляются → падать нечему.
+     `_make_row_scroller` удалён из кода целиком.
+
+3. **Скролл справочников — большой шаг и невидимый бегунок.**
+   - Шаг: в 0.23.2 на Windows ЛЮБОЙ скролл использует `AdjustableScrollController`
+     (+80 px прыжок после каждой нотификации, зашито в клиенте) — с нашим
+     корректором выходило «почти страница за щелчок». Нативный шаг без
+     корректора ≈ несколько строк; точный шаг 1–2 строки в 0.23.2 недостижим без
+     on_scroll (который падает) — см. п.2.
+   - Бегунок: списки — `Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True)`.
+     По `scrollable_control.dart` ADAPTIVE на десктопе (Windows/Linux/macOS)
+     → `Scrollbar(thumbVisibility: true)` — бегунок ВИДЕН ПОСТОЯННО (при AUTO
+     он лишь показывается при скролле/hover).
+   - `ft.ListView` НЕ подошёл: в 0.23.2 `ListView.__init__` не принимает
+     `scroll=...` → scroll-атрибут не выставляется → ScrollableControl не
+     оборачивает его в Scrollbar вообще (проверено по `list_view.dart` —child
+     без обёртки когда scroll==none).
+
+4. **Размеры окон не запоминались.**
+   - Карточка: при открытии высота клампилась `min(780, win_h*0.9)`, ширина —
+     `win_h*1.6` (опечатка высоты вместо ширины) — растянутая карточка после
+     переоткрытия сжималась. Теперь восстановление с теми же клампами, что и
+     drag: `win_w*0.95` / `win_h*0.92`; дефолт 920×780 — только при пустых
+     настройках. Сохранение уже было (`_on_drag_end` → `card_width/card_height`).
+   - «Справочники»: добавлены `refs_width`/`refs_height` (дефолт 680×560):
+     читаются в `state` при старте вкладки, применяются к карточке при открытии,
+     обновляются в drag, пишутся в settings в `_refs_on_pan_end`.
+     Min-размеры: 480×420.
+
+### 47.2 Технические заметки
+
+- `ListView` в 0.23.2: `controls` + `spacing` → `ListView.separated`; `item_extent`
+  работает только без spacing (ветка `ListView.builder`). Scrollbar — только через
+  `scroll=...`, которого у ListView нет — ещё один довод за Column.
+- Тесты для скролл-шага (464.0/436.0 через `_row_scroll_last`) удалены вместе с
+  кастомным обработчиком; вместо них — структурные проверки (нет подписки
+  `onScroll`, `scroll==ADAPTIVE`).
+
+### 47.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py \
+  ui/controls/glass_theme.py ui/controls/control_card_modal.py \
+  ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # ALL OK (301 проверка)
+```
+
+
+## 48. Вкладка «Контроли» — раунд 17 (скролл справочников + компактный заголовок таблицы)
+
+**Дата:** 2026-08-11. **Статус:** раунд 17 выполнен (результаты — в §49);
+промпт исторический: `PROMPT_контроли_доработка17.md`.
+
+### 48.1 Статус после раунда 16
+
+Живая приёмка раунда 16 (Windows, Flet 0.23.2):
+
+1. **Левая статусная полоса 4 px** — работает корректно. ✅
+2. **Консоль** — чистая, `KeyError: 'sd'`/`'dir'` устранены. ✅
+3. **Скролл в «Справочниках»** — НЕ починился. Один щелчок колеса пролистывает почти страницу, бегунок (scrollbar) не виден. ❌
+4. **Размеры окон карточки и «Справочников»** — запоминаются. ✅
+5. **Верхняя часть таблицы** — две строки фильтров занимают много места; заголовки колонок обрезаются.
+
+### 48.2 Задачи раунда 17
+
+1. **Скролл справочников:**
+   - Один щелчок колеса — 1–2 строки, не страница.
+   - Видимый бегунок справа.
+   - Не возвращать кастомный `on_scroll` (KeyError в 0.23.2).
+   - Возможные направления: `ft.ListView`, `Column(scroll=ALWAYS)`, уменьшение высоты строки списка, отступ/пространство для scrollbar.
+
+2. **Объединить `filter_row1` и `filter_row2` в одну строку.**
+   - Сохранить все фильтры и кнопки.
+   - Освободить вертикальное место над таблицей.
+
+3. **Строка заголовков колонок (`header_row`) — двухстрочная.**
+   - `max_lines=2`, убрать `no_wrap`.
+   - Высота 48–52 px.
+   - Сортировочные стрелки рядом с текстом.
+   - Геометрия разделителей и drag-ресайз сохраняются.
+
+4. **Сохранить остальной функционал.**
+   - Не ломать hover таблицы, растягивание, ресайз колонок, карточку, Excel, сеть, архив, вложения.
+
+### 48.3 Промпт и материалы
+
+- Промпт: `PROMPT_контроли_доработка17.md`.
+- Скрины: `design/screenshots/11.08.2026/`.
+
+### 48.4 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py \
+  ui/controls/glass_theme.py ui/controls/control_card_modal.py \
+  ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # ALL OK
+```
+
+
+## 49. Вкладка «Контроли» — раунд 17 завершён (скролл справочников + одна строка фильтров + двухстрочный заголовок)
+
+**Дата:** 2026-08-11. **Статус:** выполнено, запушено в `arena/019fec02-porayonka`.
+
+### 49.1 Что сделано
+
+1. **Скролл в «Справочниках» — видимый бегунок (задача 1).**
+   - Списки: `Column(scroll=ADAPTIVE)` → `Column(scroll=ALWAYS)`. По исходнику
+     клиента Flet 0.23.2 (`scrollable_control.dart`): `thumbVisibility` у
+     `always` — `true` **безусловно**, а у `adaptive` — только если
+     `!kIsWeb && platform != iOS/Android` (есть ветка `false`; на живом
+     Windows-клиенте пользователя бегунок не появился — раунд 16 не помог).
+   - `refs_card` получил ЛОКАЛЬНУЮ тему `ft.Theme` со
+     `ScrollbarTheme(thumb_visibility=True, track_visibility=True,
+     interactive=True, thumb_color=#66ffffff, track_color=#14ffffff,
+     thickness=8, radius=4, cross_axis_margin=2)` — тот же механизм, что и
+     `hover_color` таблицы в раунде 15 (клиент оборачивает любой контрол с
+     `.theme` в `Theme(...)`, `theme.dart: parseScrollBarTheme` читает
+     `thumb_color/thickness/radius/track_*`). Дефолтный бегунок светлой
+     page-темы сливался с тёмным фоном. `interactive=True` — бегунок
+     перетаскивается мышью (точная прокрутка).
+   - `on_scroll` по-прежнему не подписан (KeyError `'sd'`/`'`dir'` раунда 16 не
+     возвращается).
+
+2. **Две строки фильтров объединены в одну `filter_row` (задача 2).**
+   - `filter_row1`/`filter_row2` удалены; `main_column`: title_row →
+     filter_row → counters_row → таблица. Освобождено ~60 px по вертикали.
+   - Компоновка: слева поиск (фикс. 240 — `expand` невозможен, т.к. строка
+     скроллится), компактные дропдауны (статус 132, тип 116, инициатор/
+     исполнитель/контролёр 140), даты «С:»/«По:» (118, без декоративной
+     иконки-календаря, шрифт 11, крестик 18), IconButton «Сбросить фильтры»
+     (FILTER_ALT_OFF_OUTLINED), переключатель «Активные/Архив» справа (ужат:
+     шрифт 11, иконка 12).
+   - `filter_row` — `Row(scroll=ScrollMode.AUTO)`: на окнах < ~1450 px
+     (умолчание окна 1280, min 900) строка плавно прокручивается горизонтально
+     вместо `RenderFlex overflow`; при 1568 px (окно пользователя) влезает
+     целиком без прокрутки.
+
+3. **`header_row` стал двухстрочным (задача 3).**
+   - Высота 34 → **50 px**; текст ячеек: `no_wrap=False, max_lines=2,
+     overflow=ELLIPSIS` (размер 11, BOLD — без изменений). «Содержание»,
+     «Исполнители», «Срок исполн.» переносятся и не обрезаются.
+   - Стрелка сортировки — суффикс текста (как раньше).
+   - Разделители 30 → 42 px; drag-хэндлы колонок — на всю высоту 50;
+     X-геометрия (порядок `[bar][ячейка][разделитель]...`, padding 6) и
+     drag-ресайз не тронуты.
+
+### 49.2 Шаг колеса — почему «1–2 строки» недостижимы в Flet 0.23.2
+
+Исследовано по исходникам клиента v0.23.2 (GitHub, тег `v0.23.2`):
+
+- `widgets/adjustable_scroll_controller.dart`: на Windows ЛЮБОЙ
+  `ScrollController` — `AdjustableScrollController(extraScrollSpeed=80)`,
+  жёстко добавляющий **+80 px** к каждому пользовательскому жесту прокрутки
+  поверх нативной дельты движка (~60 px/щелчок). Итого ~140+ px за щелчок —
+  это «почти страница» при строке ~30 px. Параметр зашит в клиенте, из Python
+  не настраивается.
+- Перехват колеса без побочек невозможен: `Column(on_scroll=...)` падает с
+  KeyError (раунд 16, `scroll_notification_control.dart` +
+  `flet_core/scrollable_control.py: OnScrollEvent`); `GestureDetector.on_scroll`
+  — это `Listener(behavior: translucent, onPointerSignal: ...)`
+  (`gesture_detector.dart`), который **не поглощает** событие: нативный
+  Scrollable под ним тоже получает колесо → двойная прокрутка + гонка с
+  `scroll_to`. Блокирующих примитивов (`AbsorbPointer/IgnorePointer`) в
+  Python-API 0.23.2 нет.
+- Принятое решение: `scroll=ALWAYS` + яркий draggable-бегунок (см. выше).
+  Точное позиционирование — перетаскиванием бегунка.
+
+### 49.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py \
+  ui/controls/glass_theme.py ui/controls/control_card_modal.py \
+  ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # ALL OK (316 проверок)
+```
+
+### 49.4 Сериализация ScrollbarTheme (0.23.2)
+
+`ft.Theme` — dataclass; поле `scrollbar_theme` сериализуется
+`EmbedJsonEncoder` в ключ `scrollbar_theme` JSON темы; клиентский
+`parseScrollBarTheme` (`theme.dart`) читает `thumb_visibility`,
+`track_visibility`, `thumb_color`, `track_color`, `thickness`, `radius`,
+`cross_axis_margin`, `interactive`. Проверено smoke-тестами (`refs17`).
