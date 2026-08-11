@@ -93,6 +93,20 @@
   * карточка: равномерная рамка border.all + radius 16 + HARD_EDGE (углы не
     прозрачные).
 
+Раунд 17 (PROMPT_контроли_доработка17.md):
+  * скролл справочников: scroll=ALWAYS (thumbVisibility=true безусловно,
+    scrollable_control.dart — у ADAPTIVE была ветка false, бегунок на живом
+    Windows-клиенте не появлялся) + локальная ScrollbarTheme на refs_card
+    (яркий thumb #66ffffff, толщина 8, дорожка, interactive=True — бегунок
+    draggable); on_scroll по-прежнему не подписан (KeyError 'sd'/'dir');
+  * фильтры: две строки объединены в одну filter_row (поиск фикс 240 вместо
+    expand, дропдауны ужаты, даты без иконки-календаря, «Сброс» — IconButton,
+    «Активные/Архив» справа); Row scroll=AUTO — на узких окнах строка
+    прокручивается вместо RenderFlex overflow;
+  * заголовок таблицы двухстрочный: высота 34 -> 50, max_lines=2 без no_wrap,
+    стрелка сортировки суффиксом текста, drag-хэндлы на всю новую высоту,
+    геометрия разделителей по X неизменна.
+
 Раунд 16 (PROMPT_контроли_доработка16.md):
   * левая статусная полоса строки — строго 4 px, полная высота строки (Positioned
     left=0/top=0/bottom=0 поверх Stack строки, клип HARD_EDGE по скруглению);
@@ -1417,8 +1431,9 @@ def main():
     save_settings(st_w)
 
     def _header_row_of(tab_):
+        # Раунд 17 (задача 3): заголовок двухстрочный — высота 34 -> 50 px.
         hdrs = [c for c in walk(tab_) if isinstance(c, ft.Container)
-                and getattr(c, "height", None) == 34
+                and getattr(c, "height", None) == 50
                 and isinstance(getattr(c, "content", None), ft.Row)
                 and len(getattr(c.content, "controls", []) or []) >= 20]
         return hdrs[0].content if hdrs else None
@@ -1473,7 +1488,7 @@ def main():
               f"w={rows_w[0].width}")
     if hdr:
         hdr_cont = [c for c in walk(tab) if isinstance(c, ft.Container)
-                    and getattr(c, "height", None) == 34
+                    and getattr(c, "height", None) == 50
                     and isinstance(getattr(c, "content", None), ft.Row)
                     and len(getattr(c.content, "controls", []) or []) >= 20]
         check("width15: заголовок шириной 1214",
@@ -1537,10 +1552,11 @@ def main():
     dlg13 = _refs_overlay_of(tab)
     check("ref13: overlay справочников открыт", dlg13 is not None)
     # компактные строки: кнопки 26px, spacing списков 2
-    # Раунд 16 (задачи 2–3): списки — Column(scroll=ADAPTIVE, expand=True), БЕЗ
-    # кастомного on_scroll (нативный скролл, видимый бегунок, нет KeyError).
+    # Раунд 17 (задача 1): списки — Column(scroll=ALWAYS, expand=True), БЕЗ
+    # кастомного on_scroll. ALWAYS => thumbVisibility=true БЕЗУСЛОВНО (у ADAPTIVE
+    # была ветка false, и бегунок на живом Windows-клиенте не появлялся).
     ref_lists = [c for c in walk(dlg13) if isinstance(c, ft.Column)
-                 and getattr(c, "scroll", None) == ft.ScrollMode.ADAPTIVE
+                 and getattr(c, "scroll", None) == ft.ScrollMode.ALWAYS
                  and (getattr(c, "expand", 0) or 0) > 0]
     check("ref13: списки компактные (spacing=2)",
           len(ref_lists) >= 2 and all(c.spacing == 2 for c in ref_lists),
@@ -1548,9 +1564,9 @@ def main():
     check("ref15: списки справочников expand=True (растут при resize)",
           len(ref_lists) >= 2 and all((c.expand or 0) > 0 for c in ref_lists)
           and all(getattr(c, "height", None) is None for c in ref_lists))
-    check("ref16: scroll=ADAPTIVE у списков (видимый бегунок на десктопе)",
+    check("refs17: scroll=ALWAYS у списков (бегунок виден всегда)",
           len(ref_lists) >= 2)
-    check("ref16: у списков НЕТ подписки on_scroll (нет KeyError 'sd'/'dir')",
+    check("refs17: у списков НЕТ подписки on_scroll (нет KeyError 'sd'/'dir')",
           len(ref_lists) >= 2
           and all(c._get_attr("onScroll") is None for c in ref_lists))
     ref_btns_small = [c for c in walk(dlg13) if isinstance(c, ft.IconButton)
@@ -1785,19 +1801,35 @@ def main():
             check("refs15: обе секции списков expand (растут при resize)",
                   len(sections15) >= 2, f"{len(sections15)} секций")
         lists14 = [c for c in walk(ovl14) if isinstance(c, ft.Column)
-                   and getattr(c, "scroll", None) == ft.ScrollMode.ADAPTIVE
+                   and getattr(c, "scroll", None) == ft.ScrollMode.ALWAYS
                    and (getattr(c, "expand", 0) or 0) > 0]
         # Раунд 16 (задачи 2–3): НИКАКОЙ подписки on_scroll — её наличие в Flet
         # 0.23.2 включало ScrollNotificationControl, чьи нотификации без ключей
         # 'sd'/'dir' роняли конвертер OnScrollEvent (KeyError десятками в логе).
-        check("refs16: у списков НЕТ on_scroll (нативный скролл, без KeyError)",
+        check("refs17: у списков НЕТ on_scroll (нативный скролл, без KeyError)",
               len(lists14) >= 2
               and all(c._get_attr("onScroll") is None for c in lists14),
               f"{len(lists14)} списков")
-        check("refs16: scroll=ADAPTIVE — видимый бегунок (thumbVisibility=true)",
+        check("refs17: scroll=ALWAYS — бегунок виден всегда (thumbVisibility=true)",
               len(lists14) >= 2)
         check("refs15: списки expand=True (заполняют секцию при растягивании)",
               len(lists14) >= 2 and all((c.expand or 0) > 0 for c in lists14))
+        # Раунд 17 (задача 1): яркая ScrollbarTheme на карточке справочников —
+        # дефолтный бегунок светлой page-темы сливался с тёмным фоном.
+        if gds14 and stacks14:
+            rcard = stacks14[0].controls[0]
+            rtheme = getattr(rcard, "theme", None)
+            sbt = getattr(rtheme, "scrollbar_theme", None) if rtheme else None
+            check("refs17: у карточки справочников локальная тема скроллбара",
+                  sbt is not None, f"theme={rtheme is not None}")
+            if sbt:
+                check("refs17: бегунок яркий и толстый (thumb_color, thickness>=6)",
+                      getattr(sbt, "thumb_color", None) == "#66ffffff"
+                      and (getattr(sbt, "thickness", 0) or 0) >= 6,
+                      f"thumb={getattr(sbt, 'thumb_color', None)} w={getattr(sbt, 'thickness', None)}")
+                check("refs17: бегунок постоянный и draggable",
+                      getattr(sbt, "thumb_visibility", None) is True
+                      and getattr(sbt, "interactive", None) is True)
         # Раунд 16 (задача 4): размеры окна справочников сохраняются в settings
         # и применяются при переоткрытии.
         if gds14 and stacks14:
@@ -1885,6 +1917,76 @@ def main():
             check("bar16: после drag колонок bar НЕ сохраняется в col_widths",
                   "bar" not in (st16b.get("col_widths") or {}),
                   f"{st16b.get('col_widths')}")
+
+    # ── 40. Раунд 17, задача 2: две строки фильтров объединены в одну ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("b17", "Б-17", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    search17 = [c for c in walk(tab) if isinstance(c, ft.TextField)
+                and "Поиск по содержанию" in (getattr(c, "hint_text", "") or "")]
+    check("frow17: поле поиска есть", len(search17) == 1)
+    rows_with_search = [r for r in walk(tab) if isinstance(r, ft.Row)
+                        and search17 and search17[0] in (r.controls or [])]
+    check("frow17: найдена строка с поиском", len(rows_with_search) == 1)
+    if rows_with_search:
+        fr = rows_with_search[0]
+        dds17 = [c for c in fr.controls if isinstance(c, ft.Dropdown)]
+        texts17 = {t.value for t in walk(fr) if isinstance(t, ft.Text)}
+        icons17 = [c for c in walk(fr) if isinstance(c, ft.IconButton)]
+        check("frow17: все 5 выпадающих фильтров в одной строке",
+              len(dds17) == 5, f"{len(dds17)}")
+        check("frow17: даты «С:»/«По:» в той же строке",
+              "С: —" in texts17 and "По: —" in texts17, f"{sorted(texts17)[:8]}")
+        check("frow17: «Сброс» и «Активные/Архив» в той же строке",
+              any(getattr(i, "tooltip", None) == "Сбросить фильтры" for i in icons17)
+              and "Активные" in texts17 and "Архив" in texts17)
+        check("frow17: строка горизонтально скроллится (не overflow на 1280)",
+              getattr(fr, "scroll", None) == ft.ScrollMode.AUTO,
+              f"scroll={getattr(fr, 'scroll', None)}")
+    # второй строки фильтров больше нет: ровно один Row содержит Dropdown'ы
+    # фильтров (подсказки «Все …» — у dd экспорта Excel подсказка другая)
+    rows_with_dds = [r for r in walk(tab) if isinstance(r, ft.Row)
+                     and any(isinstance(c, ft.Dropdown)
+                             and (getattr(c, "hint_text", "") or "").startswith("Все ")
+                             for c in (r.controls or []))]
+    check("frow17: ровно одна строка с выпадающими фильтрами (вторая удалена)",
+          len(rows_with_dds) == 1, f"{len(rows_with_dds)}")
+
+    # ── 41. Раунд 17, задача 3: заголовок таблицы двухстрочный ──
+    hdr17c = [c for c in walk(tab) if isinstance(c, ft.Container)
+              and getattr(c, "height", None) == 50
+              and isinstance(getattr(c, "content", None), ft.Row)
+              and len(getattr(c.content, "controls", []) or []) >= 20]
+    check("hdr17: заголовок найден, высота 50 (была 34)", len(hdr17c) >= 1)
+    if hdr17c:
+        htexts = [t for t in walk(hdr17c[0]) if isinstance(t, ft.Text)
+                  and getattr(t, "weight", None) == ft.FontWeight.BOLD]
+        check("hdr17: ячейки текста найдены", len(htexts) >= 8, f"{len(htexts)}")
+        check("hdr17: перенос на 2 строки (max_lines=2, no_wrap снят)",
+              len(htexts) >= 8
+              and all((getattr(t, "max_lines", 1) or 1) >= 2 for t in htexts)
+              and all(not getattr(t, "no_wrap", False) for t in htexts))
+        # стрелка сортировки рядом с текстом: клик по ячейке -> ▲/▼ в тексте
+        st_conts = [c for c in walk(hdr17c[0]) if isinstance(c, ft.Container)
+                    and getattr(c, "on_click", None) is not None
+                    and isinstance(getattr(c, "content", None), ft.Text)]
+        if st_conts:
+            st_conts[1].on_click(None)
+            htexts2 = [t for t in walk(hdr17c[0]) if isinstance(t, ft.Text)
+                       and getattr(t, "weight", None) == ft.FontWeight.BOLD]
+            vals = [t.value for t in htexts2][:4]
+            safe_vals = [v.replace("▲", "^").replace("▼", "v") if v else v for v in vals]
+            check("hdr17: strelka sortirovki v tekste posle klik",
+                  any(("▲" in (t.value or "")) or ("▼" in (t.value or "")) for t in htexts2),
+                  f"{safe_vals}")
+        # drag-ресайз сохранён: хэндлы GestureDetector на всю высоту заголовка
+        handles17 = [c for c in walk(hdr17c[0]) if isinstance(c, ft.GestureDetector)]
+        handle_sizes = [getattr(getattr(h, "content", None), "height", None) for h in handles17]
+        check("hdr17: drag-хэндлы колонок есть, высота под новый заголовок (50)",
+              len(handles17) >= 8 and all(hh == 50 for hh in handle_sizes),
+              f"{len(handles17)} шт, h={sorted(set(handle_sizes))}")
 
     print()
     if FAILURES:
