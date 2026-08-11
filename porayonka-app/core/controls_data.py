@@ -27,6 +27,9 @@ DEFAULT_SETTINGS = {
     "notify_log": {},            # журнал уведомлений: {"<control_id>:<status>": "YYYY-MM-DD"}
     "notify_sound": True,        # звук уведомлений (winsound.MessageBeep)
     "extra_people": [],          # раунд 8: доп. ФИО в канонический справочник людей (редактируется в настройках)
+    # Раунд 18 (задача 4): назначение людей в категории «исполнитель»/«контролёр».
+    # {"Фамилия И.О.": ["executor"] | ["controller"] | ["executor", "controller"]}
+    "person_roles": {},
 }
 
 # Максимальный размер вложения, при котором показывается предупреждение
@@ -264,12 +267,14 @@ def get_criminalists_only() -> List[str]:
     return sorted(names, key=lambda n: (n.split()[0].casefold() if n.strip() else "", n.casefold()))
 
 
-def get_controller_names(settings: Optional[dict] = None) -> List[str]:
-    """Канонический список людей для фильтров «Исполнители»/«Контролёры»:
+def get_all_people_names(settings: Optional[dict] = None) -> List[str]:
+    """Полный канонический список людей справочника:
     криминалисты + дефолтные контролёры + доп. ФИО из настроек (`extra_people`),
-    без дублей по фамилии. Отсортирован по фамилии.
+    без дублей по фамилии.
     Раунд 13: базовые ФИО, переименованные/удалённые через справочники,
-    исключаются списком `hidden_people`."""
+    исключаются списком `hidden_people`.
+    Раунд 18 (задача 4): роли НЕ фильтруются здесь — это объединение;
+    разделённые списки — get_executor_names()/get_controller_names()."""
     extra = []
     hidden = set()
     if settings:
@@ -286,6 +291,107 @@ def get_controller_names(settings: Optional[dict] = None) -> List[str]:
         seen.add(surname)
         out.append(n)
     return out
+
+
+# ── Раунд 18 (задача 4): роли «исполнитель/контролёр» ─────────────────────
+VALID_PERSON_ROLES = ("executor", "controller")
+
+
+def _role_key(roles: dict, name: str) -> Optional[str]:
+    """Найти ключ словаря ролей по имени без учёта регистра."""
+    cf = (name or "").strip().casefold()
+    for k in roles:
+        if (k or "").strip().casefold() == cf:
+            return k
+    return None
+
+
+def get_person_roles(settings: Optional[dict]) -> dict:
+    """Эффективные роли всех людей справочника: {ФИО: ["executor", "controller"]}.
+
+    Дефолты (если в person_roles записи нет) — ПО ФАМИЛИИ, роли источников
+    суммируются: человек может быть одновременно в нескольких источниках
+    (напр., криминалист «Чашин Эдуард Александрович» и дефолтный контролёр
+    «Чашин Э.А.» — одно лицо; get_all_people_names дедуплицирует их по фамилии
+    в одну запись):
+      - базовые криминалисты        -> роль "executor"
+      - дефолтные контролёры        -> роль "controller"
+      - доп. ФИО (`extra_people`)   -> обе роли
+    Без дефолта (теоретически) — обе роли. Явные назначения из
+    settings["person_roles"] (по точному имени записи справочника) перекрывают
+    дефолты полностью — так снимается и роль-умолчание.
+    """
+    settings = settings or {}
+    defaults: Dict[str, List[str]] = {}
+
+    def _put(name: str, role: str) -> None:
+        nm = (name or "").strip()
+        if not nm:
+            return
+        sur = nm.split()[0].casefold()
+        if not sur:
+            return
+        cur = defaults.setdefault(sur, [])
+        if role not in cur:
+            cur.append(role)
+
+    for n in get_criminalists_only():
+        _put(n, "executor")
+    for n in DEFAULT_CONTROLLERS:
+        _put(n, "controller")
+    for n in (settings.get("extra_people", []) or []):
+        _put(n, "executor")
+        _put(n, "controller")
+    out = {}
+    # порядок канонический — как в get_all_people_names
+    for n in get_all_people_names(settings):
+        nm = n.strip()
+        sur = nm.split()[0].casefold() if nm else ""
+        out[n] = list(defaults.get(sur) or ["executor", "controller"])
+    for k, v in (settings.get("person_roles") or {}).items():
+        ck = (k or "").strip().casefold()
+        if not ck:
+            continue
+        clean = [r for r in (v or []) if r in VALID_PERSON_ROLES]
+        for name in out:
+            if name.strip().casefold() == ck:
+                out[name] = clean
+                break
+    return out
+
+
+def set_person_roles(settings: dict, name: str, roles: List[str]) -> bool:
+    """Назначить роли человеку и сохранить настройки (пишем всегда — даже пустой
+    список, чтобы явный сброс дефолта переживал рестарт)."""
+    name = (name or "").strip()
+    if not name:
+        return False
+    clean = [r for r in dict.fromkeys(roles or []) if r in VALID_PERSON_ROLES]
+    pr = dict(settings.get("person_roles") or {})
+    # ключ — с точным написанием существующей записи, если есть (не плодим дубли)
+    existing_key = _role_key(pr, name)
+    if existing_key is not None and existing_key != name:
+        pr.pop(existing_key, None)
+    pr[name] = clean
+    settings["person_roles"] = pr
+    save_settings(settings)
+    return True
+
+
+def get_executor_names(settings: Optional[dict] = None) -> List[str]:
+    """Раунд 18: канонический список ИСПОЛНИТЕЛЕЙ (роль executor)."""
+    return [n for n, r in get_person_roles(settings).items() if "executor" in r]
+
+
+def get_controller_names(settings: Optional[dict] = None) -> List[str]:
+    """Канонический список КОНТРОЛЁРОВ (роль controller).
+
+    До раунда 18 возвращал объединённый справочник людей; теперь — только
+    контролёров. Умолчания: дефолтные контролёры + extra_people; криминалист,
+    чья фамилия совпадает с дефолтным контролёром («Чашин Эдуард Александрович»
+    / «Чашин Э.А.»), получает обе роли одной записью (см. get_person_roles).
+    """
+    return [n for n, r in get_person_roles(settings).items() if "controller" in r]
 
 
 def rename_person(settings: dict, old: str, new: str) -> bool:
@@ -318,6 +424,15 @@ def rename_person(settings: dict, old: str, new: str) -> bool:
             hidden.append(old)
     settings["extra_people"] = nxt
     settings["hidden_people"] = hidden
+    # Раунд 18 (задача 4): назначенные роли переезжают на новое имя
+    pr = dict(settings.get("person_roles") or {})
+    old_key = _role_key(pr, old)
+    if old_key is not None:
+        roles_of_old = pr.pop(old_key)
+        new_key = _role_key(pr, new)
+        if new_key is None:
+            pr[new] = roles_of_old
+        settings["person_roles"] = pr
     save_settings(settings)
     return True
 
@@ -339,6 +454,12 @@ def remove_person(settings: dict, name: str) -> bool:
         return False
     settings["extra_people"] = nxt
     settings["hidden_people"] = hidden
+    # Раунд 18 (задача 4): вычищаем назначение ролей удалённого человека
+    pr = dict(settings.get("person_roles") or {})
+    old_key = _role_key(pr, name)
+    if old_key is not None:
+        pr.pop(old_key, None)
+        settings["person_roles"] = pr
     save_settings(settings)
     return True
 

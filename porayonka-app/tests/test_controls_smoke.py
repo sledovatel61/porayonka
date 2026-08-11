@@ -141,6 +141,26 @@
     expand=True внутри expand-секций — растут при растягивании окна; min-высота
     карточки справочников 420.
 
+Раунд 18 (PROMPT_контроли_доработка18.md):
+  * строка фильтров: слева заголовок «Фильтры» (шрифт как «Контроли», 20 bold),
+    полноценная кнопка «Сбросить фильтры», панель на всю ширину окна
+    (_apply_table_geometry: filter_row.width = tw); компоновка в две зоны —
+    скроллящийся inner (поиск + 5 дропдаунов) и прибитая справа зона
+    (даты «С:»/«По:», сброс, «Активные/Архив»);
+  * Excel: колонка H «Разовый / постоянный» комбинированная как в исходной
+    таблице — импорт даты «01.09.2026» -> разовый + end_date (конечная дата
+    больше НЕ теряется), текста «<дата> далее каждые 3 месяца» -> период 90 +
+    end_date; due — из колонки I (напоминание). Экспорт пишет конечные даты
+    обратно (control_type_text), round-trip через _controls_full и через
+    чистый текст H;
+  * заголовки колонок таблицы приложения — точно как TABLE_HEADERS исходной
+    таблицы (единый источник), + «Статус»/«Действия»;
+  * справочник людей: чипы ролей «И»/«К» (исполнитель/контролёр, можно обе —
+    одно лицо в обеих категориях), settings.person_roles; умолчания по фамилии
+    (криминалист=исполнитель, дефолтный контролёр=контролёр, тёзки сливаются с
+    обеими ролями, extra=обе); rename/remove переносят и вычищают назначения;
+    фильтры «Все исполнители»/«Все контролеры» — раздельные списки по ролям.
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -166,7 +186,9 @@ from core.controls_data import (  # noqa: E402
     load_settings, save_settings,
     read_shared_controls, write_shared_controls, get_shared_mtime,
     merge_controls, _should_notify, prune_notify_log,
-    get_controller_names, canonical_initiator_group, initiator_filter_options,
+    get_controller_names, get_executor_names,
+    get_all_people_names, get_person_roles, set_person_roles,
+    canonical_initiator_group, initiator_filter_options,
 )
 from core.controls_models import (  # noqa: E402
     Control, OVERDUE, TODAY, name_matches,
@@ -628,14 +650,27 @@ def main():
               and "Чашин Эдуард Анатольевич" not in opts
               and "Потемкин Сергей Анатольевич" not in opts,
               f"{len(opts)-1} опций")
+        # Раунд 18 (задача 4): дефолтные контролёры без роли executor НЕ попадают
+        # в фильтр исполнителей (криминалист «Чашин Эдуард Александрович» — это
+        # другой человек, он в списке).
+        check("исполнители — без дефолтных контролёров (роль не назначена)",
+              "Потемкин С.А." not in opts and "Чашин Э.А." not in opts)
         check("исполнители — без дублей", len(opts) == len(set(opts)))
         check("исполнители — «Прочие» в конце", opts[-1] == FILTER_OTHER)
     ct = hints.get("Все контролеры")
     check("dropdown «Все контролеры» найден", ct is not None)
     if ct:
         opts = [o.key for o in (ct.options or [])]
-        check("контролёры — канонический список (криминалисты + Потемкин/Чашин)",
-              "Потемкин С.А." in opts and "Семисенко Иван Юрьевич" in opts,
+        # Раунд 18 (задача 4): контролёры — ОТДЕЛЬНЫЙ список по ролям person_roles
+        # (умолчание: дефолтные контролёры + extra; чистые криминалисты —
+        # исполнители и сюда НЕ попадают). Дефолтный контролёр, фамилия которого
+        # совпадает с криминалистом («Чашин Э.А.» = «Чашин Эдуард Александрович»),
+        # сливается с ним в одну запись с обеими ролями.
+        check("контролёры — список по ролям (Потемкин + Чашин одной записью)",
+              "Потемкин С.А." in opts
+              and "Чашин Эдуард Александрович" in opts
+              and "Чашин Э.А." not in opts
+              and "Семисенко Иван Юрьевич" not in opts,
               f"{len(opts)-1} опций")
         check("контролёры — без дублей", len(opts) == len(set(opts)))
         check("контролёры — «Прочие» в конце", opts[-1] == FILTER_OTHER)
@@ -781,7 +816,7 @@ def main():
     check("name_matches: похожая фамилия ниже порога — False",
           name_matches("Семисенко Иван Юрьевич", "Семенов И.Ю.") is False)
 
-    # 15б. опции фильтров — только канонический список + «Прочие»
+    # 15б. опции фильтров — списки по ролям (раунд 18) + «Прочие»
     _seed_raw([
         _ctrl("o1", "О-1", executors=["Миронович Д.В.-5.1"]),
         _ctrl("o2", "О-2", executors=["Гайнутдинов С.И.Т.С.А.С.И.Ю."]),
@@ -795,10 +830,10 @@ def main():
     check("фильтр-опции: dropdown «Все исполнители» найден", ex is not None)
     if ex:
         opts = [o.key for o in (ex.options or [])]
-        # Раунд 7 (задача 1): исполнители = ПОЛНЫЙ справочник людей (криминалисты +
-        # дефолтные контролёры), чтобы Потемкин/Чашин не попадали в «Прочие»
-        expected = ["all"] + get_controller_names() + [FILTER_OTHER]
-        check("фильтр-опции: ровно полный канонический список + «Прочие»",
+        # Раунд 18 (задача 4): исполнители = ТОЛЬКО роль executor (криминалисты;
+        # дефолтные контролёры сюда не попадают, пока им не назначат роль «И»).
+        expected = ["all"] + get_executor_names(load_settings()) + [FILTER_OTHER]
+        check("фильтр-опции: ровно список исполнителей (роль executor) + «Прочие»",
               opts == expected, f"{len(opts)} опций")
         check("фильтр-опции: мусор из данных не попал",
               "Миронович Д.В.-5.1" not in opts
@@ -809,11 +844,14 @@ def main():
     check("фильтр-опции: dropdown «Все контролеры» найден", ct is not None)
     if ct:
         opts = [o.key for o in (ct.options or [])]
-        expected = ["all"] + get_controller_names() + [FILTER_OTHER]
-        check("фильтр-опции контролёров: криминалисты + Потемкин/Чашин (без дублей)",
+        expected = ["all"] + get_controller_names(load_settings()) + [FILTER_OTHER]
+        check("фильтр-опции контролёров: только роль controller + «Прочие»",
               opts == expected, f"{len(opts)} опций")
-        check("фильтр-опции контролёров: Чашин Э.А. дедуплицирован",
-              "Чашин Э.А." not in opts and "Чашин Эдуард Александрович" in opts)
+        # Раунд 18: дефолтный контролёр «Чашин Э.А.» слит с криминалистом-тёзкой
+        # в одну запись (обе роли) — в списке контролёров ровно один Чашин.
+        check("фильтр-опции контролёров: Чашин — одна запись (слит с криминалистом)",
+              "Чашин Э.А." not in opts
+              and opts.count("Чашин Эдуард Александрович") == 1)
 
     # 15в. фильтрация находит любые написания (включая ответственных по пунктам)
     _seed_raw([
@@ -896,24 +934,57 @@ def main():
     vis = _visible_texts(tab)
     check("refresh: после сброса видны все контроли", "Ф-30" in vis and "Ф-31" in vis)
 
-    # ── 16. Раунд 7, задача 1: «Прочие» — без канонических людей (Потемкин/Чашин) ──
+    # ── 16. Раунды 7+18: «Прочие» и роли — Потемкин/Чашин как исполнители ──
+    # Раунд 18 (задача 4): категория человека (исполнитель/контролёр) задаётся
+    # чипами «И»/«К» в «Справочниках» (settings.person_roles). По умолчанию
+    # Потемкин/Чашин — ТОЛЬКО контролёры, поэтому как исполнители они для фильтра
+    # неизвестны и попадают в «Прочие»; после назначения роли executor человек
+    # появляется в фильтре исполнителей и уходит из «Прочие» (остаётся контролёром).
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True})
     _seed_raw([
         _ctrl("p1", "П-1", executors=["Потемкин С.А."]),
         _ctrl("p2", "П-2", executors=["Чашин Э.А."]),
         _ctrl("p3", "П-3", executors=["Посторонний А.А."]),
     ])
     page, tab, _ = build()
+    ex16 = _find_dd(tab, "Все исполнители")
+    check("roles18: по умолчанию Потемкина НЕТ в опциях исполнителей",
+          ex16 is not None and "Потемкин С.А." not in [o.key for o in (ex16.options or [])])
     check("«Прочие»: выбор применился",
           _set_filter(tab, "Все исполнители", FILTER_OTHER))
     vis = _visible_texts(tab)
-    check("«Прочие»: Потемкин/Чашин как исполнители НЕ в «Прочие»",
-          "П-1" not in vis and "П-2" not in vis, f"видно: {sorted(vis)}")
-    check("«Прочие»: посторонний остаётся в «Прочие»", "П-3" in vis)
-    check("«Прочие»: Потемкин С.А. есть в опциях исполнителей",
+    # «Потемкин С.А.» по умолчанию — только контролёр: как исполнитель он для
+    # фильтра неизвестен → контроль П-1 в «Прочие». А «Чашин Э.А.» (П-2) —
+    # фамильный тёзка криминалиста «Чашин Эдуард Александрович» (роль executor),
+    # name_matches их сличает → П-2 в «Прочие» НЕ попадает.
+    check("«Прочие»: без роли executor Потемкин-исполнитель — в «Прочие»",
+          "П-1" in vis and "П-2" not in vis, f"видно: {sorted(vis)}")
+    check("«Прочие»: посторонний тоже в «Прочие»", "П-3" in vis)
+    # назначаем Потемкину роль исполнителя (как чип «И» в справочнике)
+    st16 = load_settings()
+    set_person_roles(st16, "Потемкин С.А.", ["executor", "controller"])
+    check("roles18: set_person_roles записал обе роли в settings",
+          (load_settings().get("person_roles") or {}).get("Потемкин С.А.")
+          == ["executor", "controller"],
+          f"{(load_settings().get('person_roles') or {})}")
+    page, tab, _ = build()
+    ex16b = _find_dd(tab, "Все исполнители")
+    check("roles18: Потемкин появился в опциях исполнителей",
+          ex16b is not None and "Потемкин С.А." in [o.key for o in (ex16b.options or [])])
+    ct16b = _find_dd(tab, "Все контролеры")
+    check("roles18: и остался в опциях контролёров (обе роли)",
+          ct16b is not None and "Потемкин С.А." in [o.key for o in (ct16b.options or [])])
+    check("«Прочие»: фильтр по Потемкину-исполнителю находит его контроль",
           _set_filter(tab, "Все исполнители", "Потемкин С.А."))
     vis = _visible_texts(tab)
-    check("«Прочие»: фильтр по Потемкину находит его контроль",
-          "П-1" in vis and "П-3" not in vis, f"видно: {sorted(vis)}")
+    check("«Прочие»: фильтр по Потемкину — только его контроль",
+          "П-1" in vis and "П-2" not in vis and "П-3" not in vis, f"видно: {sorted(vis)}")
+    check("«Прочие»: после назначения роли П-1 ушёл из «Прочие»",
+          _set_filter(tab, "Все исполнители", FILTER_OTHER))
+    vis = _visible_texts(tab)
+    check("«Прочие»: П-1 ушёл, посторонний остался",
+          "П-1" not in vis and "П-2" not in vis and "П-3" in vis, f"видно: {sorted(vis)}")
 
     # ── 17. Раунд 7, задача 2: канонические инициаторы ──
     check("initiator: «ГУК СК» -> «гук»", canonical_initiator_group("ГУК СК") == "гук")
@@ -1918,7 +1989,10 @@ def main():
                   "bar" not in (st16b.get("col_widths") or {}),
                   f"{st16b.get('col_widths')}")
 
-    # ── 40. Раунд 17, задача 2: две строки фильтров объединены в одну ──
+    # ── 40. Раунды 17+18: одна строка фильтров, доведённая до эталона ──
+    # Раунд 18 (задача 1): заголовок «Фильтры» слева (шрифт как «Контроли»),
+    # нормальная кнопка «Сбросить фильтры», панель на всю ширину окна; даты и
+    # режимы прибиты справа и не прокручиваются.
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
@@ -1934,17 +2008,52 @@ def main():
         fr = rows_with_search[0]
         dds17 = [c for c in fr.controls if isinstance(c, ft.Dropdown)]
         texts17 = {t.value for t in walk(fr) if isinstance(t, ft.Text)}
-        icons17 = [c for c in walk(fr) if isinstance(c, ft.IconButton)]
         check("frow17: все 5 выпадающих фильтров в одной строке",
               len(dds17) == 5, f"{len(dds17)}")
-        check("frow17: даты «С:»/«По:» в той же строке",
-              "С: —" in texts17 and "По: —" in texts17, f"{sorted(texts17)[:8]}")
-        check("frow17: «Сброс» и «Активные/Архив» в той же строке",
-              any(getattr(i, "tooltip", None) == "Сбросить фильтры" for i in icons17)
-              and "Активные" in texts17 and "Архив" in texts17)
-        check("frow17: строка горизонтально скроллится (не overflow на 1280)",
-              getattr(fr, "scroll", None) == ft.ScrollMode.AUTO,
-              f"scroll={getattr(fr, 'scroll', None)}")
+        check("frow17: внутренняя строка фильтров скроллится и растянута (expand)",
+              getattr(fr, "scroll", None) == ft.ScrollMode.AUTO
+              and (getattr(fr, "expand", 0) or 0) > 0,
+              f"scroll={getattr(fr, 'scroll', None)} expand={getattr(fr, 'expand', None)}")
+        # Раунд 18 (задача 1): внутренняя скроллящаяся строка — ТОЛЬКО поиск и
+        # выпадающие фильтры; даты/сброс/режимы — в ПРИБИТОЙ правой зоне
+        # внешней строки (не прокручиваются, всегда на виду).
+        check("frow18: дат и режимов НЕТ внутри скроллящейся строки",
+              "С: —" not in texts17 and "По: —" not in texts17
+              and "Активные" not in texts17 and "Архив" not in texts17,
+              f"{sorted(t for t in texts17 if t)[:6]}")
+        outer18 = [r for r in walk(tab) if isinstance(r, ft.Row)
+                   and fr in (r.controls or [])]
+        check("frow18: внешняя строка фильтров найдена", len(outer18) == 1)
+        if outer18:
+            otexts18 = {t.value for t in walk(outer18[0]) if isinstance(t, ft.Text)}
+            check("frow18: слева заголовок «Фильтры» шрифтом как «Контроли» (20, bold)",
+                  any(isinstance(t, ft.Text) and t.value == "Фильтры"
+                      and (getattr(t, "size", 0) or 0) == 20
+                      and getattr(t, "weight", None) == ft.FontWeight.BOLD
+                      for t in walk(outer18[0])))
+            check("frow18: даты «С:»/«По:» — в прибитой правой зоне",
+                  "С: —" in otexts18 and "По: —" in otexts18)
+            reset18 = [c for c in outer18[0].controls if isinstance(c, ft.ElevatedButton)
+                       and getattr(c, "text", None) == "Сбросить фильтры"]
+            check("frow18: полноценная кнопка «Сбросить фильтры» (не мелкая иконка)",
+                  len(reset18) == 1 and (reset18[0].height or 0) >= 30)
+            check("frow18: «Активные/Архив» в той же строке",
+                  "Активные" in otexts18 and "Архив" in otexts18)
+            # порядок зон: заголовок → скролл-фильтры → даты → сброс → режимы
+            kinds18 = [type(c).__name__ for c in outer18[0].controls]
+            check("frow18: зоны в порядке «Фильтры | фильтры | С | По | сброс | режимы»",
+                  len(kinds18) == 6 and kinds18[0] == "Row" and kinds18[1] == "Row",
+                  f"{kinds18}")
+        # панель строки фильтров — на всю ширину окна (1280-64=1216)
+        panel18 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                   and getattr(c, "height", None) == 52
+                   and any(isinstance(t, ft.Text) and t.value == "Фильтры"
+                           for t in walk(c))]
+        check("frow18: панель строки фильтров найдена (высота 52)", len(panel18) >= 1)
+        if panel18:
+            check("frow18: строка фильтров на всю ширину окна (1216 при 1280)",
+                  getattr(panel18[0], "width", None) == 1216,
+                  f"w={getattr(panel18[0], 'width', None)}")
     # второй строки фильтров больше нет: ровно один Row содержит Dropdown'ы
     # фильтров (подсказки «Все …» — у dd экспорта Excel подсказка другая)
     rows_with_dds = [r for r in walk(tab) if isinstance(r, ft.Row)
@@ -1987,6 +2096,246 @@ def main():
         check("hdr17: drag-хэндлы колонок есть, высота под новый заголовок (50)",
               len(handles17) >= 8 and all(hh == 50 for hh in handle_sizes),
               f"{len(handles17)} шт, h={sorted(set(handle_sizes))}")
+
+    # ── 42. Раунд 18, задача 2: конечная дата исполнения (колонка H) ──
+    # Эталон пользователя: H «Разовый / постоянный» — КОМБИНИРОВАННАЯ колонка:
+    # для разового контроля там КОНЕЧНАЯ дата («01.09.2026»), для периодического —
+    # текст («ежемесячно» / «10.05.2026 далее каждые 3 месяца»). Колонка I
+    # «Следующая дата исполнения» — дата НАПОМИНАНИЯ. Раньше дата из H молча
+    # терялась (parse_periodicity её не понимал).
+    from openpyxl import Workbook as _WB18, load_workbook as _LWB18
+    from core.controls_exporter import control_type_text as _ctt18
+    xlsx_in18 = os.path.join(tempfile.mkdtemp(prefix="porayonka_imp18_"), "in.xlsx")
+    wb18 = _WB18()
+    ws18 = wb18.active
+    ws18.title = "Контроли"
+    ws18.cell(row=1, column=1, value=TABLE_TITLE)
+    for ci18, h18 in enumerate(TABLE_HEADERS, 1):
+        ws18.cell(row=2, column=ci18, value=h18)
+    rows18 = [
+        # разовый с конечной датой 01.09.2026 и напоминанием 10.08.2026
+        [1, "ИМП-1", datetime(2026, 7, 1), "СУ", "Разовый контроль",
+         "Семисенко И.Ю.", "Потемкин С.А.", datetime(2026, 9, 1), datetime(2026, 8, 10), ""],
+        # периодический: «<конечная дата> далее каждые 3 месяца»
+        [2, "ИМП-2", datetime(2026, 6, 1), "ГУК", "Периодический контроль",
+         "Ливенский В.О.", "Чашин Э.А.", "10.05.2026 далее каждые 3 месяца", datetime(2026, 8, 10), ""],
+        # периодический без конечной даты — просто текст периодичности
+        [3, "ИМП-3", datetime(2026, 6, 5), "СУ", "Ежемесячный контроль",
+         "Авакян А.А.", "Потемкин С.А.", "ежемесячно", datetime(2026, 8, 15), ""],
+    ]
+    for ri18, rv18 in enumerate(rows18, 3):
+        for ci18, v18 in enumerate(rv18, 1):
+            ws18.cell(row=ri18, column=ci18, value=v18)
+    wb18.save(xlsx_in18)
+    parsed18, stats18 = import_from_excel(xlsx_in18, [])
+    by18 = {c.incoming_number: c for c in parsed18}
+    check("xl18: импорт эталонного файла — все 3 строки", stats18["imported"] == 3,
+          f"imported={stats18['imported']} errors={stats18['errors']}")
+    ic1 = by18.get("ИМП-1")
+    check("xl18: H=дата -> разовый, end_date=конечная дата (01.09.2026 не потерялась)",
+          ic1 is not None and ic1.control_type == "once" and ic1.end_date == "2026-09-01",
+          f"type={getattr(ic1, 'control_type', None)} end={getattr(ic1, 'end_date', None)}")
+    check("xl18: разовый — due из колонки I (10.08.2026, напоминание)",
+          ic1 is not None and ic1.due_date == "2026-08-10",
+          f"due={getattr(ic1, 'due_date', None)}")
+    ic2 = by18.get("ИМП-2")
+    check("xl18: «<дата> далее каждые 3 месяца» -> период 90 дней + end_date",
+          ic2 is not None and ic2.control_type == "periodic"
+          and ic2.period_days == 90 and ic2.end_date == "2026-05-10",
+          f"type={getattr(ic2, 'control_type', None)} days={getattr(ic2, 'period_days', None)}"
+          f" end={getattr(ic2, 'end_date', None)}")
+    check("xl18: периодический — due из колонки I",
+          ic2 is not None and ic2.due_date == "2026-08-10")
+    ic3 = by18.get("ИМП-3")
+    check("xl18: «ежемесячно» -> период 30 дней, end_date пустая",
+          ic3 is not None and ic3.control_type == "periodic"
+          and ic3.period_days == 30 and not ic3.end_date,
+          f"days={getattr(ic3, 'period_days', None)} end={getattr(ic3, 'end_date', None)}")
+    # экспорт: колонка H — как в исходной таблице (конечные даты на месте)
+    c18a = Control(id="x18a", incoming_number="ЭКС-1", receive_date="2026-07-01",
+                   initiator="СУ", content="Разовый с конечной датой",
+                   executors=["Семисенко И.Ю."], controller="Потемкин С.А.",
+                   control_type="once", period_days=7,
+                   due_date="2026-08-10", end_date="2026-09-01")
+    c18b = Control(id="x18b", incoming_number="ЭКС-2", receive_date="2026-06-01",
+                   initiator="ГУК", content="Периодический с конечной датой",
+                   executors=["Ливенский В.О."], controller="Чашин Э.А.",
+                   control_type="periodic", period_days=90,
+                   due_date="2026-08-10", end_date="2026-05-10")
+    check("xl18: текст H разового в таблице/экспорте — конечная дата",
+          _ctt18(c18a) == "01.09.2026", f"{_ctt18(c18a)}")
+    check("xl18: текст H периодического — «<дата> далее каждые 3 месяца»",
+          _ctt18(c18b) == "10.05.2026 далее каждые 3 месяца", f"{_ctt18(c18b)}")
+    xlsx_out18 = os.path.join(tempfile.mkdtemp(prefix="porayonka_exp18_"), "out.xlsx")
+    ControlsExcelExporter().export([c18a, c18b], xlsx_out18, soon_days=3, full=True)
+    w18o = _LWB18(xlsx_out18)
+    wso18 = w18o["Контроли"]
+    check("xl18: экспорт разового — H = «01.09.2026» (не слово «разовый»)",
+          wso18["H3"].value == "01.09.2026", f"H3={wso18['H3'].value!r}")
+    check("xl18: экспорт периодического — H = «10.05.2026 далее каждые 3 месяца»",
+          wso18["H4"].value == "10.05.2026 далее каждые 3 месяца",
+          f"H4={wso18['H4'].value!r}")
+    # round-trip через скрытый лист и через чистый текст H — обе даты целы
+    pr18, st18x = import_from_excel(xlsx_out18, [])
+    bout18 = {c.incoming_number: c for c in pr18}
+    check("xl18: round-trip (полный лист) — разовый end_date сохранён",
+          st18x["full_format"]
+          and bout18.get("ЭКС-1") is not None
+          and bout18["ЭКС-1"].end_date == "2026-09-01"
+          and bout18["ЭКС-1"].control_type == "once")
+    check("xl18: round-trip (полный лист) — период 90 + end_date сохранены",
+          bout18.get("ЭКС-2") is not None and bout18["ЭКС-2"].period_days == 90
+          and bout18["ЭКС-2"].end_date == "2026-05-10")
+    # импорт файла БЕЗ скрытого листа — текст H разбирается эвристикой
+    pr18b, _ = import_from_excel(xlsx_in18, [])
+    check("xl18: импорт без полного листа — данные из H/I восстановлены",
+          len(pr18b) == 3)
+
+    # ── 43. Раунд 18, задача 3: заголовки колонок — точно как в исходной Excel ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    _seed_raw([_ctrl("h18", "Ж-18", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    hdr43 = [c for c in walk(tab) if isinstance(c, ft.Container)
+             and getattr(c, "height", None) == 50
+             and isinstance(getattr(c, "content", None), ft.Row)
+             and len(getattr(c.content, "controls", []) or []) >= 20]
+    check("hdr18: заголовок таблицы найден", len(hdr43) >= 1)
+    if hdr43:
+        cells43 = []
+        for st43 in hdr43[0].content.controls:
+            if isinstance(st43, ft.Stack) and st43.controls:
+                t43 = getattr(st43.controls[0], "content", None)
+                if isinstance(t43, ft.Text):
+                    v43 = (t43.value or "").replace("▲", "").replace("▼", "").strip()
+                    cells43.append(v43)
+        expected43 = [h.strip().upper() for h in TABLE_HEADERS[:9]] + ["СТАТУС", "ДЕЙСТВИЯ"]
+        check("hdr18: заголовки 1:1 с исходной таблицей Excel (+ «Статус»/«Действия»)",
+              cells43 == expected43, f"{cells43[:4]}")
+
+    # ── 44. Раунд 18, задача 4: роли person_roles + чипы «И»/«К» в справочнике ──
+    from core.controls_data import (add_extra_person, rename_person, remove_person)
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": []})
+    st44 = load_settings()
+    ex44 = get_executor_names(st44)
+    ct44 = get_controller_names(st44)
+    check("roles18: умолчание — криминалист только исполнитель",
+          "Семисенко Иван Юрьевич" in ex44 and "Семисенко Иван Юрьевич" not in ct44)
+    check("roles18: умолчание — Потемкин только контролёр",
+          "Потемкин С.А." in ct44 and "Потемкин С.А." not in ex44)
+    check("roles18: Чашин слит с криминалистом — обе роли одной записью",
+          "Чашин Эдуард Александрович" in ex44
+          and "Чашин Эдуард Александрович" in ct44
+          and "Чашин Э.А." not in ex44 and "Чашин Э.А." not in ct44)
+    # явное снятие дефолтной роли переживает рестарт (пишется даже пустой список)
+    set_person_roles(st44, "Чашин Эдуард Александрович", ["executor"])
+    check("roles18: снятие роли контролёра — Чашин ушёл из контролёров",
+          "Чашин Эдуард Александрович" not in get_controller_names(load_settings()))
+    set_person_roles(st44, "Чашин Эдуард Александрович", [])
+    check("roles18: пустой список ролей сохраняется (ни один фильтр)",
+          "Чашин Эдуард Александрович" not in get_controller_names(load_settings())
+          and "Чашин Эдуард Александрович" not in get_executor_names(load_settings()))
+    # extra-персона: обе роли; rename переносит назначение, remove вычищает
+    st44b = load_settings()
+    add_extra_person(st44b, "Тестов Тест Тестович")
+    st44b = load_settings()
+    set_person_roles(st44b, "Тестов Тест Тестович", ["controller"])
+    st44b = load_settings()
+    check("roles18: extra-персоне назначена только роль контролёра",
+          "Тестов Тест Тестович" in get_controller_names(st44b)
+          and "Тестов Тест Тестович" not in get_executor_names(st44b))
+    rename_person(st44b, "Тестов Тест Тестович", "Тестов Т.Т.")
+    st44b = load_settings()
+    pr44 = get_person_roles(st44b)
+    check("roles18: переименование переносит роль на новое имя",
+          pr44.get("Тестов Т.Т.") == ["controller"]
+          and "Тестов Тест Тестович" not in pr44)
+    remove_person(st44b, "Тестов Т.Т.")
+    st44b = load_settings()
+    check("roles18: удаление человека вычищает назначение ролей",
+          "Тестов Т.Т." not in get_person_roles(st44b)
+          and not any("Тестов" in k for k in (st44b.get("person_roles") or {})))
+    # UI: чипы «И»/«К» в строке справочника
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "hidden_people": []})
+    _seed_raw([_ctrl("r18", "Р-18", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")])
+    page, tab, _ = build()
+    ref44 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+             and getattr(c, "text", None) == "Справочники"]
+    ref44[0].on_click(None)
+    dlg44 = _refs_overlay_of(tab)
+    check("roles18: overlay справочников открыт", dlg44 is not None)
+
+    def _chips_of_person(overlay, name):
+        rows_p = [c for c in walk(overlay) if isinstance(c, ft.Container)
+                  and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
+                  and any(isinstance(t, ft.Text) and t.value == name for t in walk(c))]
+        if not rows_p:
+            return None
+        chips = {}
+        for ch in walk(rows_p[0]):
+            if isinstance(ch, ft.Container) and getattr(ch, "width", None) == 24 \
+                    and getattr(ch, "height", None) == 22 \
+                    and getattr(ch, "on_click", None) is not None:
+                lbl = getattr(getattr(ch, "content", None), "value", None)
+                chips[lbl] = ch
+        return chips
+
+    if dlg44:
+        hint44 = [t for t in walk(dlg44) if isinstance(t, ft.Text)
+                  and t.value and "Чипы «И»/«К»" in str(t.value)]
+        check("roles18: подсказка по чипам ролей в справочнике", len(hint44) >= 1)
+        chips44 = _chips_of_person(dlg44, "Потемкин С.А.")
+        check("roles18: в строке человека чипы «И» и «К»",
+              chips44 is not None and set(chips44.keys()) == {"И", "К"},
+              f"{sorted(chips44.keys()) if chips44 else None}")
+        if chips44:
+            check("roles18: у Потемкина активен только «К» (дефолтный контролёр)",
+                  getattr(chips44["К"], "bgcolor", None) == GLASS["in_progress"]
+                  and getattr(chips44["И"], "bgcolor", None) == "transparent",
+                  f"K={getattr(chips44['К'], 'bgcolor', None)} I={getattr(chips44['И'], 'bgcolor', None)}")
+            chips44["И"].on_click(None)  # назначить исполнителя
+            roles44 = (load_settings().get("person_roles") or {}).get("Потемкин С.А.") or []
+            check("roles18: клик по «И» назначил обе роли",
+                  "executor" in roles44 and "controller" in roles44, f"{roles44}")
+            chips44b = _chips_of_person(dlg44, "Потемкин С.А.")
+            check("roles18: после назначения оба чипа активны",
+                  chips44b is not None
+                  and getattr(chips44b["И"], "bgcolor", None) == GLASS["accent"]
+                  and getattr(chips44b["К"], "bgcolor", None) == GLASS["in_progress"],
+                  f"I={getattr(chips44b['И'], 'bgcolor', None) if chips44b else None}")
+            if chips44b:
+                chips44b["К"].on_click(None)  # снять контролёра
+                roles44b = (load_settings().get("person_roles") or {}).get("Потемкин С.А.") or []
+                check("roles18: повторный клик по «К» снял роль контролёра",
+                      roles44b == ["executor"], f"{roles44b}")
+        apply44 = _refs_apply_of(dlg44)
+        check("roles18: кнопка «Применить» есть", len(apply44) >= 1)
+        if apply44:
+            apply44[0].on_click(None)
+            ex44b = _find_dd(tab, "Все исполнители")
+            ct44b = _find_dd(tab, "Все контролеры")
+            check("roles18: после «Применить» Потемкин — в фильтре исполнителей",
+                  ex44b is not None
+                  and "Потемкин С.А." in [o.key for o in (ex44b.options or [])])
+            check("roles18: …и ушёл из фильтра контролёров",
+                  ct44b is not None
+                  and "Потемкин С.А." not in [o.key for o in (ct44b.options or [])])
+        # инициаторы — без чипов ролей (только люди)
+        init44_rows = [c for c in walk(dlg44) if isinstance(c, ft.Container)
+                       and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
+                       and any(isinstance(t, ft.Text) and t.value == "СУ" for t in walk(c))]
+        check("roles18: у инициаторов чипов ролей нет",
+              not init44_rows
+              or all(not [ch for ch in walk(r) if isinstance(ch, ft.Container)
+                          and getattr(ch, "width", None) == 24
+                          and getattr(ch, "height", None) == 22
+                          and getattr(ch, "on_click", None) is not None]
+                     for r in init44_rows))
 
     print()
     if FAILURES:

@@ -20,7 +20,8 @@ from core.controls_models import (
 )
 from core.controls_data import (
     load_controls, save_controls, load_settings, save_settings,
-    get_criminalist_names, get_controller_names,
+    get_criminalist_names, get_controller_names, get_executor_names,
+    get_all_people_names, get_person_roles, set_person_roles,
     get_initiators, canonical_initiator_group, initiator_filter_options,
     initiator_filter_group,
     archive_control, restore_control,
@@ -34,7 +35,7 @@ from core.controls_data import (
 )
 
 FILTER_OTHER = "__other__"  # пункт «Прочие» в фильтрах исполнителей/контролёров
-from core.controls_exporter import ControlsExcelExporter, import_from_excel
+from core.controls_exporter import ControlsExcelExporter, import_from_excel, TABLE_HEADERS, control_type_text
 from .glass_theme import GLASS, with_alpha, glass_panel
 from .russian_calendar import create_russian_date_field, create_russian_calendar_expanded
 
@@ -134,7 +135,10 @@ def _display_date(iso: Optional[str]) -> str:
     return d.strftime("%d.%m.%Y") if d else "—"
 
 def _type_label(ctl: Control) -> str:
-    return "постоянный" if ctl.control_type == PERIODIC else "разовый"
+    # Раунд 18 (задача 2): как в исходной Excel-таблице — для разового контроля
+    # показываем КОНЕЧНУЮ дату исполнения, для периодического — «<дата> далее
+    # <периодичность>» / периодичность. Реализация — в core.controls_exporter.
+    return control_type_text(ctl)
 
 def _reason_label(reason: str) -> str:
     return "Исполнен" if reason == ARCHIVE_DONE else ("Удалён" if reason == ARCHIVE_DELETED else "")
@@ -218,7 +222,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # Раунд 7-8 (задачи 1/1): фильтры «Исполнители»/«Контролёры» используют ПОЛНЫЙ
     # канонический справочник людей — криминалисты + дефолтные контролёры +
     # доп. ФИО из настроек (`extra_people`, редактируется в модалке настроек).
-    executor_canonical = get_controller_names(settings)
+    # Раунд 18 (задача 4): списки РАЗДЕЛЕНЫ по ролям person_roles — исполнители
+    # из get_executor_names(), контролёры из get_controller_names() (умолчания:
+    # криминалисты = исполнители, дефолтные контролёры = контролёры, доп. ФИО —
+    # обе роли; меняется чипами «И»/«К» в «Справочниках»).
+    executor_canonical = get_executor_names(settings)
     controller_canonical = get_controller_names(settings)
     initiators = get_initiators(settings)
     network_user = settings.get("network_user", "") or ""
@@ -742,26 +750,32 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # [bar][ячейка][разделитель][ячейка][разделитель]... с одинаковым spacing,
         # поэтому вертикальные линии заголовка и строк стоят на одних X.
         # Раунд 17 (задача 3): разделители выше под двухстрочный заголовок.
+        # Раунд 18 (задача 3): заголовки колонок — ТОЧНО как в исходной
+        # Excel-таблице (TABLE_HEADERS из core.controls_exporter — единый
+        # источник). Длинные названия переносятся на 2 строки (раунд 17).
+        # Дополнительные колонки приложения («Статус», «Действия», а в архиве —
+        # «Причина» вместо типа) — без изменений.
+        _H = [h.strip() for h in TABLE_HEADERS]
         _hsep = ft.Container(width=1, height=42, bgcolor="#26ffffff")
         controls = [
             ft.Container(width=_W["bar"]),
-            _header_cell("№", _W["num"], "num", center=True),
+            _header_cell(_H[0], _W["num"], "num", center=True),
             _hsep,
-            _header_cell("вх. №", _W["incoming"], "incoming"),
+            _header_cell(_H[1], _W["incoming"], "incoming"),
             _hsep,
-            _header_cell("Дата пост.", _W["receive"], "receive"),
+            _header_cell(_H[2], _W["receive"], "receive"),
             _hsep,
-            _header_cell("Инициатор", _W["initiator"], "initiator"),
+            _header_cell(_H[3], _W["initiator"], "initiator"),
             _hsep,
-            _header_cell("Содержание", _W["content"], "content"),
+            _header_cell(_H[4], _W["content"], "content"),
             _hsep,
-            _header_cell("Исполнители", _W["executors"], "executors"),
+            _header_cell(_H[5], _W["executors"], "executors"),
             _hsep,
-            _header_cell("За кем", _W["controller"], "controller"),
+            _header_cell(_H[6], _W["controller"], "controller"),
             _hsep,
-            _header_cell("Причина" if is_archive else "Тип", _W["type"], "type"),
+            _header_cell("Причина" if is_archive else _H[7], _W["type"], "type"),
             _hsep,
-            _header_cell("Срок исполн.", _W["due"], "due"),
+            _header_cell(_H[8], _W["due"], "due"),
             _hsep,
             _header_cell("Статус", _W["status"], "status"),
             _hsep,
@@ -1254,8 +1268,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _open_filter_cal(is_from: bool, current_iso: Optional[str] = None):
         filter_cal_state["is_from"] = is_from
         filter_cal_state["setter"] = _set_from_iso if is_from else _set_to_iso
-        # Position near field: S ~ left 650, Po ~ 800
-        filter_cal_root.left = 650 if is_from else 800
+        # Раунд 18 (задача 1): поля дат — в прибитой правой зоне filter_row,
+        # поэтому позиция календаря считается от фактической ширины строки
+        # (правый край минус ширины правой зоны), а не жёсткая константа.
+        try:
+            fw = int(filter_row.width or 1216)
+        except Exception:
+            fw = 1216
+        filter_cal_root.left = max(8, fw - (590 if is_from else 460))
         filter_cal_root.top = 150
         if current_iso:
             try:
@@ -1380,23 +1400,45 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     filter_to_clear.on_click = _clear_to
 
     # Раунд 17 (задача 2): filter_row1 + filter_row2 ОБЪЕДИНЕНЫ в одну строку
-    # filter_row — экономия ~60 px по вертикали для таблицы. Компоновка: слева
-    # поиск, компактные выпадающие фильтры (статус/тип/инициатор/исполнитель/
-    # контролёр), даты «С:»/«По:», «Сброс» и переключатель «Активные/Архив»
-    # справа. Row scroll=AUTO: при окнах уже ~1450 px строка плавно прокручивается
-    # горизонтально вместо RenderFlex overflow (окно по умолчанию 1280, min 900).
+    # filter_row — экономия ~60 px по вертикали для таблицы.
+    # Раунд 18 (задача 1): доводка строки фильтров:
+    #   * слева заголовок «Фильтры» — шрифт/размер/жирность как у «Контроли»
+    #     (иконка 20 + Text 20 bold);
+    #   * маленькая иконка-сброс заменена полноценной кнопкой «Сбросить фильтры»;
+    #   * панель растянута на всю ширину окна (явная width = ширине таблицы,
+    #     см. _apply_table_geometry — раньше shrink-wrap обрывал панель справа);
+    #   * компоновка в две зоны: прокручиваемая серединка (scroll=AUTO, expand)
+    #     — поиск и выпадающие фильтры; прибитая правая зона — даты «С:»/«По:»,
+    #     «Сбросить фильтры» и «Активные/Архив» всегда на виду даже на узких
+    #     окнах (прокручиваются только выпадающие фильтры).
     # Bug 7: крестики очистки встроены внутрь поля даты (suffix).
+    reset_filters_btn = ft.ElevatedButton(
+        text="Сбросить фильтры",
+        bgcolor=GLASS["surface"], color=GLASS["text"], height=36,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10),
+                             side=ft.BorderSide(1, GLASS["border"]),
+                             padding=ft.padding.symmetric(horizontal=12)),
+        on_click=_reset_filters)
+    filter_inner_row = ft.Row(
+        controls=[search_field, status_filter_dd, type_filter_dd,
+                  initiator_filter_dd, executor_filter_dd, controller_filter_dd],
+        spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        scroll=ft.ScrollMode.AUTO, expand=True,
+    )
     filter_row = glass_panel(
         content=ft.Row(
-            controls=[search_field, status_filter_dd, type_filter_dd,
-                      initiator_filter_dd, executor_filter_dd, controller_filter_dd,
-                      filter_from_container, filter_to_container,
-                      ft.IconButton(icon=ft.icons.FILTER_ALT_OFF_OUTLINED, icon_size=18,
-                                    icon_color=GLASS["accent"], tooltip="Сбросить фильтры",
-                                    width=30, height=30, padding=0, on_click=_reset_filters),
-                      mode_row],
-            spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            scroll=ft.ScrollMode.AUTO,
+            controls=[
+                ft.Row(controls=[ft.Icon(ft.icons.FILTER_LIST, size=20, color=GLASS["text"]),
+                                 ft.Text("Фильтры", size=20, weight=ft.FontWeight.BOLD,
+                                         color=GLASS["text"], no_wrap=True)],
+                       spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                filter_inner_row,
+                filter_from_container,
+                filter_to_container,
+                reset_filters_btn,
+                mode_row,
+            ],
+            spacing=10, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         height=52, radius=12, padding=ft.padding.symmetric(horizontal=12, vertical=8),
     )
@@ -1425,8 +1467,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         try:
             table_container.width = tw
             header_row.width = tw - 2
+            # Раунд 18 (задача 1): строка фильтров — строго на всю ширину окна
+            # (та же ширина, что и у панели таблицы).
+            filter_row.width = tw
             _safe_update(table_container)
             _safe_update(header_row)
+            _safe_update(filter_row)
         except Exception:
             traceback.print_exc()
         _rebuild_header()
@@ -2881,7 +2927,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             rename_initiator, remove_initiator,
         )
 
-        def _build_list_col(source_getter, on_add, on_remove, on_edit, empty_text):
+        def _build_list_col(source_getter, on_add, on_remove, on_edit, empty_text,
+                            make_badges=None):
+            # Раунд 18 (задача 4): make_badges(значение) -> список контролов
+            # (чипы ролей «И»/«К» для справочника людей), вставляются перед
+            # кнопками переименовать/удалить. None — без чипов (инициаторы).
             # Раунд 10 (задача 3): поле добавления растянуто на всю ширину,
             # редактирование записи — инлайн (карандаш → поле + галочка/крестик),
             # без вложенных диалогов.
@@ -2949,17 +2999,23 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=1),
                         ))
                     else:
+                        row_ctrls = [
+                            ft.Text(it, size=12, color=GLASS["text"], expand=True,
+                                   no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=it),
+                        ]
+                        if make_badges is not None:
+                            row_ctrls.extend(make_badges(it))
+                        row_ctrls.extend([
+                            ft.IconButton(icon=ft.icons.EDIT_OUTLINED, icon_size=14, width=26, height=26, padding=0,
+                                          icon_color=GLASS["text_secondary"], tooltip="Переименовать",
+                                          on_click=lambda e, idx=i: _edit(idx)),
+                            ft.IconButton(icon=ft.icons.CLOSE, icon_size=14, width=26, height=26, padding=0,
+                                          icon_color=GLASS["overdue"], tooltip="Удалить",
+                                          on_click=lambda e, n=it: _del(n)),
+                        ])
                         col.controls.append(ft.Container(
-                            content=ft.Row(controls=[
-                                ft.Text(it, size=12, color=GLASS["text"], expand=True,
-                                       no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=it),
-                                ft.IconButton(icon=ft.icons.EDIT_OUTLINED, icon_size=14, width=26, height=26, padding=0,
-                                              icon_color=GLASS["text_secondary"], tooltip="Переименовать",
-                                              on_click=lambda e, idx=i: _edit(idx)),
-                                ft.IconButton(icon=ft.icons.CLOSE, icon_size=14, width=26, height=26, padding=0,
-                                              icon_color=GLASS["overdue"], tooltip="Удалить",
-                                              on_click=lambda e, n=it: _del(n)),
-                            ], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            content=ft.Row(controls=row_ctrls,
+                                           spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]),
                             border_radius=6, padding=ft.padding.symmetric(horizontal=6, vertical=1),
                         ))
@@ -2995,8 +3051,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             return col, field, add_btn
 
         # Источники: базовые (криминалисты/контролёры — read-only) + extra_people (редактируемое)
+        # Раунд 18 (задача 4): справочник показывает ВСЕХ людей независимо от
+        # роли (объединение get_all_people_names) — роль назначается чипами И/К.
         def _people_items():
-            return list(get_controller_names(settings))
+            return list(get_all_people_names(settings))
 
         def _people_add(name):
             add_extra_person(settings, name)
@@ -3039,9 +3097,40 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             initiators.clear()
             initiators.extend(get_initiators(settings))
 
+        # Раунд 18 (задача 4): чипы ролей в строке человека — «И» (исполнитель)
+        # и «К» (контролёр). Активный — цветная заливка, обе роли могут быть
+        # включены одновременно (одно лицо может быть и исполнителем, и
+        # контролёром). Хранение: settings["person_roles"] (core.controls_data).
+        def _person_role_chip(name: str, role: str, label: str, tip: str, color: str):
+            active = role in (get_person_roles(settings).get(name) or [])
+            def _toggle(e=None):
+                cur = list(get_person_roles(settings).get(name) or [])
+                if role in cur:
+                    cur.remove(role)
+                else:
+                    cur.append(role)
+                set_person_roles(settings, name, cur)
+                people_col._rebuild()
+            return ft.Container(
+                content=ft.Text(label, size=10, weight=ft.FontWeight.W_700,
+                                color="#ffffff" if active else GLASS["text_muted"],
+                                no_wrap=True),
+                width=24, height=22, alignment=ft.alignment.center, border_radius=11,
+                bgcolor=color if active else "transparent",
+                border=None if active else ft.border.all(1, GLASS["border"]),
+                ink=True, on_click=_toggle, tooltip=tip,
+            )
+
+        def _people_badges(name: str):
+            return [
+                _person_role_chip(name, "executor", "И", "Исполнитель — участвует в фильтре «Все исполнители»", GLASS["accent"]),
+                _person_role_chip(name, "controller", "К", "Контролёр — участвует в фильтре «Все контролеры»", GLASS["in_progress"]),
+            ]
+
         people_col, people_field, people_add = _build_list_col(
             _people_items, _people_add, _people_remove, _people_edit,
-            "Нет доп. ФИО (базовые — криминалисты и контролёры)")
+            "Нет доп. ФИО (базовые — криминалисты и контролёры)",
+            make_badges=_people_badges)
         init_col, init_field, init_add = _build_list_col(
             _init_items, _init_add, _init_remove, _init_edit, "Нет инициаторов")
         # сразу наполнить списки (иначе модалка откроется пустой)
@@ -3052,7 +3141,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             nonlocal executor_canonical, controller_canonical
             _close_refs()
             # пересобрать каноны и фильтры
-            executor_canonical = get_controller_names(settings)
+            # Раунд 18 (задача 4): каноны РАЗДЕЛЕНЫ по ролям
+            executor_canonical = get_executor_names(settings)
             controller_canonical = get_controller_names(settings)
             _refresh_filter_options()
             _rebuild_table()
@@ -3202,6 +3292,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     content=ft.Column(controls=[
                         ft.Text("Исполнители / контролёры (канонические ФИО для фильтров)", size=12,
                                 weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+                        # Раунд 18 (задача 4): подсказка по чипам ролей
+                        ft.Text("Чипы «И»/«К» — назначение в фильтры: И — исполнители, К — контролёры (можно обе)",
+                                size=10, color=GLASS["text_muted"]),
                         # Раунд 10 (задача 3): поле растянуто на всю ширину
                         ft.Row(controls=[people_field, people_add], spacing=6,
                                vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -3252,7 +3345,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             network_role = new_settings.get("network_role", "admin") or "admin"
             network_user = new_settings.get("network_user", "") or ""
             # Раунд 8: справочник людей мог измениться — пересобираем каноны фильтров
-            executor_canonical = get_controller_names(settings)
+            # Раунд 18 (задача 4): каноны РАЗДЕЛЕНЫ по ролям person_roles
+            executor_canonical = get_executor_names(settings)
             controller_canonical = get_controller_names(settings)
             initiators.clear()
             initiators.extend(get_initiators(settings))
