@@ -462,6 +462,43 @@ def next_milestone(control: Control) -> Optional[ControlMilestone]:
     return pending[0] if pending else None
 
 
+def sync_due_after_tasks(control: Control) -> None:
+    """Раунд 22 (задача 1): сдвинуть «следующую дату»/конечный срок контроля,
+    если они указывают на уже ИСПОЛНЕННЫЙ пункт задания.
+
+    Сценарий пользователя: даты проставлены только в пунктах (п.1/п.3 —
+    31.08.2026, п.10 — 28.08.2026); п.10 исполнен 11.08 — «следующая дата»
+    контроля должна съехать на ближайший неисполненный пункт (31.08.2026), а
+    не оставаться 28.08.
+
+    Правила (консервативные, ручная дата не затирается):
+    - due_date, равная дате исполненного пункта и НЕ встречающаяся среди
+      неисполненных, — «протухший указатель»: сдвигаем на min(неисполненные);
+    - due_date пустая при наличии пунктов — проставляем min(неисполненные);
+    - end_date РАЗОВОГО контроля («срок разового контроля» в таблице) раньше
+      последнего неисполненного пункта — логически протух: сдвигаем на
+      max(неисполненные); конечная дата, идущая ПОСЛЕ пунктов (ручная),
+      сохраняется;
+    - все пункты исполнены → даты не трогаем (контроль ждёт закрытия);
+    - ручные даты, не совпадающие с датами исполненных пунктов, сохраняются.
+    """
+    tasks = control.tasks or []
+    if not tasks:
+        return
+    done_dates = {parse_date(t.due_date) for t in tasks if t.is_done and parse_date(t.due_date)}
+    pending_dates = [parse_date(t.due_date) for t in tasks if not t.is_done and parse_date(t.due_date)]
+    if not pending_dates:
+        return
+    nxt = min(pending_dates)
+    cur = parse_date(control.due_date)
+    if cur is None or (cur in done_dates and cur not in pending_dates):
+        control.due_date = nxt.isoformat()
+    if control.control_type == ONE_TIME:
+        end = parse_date(control.end_date)
+        if end is not None and end < max(pending_dates):
+            control.end_date = max(pending_dates).isoformat()
+
+
 def deadline_status(control: Control, soon_days: int = 3) -> str:
     """Вычислить статус срока контроля."""
     if control.done:

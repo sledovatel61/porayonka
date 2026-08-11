@@ -6,6 +6,7 @@ import shutil
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
+from uuid import uuid4
 
 from .controls_models import Control, short_name
 
@@ -83,8 +84,17 @@ def load_controls() -> List[Control]:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         version = data.get("schema_version", 0)
-        controls = [Control.from_dict(d) for d in data.get("controls", [])]
+        raw_controls = list(data.get("controls", []) or [])
+        healed = _heal_missing_ids(raw_controls)
+        controls = [Control.from_dict(d) for d in raw_controls]
         _migrate(version, controls)
+        if healed:
+            # Раунд 22: вылеченные id фиксируем сразу, иначе from_dict выдавал
+            # бы случайный uuid на КАЖДОМ запуске и вложения отвязывались вновь.
+            try:
+                save_controls(controls)
+            except (PermissionError, OSError) as e:
+                print(f"[CONTROLS_DATA] healed ids save error: {e}")
         return controls
     except (json.JSONDecodeError, OSError, ValueError) as e:
         print(f"[CONTROLS_DATA] Oshibka zagruzki controls.json: {e}")
@@ -131,6 +141,64 @@ def _migrate(version: int, controls: List[Control]) -> None:
     # Поля schema v2 (end_date, milestones, attachments, archived, ...)
     # обрабатываются Control.from_dict с дефолтами, отдельная миграция не нужна.
     pass
+
+
+def _attachments_prefix(attachments) -> Optional[str]:
+    """Общий префикс-папка вложений вида `<id>/<файл>` (или None, если его нет
+    или префиксы различаются). Раунд 22: у контроля без id папка уже создана —
+    переиспользуем её имя как id, чтобы уже скопированные файлы не «потерялись»."""
+    prefixes = []
+    for rel in attachments or []:
+        parts = str(rel).split("/")
+        if len(parts) >= 2 and parts[0]:
+            prefixes.append(parts[0])
+    uniq = sorted(set(prefixes))
+    return uniq[0] if len(uniq) == 1 else None
+
+
+def _heal_missing_ids(raw_controls: List[dict]) -> bool:
+    """Раунд 22 (задачи 2/3/5): импорт раундов ≤21 добавлял контроли с
+    id=None («будет сгенерирован» — но нигде не генерировался). Такой контроль:
+    - ломал вложения (TypeError Path/None, файл копировался в папку случайного
+      uuid из detail_state и потом «не находился»);
+    - «задваивал» строки при сохранении (state-поиск `x.id == c.id` матчил
+      ПЕРВЫЙ None с None — чужую карточку);
+    - блокировал «Сохранить» вместе с пустой датой поступления.
+    Здесь id назначается: из общей папки вложений, если она есть (файлы
+    остаются на месте и вновь связаны с контролем), иначе — новый uuid.
+    Возвращает True, если хотя бы один id назначен (вызывающий сохраняет).
+    """
+    if not isinstance(raw_controls, list):
+        return False
+    used = set()
+    for d in raw_controls:
+        cid = (d or {}).get("id") if isinstance(d, dict) else None
+        if cid:
+            used.add(str(cid))
+    changed = False
+    for d in raw_controls:
+        if not isinstance(d, dict) or d.get("id"):
+            continue
+        cand = _attachments_prefix(d.get("attachments"))
+        if not cand or cand in used:
+            cand = str(uuid4())
+        d["id"] = cand
+        used.add(cand)
+        changed = True
+    return changed
+
+
+def ensure_control_id(control: Control) -> bool:
+    """Раунд 22: контролю БЕЗ id присвоить id (из папки вложений — файлы
+    остаются связанными — либо новый uuid). True, если id был назначен.
+
+    Используется UI как страховка (открытие/сохранение карточки): в persisted
+    данных None-контроли лечатся в load_controls (_heal_missing_ids), здесь —
+    живые объекты, добавленные старым импортом в текущей сессии."""
+    if control is None or control.id:
+        return False
+    control.id = _attachments_prefix(control.attachments) or str(uuid4())
+    return True
 
 
 # ────────────────────────────────────────────────
@@ -726,7 +794,13 @@ def restore_control(control: Control) -> None:
 # ────────────────────────────────────────────────
 
 def get_attachment_source_path(control_id: str, rel_path: str) -> Optional[Path]:
-    """Локальный абсолютный путь вложения по относительному пути."""
+    """Локальный абсолютный путь вложения по относительному пути.
+
+    Раунд 22 (задача 5): пустой/None control_id — сразу None: раньше здесь
+    падал TypeError Path/None при работе с контролем без id (лог пользователя:
+    delete_attachment -> get_attachment_dir(None))."""
+    if not control_id:
+        return None
     safe = Path(rel_path).name
     return get_attachment_dir(control_id) / safe if safe else None
 
@@ -803,7 +877,11 @@ def open_attachment(control_id: str, rel_path: str) -> Optional[Path]:
 
 
 def resolve_attachment(control_id: str, rel_path: str, settings: dict) -> Optional[Path]:
-    """Разрешить путь вложения: сначала общая папка, затем локально."""
+    """Разрешить путь вложения: сначала общая папка, затем локально.
+
+    Раунд 22 (задача 5): без id контроля — None (никаких TypeError)."""
+    if not control_id:
+        return None
     shared_dir = _shared_dir(settings)
     if shared_dir is not None:
         cand = shared_dir / "controls_attachments" / control_id / Path(rel_path).name
@@ -816,7 +894,12 @@ def resolve_attachment(control_id: str, rel_path: str, settings: dict) -> Option
 
 
 def delete_attachment(control_id: str, rel_path: str, settings: dict) -> None:
-    """Удалить файл вложения (локально и из общей папки)."""
+    """Удалить файл вложения (локально и из общей папки).
+
+    Раунд 22 (задача 5): без id контроля файл на диске определить нельзя —
+    молча выходим (UI при этом убирает вложение из списка)."""
+    if not control_id:
+        return
     local = get_attachment_source_path(control_id, rel_path)
     if local and local.exists():
         try:
@@ -834,7 +917,11 @@ def delete_attachment(control_id: str, rel_path: str, settings: dict) -> None:
 
 
 def delete_all_attachments(control_id: str, settings: dict) -> None:
-    """Удалить папку вложений контроля (локально и в общей папке)."""
+    """Удалить папку вложений контроля (локально и в общей папке).
+
+    Раунд 22 (задача 5): без id — молча выходим (TypeError Path/None)."""
+    if not control_id:
+        return
     local_dir = get_attachment_dir(control_id)
     try:
         shutil.rmtree(local_dir, ignore_errors=True)

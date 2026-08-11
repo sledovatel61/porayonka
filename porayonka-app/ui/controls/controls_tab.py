@@ -13,7 +13,7 @@ import flet as ft
 from core.controls_models import (
     Control, ControlTask, ControlMilestone, PERIODIC, ONE_TIME,
     effective_due_date, deadline_status, parse_date, short_name,
-    name_matches,
+    name_matches, sync_due_after_tasks,
     STATUS_LABELS,
     OVERDUE, TODAY, SOON, IN_PROGRESS, DONE, COMPLETED, NO_DATE,
     ARCHIVE_DONE, ARCHIVE_DELETED,
@@ -33,6 +33,7 @@ from core.controls_data import (
     resolve_attachment, delete_attachment, ATTACHMENT_WARN_MB,
     add_custom_initiator,
     merge_controls, _should_notify,
+    ensure_control_id, attachment_abs,
 )
 
 FILTER_OTHER = "__other__"  # пункт «Прочие» в фильтрах исполнителей/контролёров
@@ -328,6 +329,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # обе роли; меняется чипами «И»/«К» в «Справочниках»).
     executor_canonical = get_executor_names(settings)
     controller_canonical = get_controller_names(settings)
+    # Раунд 22 (задача 4): ФИЛЬТРЫ «Все исполнители»/«Все контролеры» —
+    # ПОЛНЫЙ справочник людей, БЕЗ разделения по ролям. Иначе человек со
+    # снятым чипом «И» исчезал из фильтра, а его контроли падали в «Прочие».
+    # Разделение по ролям остаётся ТОЛЬКО для списков выбора в карточке.
+    filter_people = get_all_people_names(settings)
     initiators = get_initiators(settings)
     network_user = settings.get("network_user", "") or ""
     network_role = settings.get("network_role", "admin")
@@ -643,8 +649,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     return False
             if state["f_controller"] != "all":
                 if state["f_controller"] == FILTER_OTHER:
-                    # «Прочие»: контролёр не матчится ни с одним каноническим
-                    if any(name_matches(cn, ctl.controller) for cn in controller_canonical):
+                    # «Прочие»: контролёр не матчится ни с одним человеком
+                    # ПОЛНОГО справочника (раунд 22, задача 4 — не с ролевым).
+                    if any(name_matches(cn, ctl.controller) for cn in filter_people):
                         return False
                 elif not name_matches(state["f_controller"], ctl.controller):
                     return False
@@ -653,8 +660,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 for t in ctl.tasks:
                     names.extend(t.assignees)
                 if state["f_executor"] == FILTER_OTHER:
-                    # «Прочие»: ни один исполнитель/ответственный не матчится с каноническими
-                    if any(name_matches(cn, nm) for cn in executor_canonical for nm in names if nm):
+                    # «Прочие»: ни один исполнитель/ответственный не матчится
+                    # ни с одним человеком ПОЛНОГО справочника (раунд 22).
+                    if any(name_matches(cn, nm) for cn in filter_people for nm in names if nm):
                         return False
                 elif not any(name_matches(state["f_executor"], nm) for nm in names):
                     return False
@@ -1156,19 +1164,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             raw_initiators = {c.initiator for c in state["controls"] if c.initiator} | set(initiators)
             # Раунд 13: опции учитывают правки справочника (rename/hide кластеров)
             canon_initiators = initiator_filter_options(raw_initiators, settings)
+            # Раунд 22 (задача 4): опции ОБОИХ фильтров — полный справочник
+            # людей (роли влияют только на списки выбора в карточке).
             executor_filter_dd.options = ([ft.dropdown.Option("all", "Все исполнители")]
-                                          + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical]
+                                          + [ft.dropdown.Option(n, short_name(n)) for n in filter_people]
                                           + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
             controller_filter_dd.options = ([ft.dropdown.Option("all", "Все контролеры")]
-                                            + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical]
+                                            + [ft.dropdown.Option(n, short_name(n)) for n in filter_people]
                                             + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
             initiator_filter_dd.options = [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in canon_initiators]
             # Ранее выбранное значение сохраняем, только если оно каноническое;
             # мусорная строка из старых данных — молча сброс на «Все».
-            if state["f_executor"] not in ("all", FILTER_OTHER) and state["f_executor"] not in executor_canonical:
+            if state["f_executor"] not in ("all", FILTER_OTHER) and state["f_executor"] not in filter_people:
                 state["f_executor"] = "all"
                 executor_filter_dd.value = "all"
-            if state["f_controller"] not in ("all", FILTER_OTHER) and state["f_controller"] not in controller_canonical:
+            if state["f_controller"] not in ("all", FILTER_OTHER) and state["f_controller"] not in filter_people:
                 state["f_controller"] = "all"
                 controller_filter_dd.value = "all"
             if state["f_initiator"] != "all":
@@ -1273,8 +1283,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     status_filter_dd = _glass_dropdown("Все статусы", 132, [ft.dropdown.Option("all", "Все статусы"), ft.dropdown.Option(OVERDUE, "Просрочено"), ft.dropdown.Option(TODAY, "Сегодня"), ft.dropdown.Option(SOON, "Скоро"), ft.dropdown.Option(IN_PROGRESS, "В работе"), ft.dropdown.Option(DONE, "Исполнено"), ft.dropdown.Option(COMPLETED, "Завершён")])
     type_filter_dd = _glass_dropdown("Все типы", 116, [ft.dropdown.Option("all", "Все типы"), ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")])
     initiator_filter_dd = _glass_dropdown("Все инициаторы", 140, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators, settings)])
-    executor_filter_dd = _glass_dropdown("Все исполнители", 140, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
-    controller_filter_dd = _glass_dropdown("Все контролеры", 140, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
+    # Раунд 22 (задача 4): стартовые опции — полный справочник людей (оба фильтра).
+    executor_filter_dd = _glass_dropdown("Все исполнители", 140, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in filter_people] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
+    controller_filter_dd = _glass_dropdown("Все контролеры", 140, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in filter_people] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
 
     def _on_filter_change(e=None):
         state["f_status"] = status_filter_dd.value or "all"
@@ -2068,6 +2079,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         state["editing"] = True
         state["pending_dialog_shown"] = False
         detail_state["is_new"] = is_new
+        # Раунд 22 (задачи 3/5): страховка — контроль БЕЗ id (старый импорт в
+        # этой же сессии до фикса) получает id сразу при открытии карточки:
+        # иначе вложения копировались в папку случайного uuid деталки, а
+        # «Сохранить» матчило None == None и «задваивало» строку.
+        if ctl and not ctl.id:
+            ensure_control_id(ctl)
         detail_state["control_id"] = ctl.id if ctl else str(uuid4())
         detail_state["receive_date"] = (ctl.receive_date if ctl else date.today().isoformat())
         detail_state["due_date"] = (ctl.due_date if ctl else None)
@@ -2484,7 +2501,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             import os as _os
             try:
                 path = resolve_attachment(detail_state["control_id"], rel, settings)
-                return str(path) if (path and _os.path.exists(str(path))) else None
+                if path and _os.path.exists(str(path)):
+                    return str(path)
+                # Раунд 22 (задача 3): фолбэк по САМОМУ относительному пути
+                # (`<id>/<файл>`) — файл, прикреплённый в сессии старого
+                # импорта, лежит в папке uuid из rel и не совпадает с id
+                # контроля; без фолбэка превью писало «Файл вложения не
+                # найден».
+                alt = attachment_abs(rel)
+                return str(alt) if _os.path.exists(str(alt)) else None
             except Exception:
                 return None
 
@@ -2614,6 +2639,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         def _open_attach(rel: str):
             import subprocess, sys, os
             path = resolve_attachment(detail_state["control_id"], rel, settings)
+            if not (path and os.path.exists(str(path))):
+                try:
+                    alt = attachment_abs(rel)  # раунд 22: фолбэк по rel-пути
+                    if os.path.exists(str(alt)):
+                        path = alt
+                except Exception:
+                    traceback.print_exc()
             if not path or not os.path.exists(str(path)):
                 from ui.toast import show_error_toast
                 show_error_toast(page, "Файл вложения не найден")
@@ -2753,7 +2785,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     traceback.print_exc()
                 return
             if not detail_state["receive_date"]:
-                return
+                # Раунд 22 (задача 2): раньше здесь был ТИХИЙ return — у
+                # импортированных карточек без даты поступления «Сохранить»
+                # просто не реагировал (консоль чистая, карточка открыта).
+                # Теперь дата проставляется автоматически (сегодня) + подсказка.
+                detail_state["receive_date"] = date.today().isoformat()
+                receive_field_text.value = _display_date(detail_state["receive_date"])
+                try:
+                    _safe_update(receive_field_text)
+                except Exception:
+                    traceback.print_exc()
+                from ui.toast import show_toast
+                show_toast(page, "«Дата поступления» была пустой — проставлена автоматически",
+                           icon=ft.icons.EVENT_AVAILABLE)
             execs = exec_container._get_selected() if hasattr(exec_container, "_get_selected") else []
             new_tasks = []
             for ui in detail_state["tasks"]:
@@ -2786,6 +2830,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 return _PERIOD_DAYS.get(k, 7)
 
             c = ctl if ctl else Control(id=detail_state["control_id"])
+            if not c.id:
+                # Раунд 22 (задача 3): страховка перед поиском `x.id == c.id` —
+                # с id=None он матчил ПЕРВЫЙ импортированный None-контроль,
+                # перезаписывал чужую карточку и «задваивал» строку в таблице.
+                c.id = detail_state.get("control_id") or str(uuid4())
+                detail_state["control_id"] = c.id
             c.incoming_number = inc
             c.receive_date = detail_state["receive_date"]
             c.initiator = init_dd.value or ""
@@ -2794,7 +2844,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             c.controller = controller_dd.value or ""
             c.control_type = type_dd.value or ONE_TIME
             c.period_days = _period_days_val_inner() if c.control_type == PERIODIC else (ctl.period_days if ctl else 7)
-            c.end_date = detail_state["end_date"] if c.control_type == PERIODIC else None
+            # Раунд 22 (задача 2): end_date сохраняется и у РАЗОВОГО контроля —
+            # это «срок разового контроля» в таблице (раунд 18, колонка H
+            # Excel); раньше сохранение карточки молча СТИРАЛО его у разовых.
+            c.end_date = detail_state["end_date"]
             c.due_date = detail_state["due_date"]
             c.comment = comment_field.value.strip()
             c.tasks = new_tasks
@@ -2803,6 +2856,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             c.updated_at = datetime.now().isoformat()
             if not c.receive_date:
                 c.receive_date = date.today().isoformat()
+            # Раунд 22 (задача 1): «следующая дата»/срок разового контроля,
+            # указывающие на уже исполненные пункты, сдвигаются на оставшиеся.
+            sync_due_after_tasks(c)
             if not c.due_date:
                 eff = effective_due_date(c)
                 if eff:
@@ -2850,38 +2906,37 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             пункт задания и дату его фактического исполнения. Работаем с ЖИВОЙ
             моделью ctl (а не с черновиком detail_state), после подтверждения
             синхронизируем черновик и перестраиваем плашки пунктов — остальные
-            поля карточки (несохранённые) не затрагиваются."""
+            поля карточки (несохранённые) не затрагиваются.
+            Раунд 22 (задача 2): МУЛЬТИ-выбор — чекбоксы вместо радиокнопок:
+            можно отметить ИСПОЛНЕННЫМИ сразу несколько пунктов одной датой
+            (раньше приходилось открывать диалог на каждый пункт). Исполненные
+            пункты показаны серыми выключенными чекбоксами. После отметки —
+            sync_due_after_tasks: «следующая дата»/срок разового контроля
+            сдвигаются с исполненных пунктов на оставшиеся (и в черновике
+            карточки — чтобы «Сохранить» не откатило сдвиг)."""
             if not ctl or not ctl.tasks:
                 return
-            sel = {"id": None}
-            for t in ctl.tasks:
-                if not t.is_done:
-                    sel["id"] = t.id
-                    break
-            if sel["id"] is None:
-                sel["id"] = ctl.tasks[0].id
             done_ref = {"iso": date.today().isoformat()}
-            radios = ft.RadioGroup(
-                value=sel["id"],
-                on_change=lambda e: sel.update({"id": e.control.value}),
-                content=ft.Column(
-                    controls=[
-                        ft.Radio(
-                            value=t.id,
-                            label=(t.title or "Пункт")
-                                  + (f" — {', '.join(short_name(a) for a in t.assignees)}" if t.assignees else "")
-                                  + (f" (исполнен {_display_date(t.done_date)})" if t.is_done else ""),
-                            label_style=ft.TextStyle(size=12, color=GLASS["text"] if not t.is_done else GLASS["text_muted"]),
-                        )
-                        for t in ctl.tasks
-                    ],
-                    spacing=2, scroll=ft.ScrollMode.ALWAYS,
-                ),
+            task_cbs = []   # [(ControlTask, Checkbox)]
+            cb_controls = []
+            for t in ctl.tasks:
+                _lbl = ((t.title or "Пункт")
+                        + (f" — {', '.join(short_name(a) for a in t.assignees)}" if t.assignees else "")
+                        + (f" (исполнен {_display_date(t.done_date)})" if t.is_done else ""))
+                cb = ft.Checkbox(
+                    value=bool(t.is_done), disabled=bool(t.is_done),
+                    label=_lbl,
+                    fill_color=GLASS["today"] if not t.is_done else GLASS["text_muted"],
+                    label_style=ft.TextStyle(size=12, color=GLASS["text"] if not t.is_done else GLASS["text_muted"]),
+                )
+                cb.data = t.id  # для тестов/отладки: чекбокс <-> пункт
+                task_cbs.append((t, cb))
+                cb_controls.append(cb)
+            cbs_col = ft.Column(controls=cb_controls, spacing=2, scroll=ft.ScrollMode.ALWAYS)
+            cbs_block = ft.Container(
+                content=cbs_col, height=min(200, 40 + 34 * len(ctl.tasks)),
             )
-            radios_block = ft.Container(
-                content=radios, height=min(200, 40 + 34 * len(ctl.tasks)),
-            )
-            radios_block.theme = _scrollbar_theme()
+            cbs_block.theme = _scrollbar_theme()
             chosen_txt = ft.Text(f"Дата исполнения: {_display_date(done_ref['iso'])}",
                                  size=12, color=GLASS["text"], weight=ft.FontWeight.W_600)
             def _on_pick_done(iso):
@@ -2896,15 +2951,27 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 except Exception:
                     traceback.print_exc()
             def _confirm(e=None):
-                task = None
-                for t in ctl.tasks:
-                    if t.id == sel["id"]:
-                        task = t
-                        break
-                if task is None:
+                chosen = [t for t, cb in task_cbs if cb.value and not t.is_done]
+                if not chosen:
+                    from ui.toast import show_toast
+                    show_toast(page, "Выберите пункты задания (галочки)", icon=ft.icons.INFO_OUTLINE)
                     return
-                task.is_done = True
-                task.done_date = done_ref["iso"]
+                for task in chosen:
+                    task.is_done = True
+                    task.done_date = done_ref["iso"]
+                # Раунд 22 (задача 1): сдвинуть «следующую дату»/срок разового
+                # контроля с исполненных пунктов на оставшиеся + синхронизиро-
+                # вать черновик и поля карточки, чтобы «Сохранить» не откатило.
+                sync_due_after_tasks(ctl)
+                detail_state["due_date"] = ctl.due_date
+                detail_state["end_date"] = ctl.end_date
+                try:
+                    due_field_text.value = _display_date(ctl.due_date)
+                    end_field_text.value = _display_date(ctl.end_date)
+                    _safe_update(due_field_text)
+                    _safe_update(end_field_text)
+                except Exception:
+                    traceback.print_exc()
                 ctl.updated_at = datetime.now().isoformat()
                 try:
                     _persist(state["controls"])
@@ -2916,20 +2983,25 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     traceback.print_exc()
                 # синк черновика открытой карточки + перестройка плашек пунктов
                 for ui in detail_state["tasks"]:
-                    if ui.get("task_id") == task.id:
-                        ui["is_done"] = True
-                        ui["done_date"] = task.done_date
+                    for task in chosen:
+                        if ui.get("task_id") == task.id:
+                            ui["is_done"] = True
+                            ui["done_date"] = task.done_date
                 try:
                     _rebuild_task_cards()
                     _rebuild_table()
                 except Exception:
                     traceback.print_exc()
                 from ui.toast import show_toast
-                _ass = ", ".join(short_name(a) for a in task.assignees if a)
-                _msg = f"{task.title or 'Пункт'} исполнен"
-                if _ass:
-                    _msg += f" — {_ass}"
-                _msg += f", дата исполнения {_display_date(task.done_date)}"
+                if len(chosen) == 1:
+                    task = chosen[0]
+                    _ass = ", ".join(short_name(a) for a in task.assignees if a)
+                    _msg = f"{task.title or 'Пункт'} исполнен"
+                    if _ass:
+                        _msg += f" — {_ass}"
+                    _msg += f", дата исполнения {_display_date(task.done_date)}"
+                else:
+                    _msg = f"Исполнено пунктов: {len(chosen)}, дата {_display_date(done_ref['iso'])}"
                 show_toast(page, _msg, icon=ft.icons.DONE_ALL)
                 # все пункты исполнены — подсказать про закрытие контроля
                 if all(t.is_done for t in ctl.tasks):
@@ -2939,13 +3011,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 modal=True,
                 bgcolor=GLASS["surface_solid"],
                 title=ft.Row(controls=[ft.Icon(ft.icons.DONE_ALL, size=18, color=GLASS["today"]),
-                                       ft.Text("Исполнение пункта задания", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"])],
+                                       ft.Text("Исполнение пунктов задания", size=15, weight=ft.FontWeight.BOLD, color=GLASS["text"])],
                              spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 content=ft.Container(
                     width=340,
                     content=ft.Column(controls=[
-                        ft.Text("Выберите пункт задания:", size=12, color=GLASS["text_secondary"]),
-                        radios_block,
+                        ft.Text("Выберите пункты задания (можно несколько):", size=12, color=GLASS["text_secondary"]),
+                        cbs_block,
                         ft.Container(height=6),
                         chosen_txt,
                         cal_block,
@@ -2953,7 +3025,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ),
                 actions=[
                     ft.TextButton("Отмена", on_click=_cancel, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
-                    ft.ElevatedButton("Отметить исполненным", bgcolor=GLASS["today"], color=GLASS["green_dark_text"],
+                    ft.ElevatedButton("Отметить исполненными", bgcolor=GLASS["today"], color=GLASS["green_dark_text"],
                                       on_click=_confirm, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
@@ -3376,6 +3448,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         def _confirm(e=None):
             try:
                 for c in parsed:
+                    # Раунд 22 (задачи 2/3/5): id присваиваем НЕМЕДЛЕННО при
+                    # импорте — раньше парсер отдавал id=None «на потом», а
+                    # «потом» не наступало: контроль без id ломал вложения
+                    # (TypeError Path/None), «Сохранить» матчило None == None
+                    # и задваивало строки, предпросмотр не находил файл.
+                    if not c.id:
+                        c.id = str(uuid4())
                     state["controls"].append(c)
                 _persist(state["controls"])
                 page.close(dialog)
@@ -3598,8 +3677,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         def _people_badges(name: str):
             return [
-                _person_role_chip(name, "executor", "И", "Исполнитель — участвует в фильтре «Все исполнители»", GLASS["accent"]),
-                _person_role_chip(name, "controller", "К", "Контролёр — участвует в фильтре «Все контролеры»", GLASS["in_progress"]),
+                # Раунд 22 (задача 4): фильтры показывают ПОЛНЫЙ справочник;
+                # чипы «И»/«К» управляют списками выбора В КАРТОЧКЕ контроля.
+                _person_role_chip(name, "executor", "И", "Исполнитель — в списке выбора исполнителей в карточке", GLASS["accent"]),
+                _person_role_chip(name, "controller", "К", "Контролёр — в списке выбора контролёров в карточке", GLASS["in_progress"]),
             ]
 
         people_col, people_field, people_add = _build_list_col(
@@ -3613,12 +3694,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         init_col._rebuild()
 
         def _apply(e=None):
-            nonlocal executor_canonical, controller_canonical
+            nonlocal executor_canonical, controller_canonical, filter_people
             _close_refs()
             # пересобрать каноны и фильтры
             # Раунд 18 (задача 4): каноны РАЗДЕЛЕНЫ по ролям
             executor_canonical = get_executor_names(settings)
             controller_canonical = get_controller_names(settings)
+            # Раунд 22 (задача 4): опции фильтров — полный справочник
+            filter_people = get_all_people_names(settings)
             _refresh_filter_options()
             _rebuild_table()
             _refresh_counters()
@@ -3759,7 +3842,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         ft.Text("Исполнители / контролёры (канонические ФИО для фильтров)", size=12,
                                 weight=ft.FontWeight.BOLD, color=GLASS["text"]),
                         # Раунд 18 (задача 4): подсказка по чипам ролей
-                        ft.Text("Чипы «И»/«К» — назначение в фильтры: И — исполнители, К — контролёры (можно обе)",
+                        ft.Text("Чипы «И»/«К» — списки выбора в карточке: И — исполнители, К — контролёры (можно обе; на фильтры не влияет)",
                                 size=10, color=GLASS["text_muted"]),
                         # Раунд 10 (задача 3): поле растянуто на всю ширину
                         ft.Row(controls=[people_field, people_add], spacing=6,
@@ -3803,7 +3886,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _open_settings(e=None):
         from .controls_settings_modal import create_controls_settings_modal
         def on_apply_inner(new_settings):
-            nonlocal soon_days, network_role, network_user, executor_canonical, controller_canonical
+            nonlocal soon_days, network_role, network_user, executor_canonical, controller_canonical, filter_people
             settings.clear()
             settings.update(new_settings)
             save_settings(new_settings)
@@ -3814,6 +3897,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             # Раунд 18 (задача 4): каноны РАЗДЕЛЕНЫ по ролям person_roles
             executor_canonical = get_executor_names(settings)
             controller_canonical = get_controller_names(settings)
+            # Раунд 22 (задача 4): опции фильтров — полный справочник
+            filter_people = get_all_people_names(settings)
             initiators.clear()
             initiators.extend(get_initiators(settings))
             try:

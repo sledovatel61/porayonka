@@ -161,6 +161,19 @@
     обеими ролями, extra=обе); rename/remove переносят и вычищают назначения;
     фильтры «Все исполнители»/«Все контролеры» — раздельные списки по ролям.
 
+Раунд 22 (PROMPT_контроли_доработка22.md):
+  * фильтры «Все исполнители»/«Все контролеры» — ПОЛНЫЙ справочник людей БЕЗ
+    разделения по ролям (роли person_roles влияют только на списки выбора в
+    карточке); «Прочие» — только люди ВНЕ справочника;
+  * контроли без id (старый импорт): heal в load_controls (id из префикса
+    папки вложений/новый uuid, сохраняется), id при импорте — сразу,
+    ensure_control_id в карточке, гарды вложений без TypeError Path/None,
+    предпросмотр — фолбэк по rel-пути;
+  * «Сохранить» с пустой «Датой поступления» больше НЕ тихий отказ — дата
+    проставляется автоматически; end_date разового контроля не стирается;
+  * «Исполнен пункт» — мульти-выбор чекбоксами; sync_due_after_tasks сдвигает
+    «следующую дату»/срок разового с исполненных пунктов на оставшиеся.
+
 Запуск:  cd porayonka-app && python tests/test_controls_smoke.py
 """
 import io
@@ -682,27 +695,27 @@ def main():
               and "Чашин Эдуард Анатольевич" not in opts
               and "Потемкин Сергей Анатольевич" not in opts,
               f"{len(opts)-1} опций")
-        # Раунд 18 (задача 4): дефолтные контролёры без роли executor НЕ попадают
-        # в фильтр исполнителей (криминалист «Чашин Эдуард Александрович» — это
-        # другой человек, он в списке).
-        check("исполнители — без дефолтных контролёров (роль не назначена)",
-              "Потемкин С.А." not in opts and "Чашин Э.А." not in opts)
+        # Раунд 18→22: раунд 18 не пускал дефолтных контролёров без роли «И»
+        # в фильтр исполнителей; раунд 22 (задача 4) отменил деление фильтров
+        # по ролям — опции = ПОЛНЫЙ справочник (роли — только для пикеров
+        # карточки). «Чашин Э.А.» слит с криминалистом-тёзкой одной записью.
+        check("исполнители — полный справочник: дефолтные контролёры тоже есть",
+              "Потемкин С.А." in opts and "Чашин Э.А." not in opts)
         check("исполнители — без дублей", len(opts) == len(set(opts)))
         check("исполнители — «Прочие» в конце", opts[-1] == FILTER_OTHER)
     ct = hints.get("Все контролеры")
     check("dropdown «Все контролеры» найден", ct is not None)
     if ct:
         opts = [o.key for o in (ct.options or [])]
-        # Раунд 18 (задача 4): контролёры — ОТДЕЛЬНЫЙ список по ролям person_roles
-        # (умолчание: дефолтные контролёры + extra; чистые криминалисты —
-        # исполнители и сюда НЕ попадают). Дефолтный контролёр, фамилия которого
-        # совпадает с криминалистом («Чашин Э.А.» = «Чашин Эдуард Александрович»),
-        # сливается с ним в одну запись с обеими ролями.
-        check("контролёры — список по ролям (Потемкин + Чашин одной записью)",
+        # Раунд 18→22: раунд 18 делил фильтр контролёров по ролям; раунд 22
+        # (задача 4) — опции = тот же ПОЛНЫЙ справочник людей (иначе контролёр
+        # со снятым чипом терялся из фильтра, а контроли падали в «Прочие»).
+        # Слияние тёзок сохраняется: «Чашин Э.А.» отдельной записью не выводится.
+        check("контролёры — полный справочник (Потемкин + Чашин одной записью)",
               "Потемкин С.А." in opts
               and "Чашин Эдуард Александрович" in opts
               and "Чашин Э.А." not in opts
-              and "Семисенко Иван Юрьевич" not in opts,
+              and "Семисенко Иван Юрьевич" in opts,
               f"{len(opts)-1} опций")
         check("контролёры — без дублей", len(opts) == len(set(opts)))
         check("контролёры — «Прочие» в конце", opts[-1] == FILTER_OTHER)
@@ -848,7 +861,10 @@ def main():
     check("name_matches: похожая фамилия ниже порога — False",
           name_matches("Семисенко Иван Юрьевич", "Семенов И.Ю.") is False)
 
-    # 15б. опции фильтров — списки по ролям (раунд 18) + «Прочие»
+    # 15б. опции фильтров — ПОЛНЫЙ справочник (раунды 18→22) + «Прочие»
+    # Раунд 22 (задача 4): фильтры больше НЕ делятся по ролям person_roles —
+    # иначе человек со снятым чипом «И» исчезал из фильтра, а его контроли
+    # падали в «Прочие». Роли влияют только на списки выбора в карточке.
     _seed_raw([
         _ctrl("o1", "О-1", executors=["Миронович Д.В.-5.1"]),
         _ctrl("o2", "О-2", executors=["Гайнутдинов С.И.Т.С.А.С.И.Ю."]),
@@ -862,25 +878,29 @@ def main():
     check("фильтр-опции: dropdown «Все исполнители» найден", ex is not None)
     if ex:
         opts = [o.key for o in (ex.options or [])]
-        # Раунд 18 (задача 4): исполнители = ТОЛЬКО роль executor (криминалисты;
-        # дефолтные контролёры сюда не попадают, пока им не назначат роль «И»).
-        expected = ["all"] + get_executor_names(load_settings()) + [FILTER_OTHER]
-        check("фильтр-опции: ровно список исполнителей (роль executor) + «Прочие»",
+        # Раунд 22 (задача 4): исполнители = ПОЛНЫЙ справочник людей (без деления
+        # по ролям) + «Прочие» в конце.
+        expected = ["all"] + get_all_people_names(load_settings()) + [FILTER_OTHER]
+        check("фильтр-опции: ровно полный справочник людей + «Прочие»",
               opts == expected, f"{len(opts)} опций")
         check("фильтр-опции: мусор из данных не попал",
               "Миронович Д.В.-5.1" not in opts
               and "Т.С.А" not in "".join(opts)
               and "Авакян А.А." not in opts
               and "Посторонний А.А." not in opts)
+        # Раунд 22 (задача 4): дефолтный контролёр ПОЯВЛЯЕТСЯ в фильтре
+        # исполнителей (как человек из справочника), даже без роли «И».
+        check("фильтр-опции: Потемкин (контролёр по роли) есть в исполнителях",
+              "Потемкин С.А." in opts)
     ct = _find_dd(tab, "Все контролеры")
     check("фильтр-опции: dropdown «Все контролеры» найден", ct is not None)
     if ct:
         opts = [o.key for o in (ct.options or [])]
-        expected = ["all"] + get_controller_names(load_settings()) + [FILTER_OTHER]
-        check("фильтр-опции контролёров: только роль controller + «Прочие»",
+        expected = ["all"] + get_all_people_names(load_settings()) + [FILTER_OTHER]
+        check("фильтр-опции контролёров: тот же полный справочник + «Прочие»",
               opts == expected, f"{len(opts)} опций")
-        # Раунд 18: дефолтный контролёр «Чашин Э.А.» слит с криминалистом-тёзкой
-        # в одну запись (обе роли) — в списке контролёров ровно один Чашин.
+        # Раунд 18→22: дефолтный контролёр «Чашин Э.А.» слит с криминалистом-
+        # тёзкой в одну запись — в списке ровно один Чашин.
         check("фильтр-опции контролёров: Чашин — одна запись (слит с криминалистом)",
               "Чашин Э.А." not in opts
               and opts.count("Чашин Эдуард Александрович") == 1)
@@ -966,12 +986,12 @@ def main():
     vis = _visible_texts(tab)
     check("refresh: после сброса видны все контроли", "Ф-30" in vis and "Ф-31" in vis)
 
-    # ── 16. Раунды 7+18: «Прочие» и роли — Потемкин/Чашин как исполнители ──
-    # Раунд 18 (задача 4): категория человека (исполнитель/контролёр) задаётся
-    # чипами «И»/«К» в «Справочниках» (settings.person_roles). По умолчанию
-    # Потемкин/Чашин — ТОЛЬКО контролёры, поэтому как исполнители они для фильтра
-    # неизвестны и попадают в «Прочие»; после назначения роли executor человек
-    # появляется в фильтре исполнителей и уходит из «Прочие» (остаётся контролёром).
+    # ── 16. Раунды 7+18→22: «Прочие» = нет в ПОЛНОМ справочнике людей ──
+    # Раунд 18 (задача 4): категория человека (исполнитель/контролёр) задавалась
+    # чипами «И»/«К» и фильтры делились по ролям. Раунд 22 (задача 4): роли
+    # больше НЕ влияют на фильтры (только на списки выбора в карточке) —
+    # иначе человек со снятым чипом терялся из фильтра, а его контроли падали
+    # в «Прочие» (сырьё пользователя: Авакян/Агеев/Чащин в «Прочих»).
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True})
     _seed_raw([
@@ -981,41 +1001,38 @@ def main():
     ])
     page, tab, _ = build()
     ex16 = _find_dd(tab, "Все исполнители")
-    check("roles18: по умолчанию Потемкина НЕТ в опциях исполнителей",
-          ex16 is not None and "Потемкин С.А." not in [o.key for o in (ex16.options or [])])
+    check("roles22: Потемкин ЕСТЬ в опциях исполнителей (полный справочник)",
+          ex16 is not None and "Потемкин С.А." in [o.key for o in (ex16.options or [])])
     check("«Прочие»: выбор применился",
           _set_filter(tab, "Все исполнители", FILTER_OTHER))
     vis = _visible_texts(tab)
-    # «Потемкин С.А.» по умолчанию — только контролёр: как исполнитель он для
-    # фильтра неизвестен → контроль П-1 в «Прочие». А «Чашин Э.А.» (П-2) —
-    # фамильный тёзка криминалиста «Чашин Эдуард Александрович» (роль executor),
-    # name_matches их сличает → П-2 в «Прочие» НЕ попадает.
-    check("«Прочие»: без роли executor Потемкин-исполнитель — в «Прочие»",
-          "П-1" in vis and "П-2" not in vis, f"видно: {sorted(vis)}")
-    check("«Прочие»: посторонний тоже в «Прочие»", "П-3" in vis)
-    # назначаем Потемкину роль исполнителя (как чип «И» в справочнике)
+    # «Потемкин С.А.» и «Чашин Э.А.» — люди справочника (дефолтные контролёры) →
+    # их контроли в «Прочие» НЕ попадают; «Посторонний А.А.» вне справочника →
+    # попадает. Роли person_roles на это больше не влияют.
+    check("«Прочие»: контроли людей справочника НЕ попадают в «Прочие»",
+          "П-1" not in vis and "П-2" not in vis, f"видно: {sorted(vis)}")
+    check("«Прочие»: посторонний — в «Прочие»", "П-3" in vis)
+    # даже ЯВНЫЙ сброс обеих ролей человека не убирает его из фильтров
     st16 = load_settings()
-    set_person_roles(st16, "Потемкин С.А.", ["executor", "controller"])
-    check("roles18: set_person_roles записал обе роли в settings",
-          (load_settings().get("person_roles") or {}).get("Потемкин С.А.")
-          == ["executor", "controller"],
-          f"{(load_settings().get('person_roles') or {})}")
+    set_person_roles(st16, "Потемкин С.А.", [])
+    check("roles22: роли Потемкина сброшены (данные сохранились)",
+          (load_settings().get("person_roles") or {}).get("Потемкин С.А.") == [])
     page, tab, _ = build()
     ex16b = _find_dd(tab, "Все исполнители")
-    check("roles18: Потемкин появился в опциях исполнителей",
+    check("roles22: и без ролей Потемкин остаётся в опциях исполнителей",
           ex16b is not None and "Потемкин С.А." in [o.key for o in (ex16b.options or [])])
     ct16b = _find_dd(tab, "Все контролеры")
-    check("roles18: и остался в опциях контролёров (обе роли)",
+    check("roles22: и в опциях контролёров",
           ct16b is not None and "Потемкин С.А." in [o.key for o in (ct16b.options or [])])
-    check("«Прочие»: фильтр по Потемкину-исполнителю находит его контроль",
+    check("«Прочие»: фильтр по Потемкину находит его контроль",
           _set_filter(tab, "Все исполнители", "Потемкин С.А."))
     vis = _visible_texts(tab)
     check("«Прочие»: фильтр по Потемкину — только его контроль",
           "П-1" in vis and "П-2" not in vis and "П-3" not in vis, f"видно: {sorted(vis)}")
-    check("«Прочие»: после назначения роли П-1 ушёл из «Прочие»",
+    check("«Прочие»: и без ролей П-1 не попадает в «Прочие»",
           _set_filter(tab, "Все исполнители", FILTER_OTHER))
     vis = _visible_texts(tab)
-    check("«Прочие»: П-1 ушёл, посторонний остался",
+    check("«Прочие»: только посторонний остался",
           "П-1" not in vis and "П-2" not in vis and "П-3" in vis, f"видно: {sorted(vis)}")
 
     # ── 17. Раунд 7, задача 2: канонические инициаторы ──
@@ -2367,12 +2384,14 @@ def main():
             apply44[0].on_click(None)
             ex44b = _find_dd(tab, "Все исполнители")
             ct44b = _find_dd(tab, "Все контролеры")
-            check("roles18: после «Применить» Потемкин — в фильтре исполнителей",
+            # Раунд 22 (задача 4): опции фильтров — полный справочник людей,
+            # роли (чипы) на них НЕ влияют — Потемкин остаётся в обоих списках.
+            check("roles22: после «Применить» Потемкин остаётся в фильтре исполнителей",
                   ex44b is not None
                   and "Потемкин С.А." in [o.key for o in (ex44b.options or [])])
-            check("roles18: …и ушёл из фильтра контролёров",
+            check("roles22: …и остаётся в фильтре контролёров (чипы не влияют на фильтры)",
                   ct44b is not None
-                  and "Потемкин С.А." not in [o.key for o in (ct44b.options or [])])
+                  and "Потемкин С.А." in [o.key for o in (ct44b.options or [])])
         # инициаторы — без чипов ролей (только люди)
         init44_rows = [c for c in walk(dlg44) if isinstance(c, ft.Container)
                        and getattr(c, "bgcolor", None) == GLASS["surface_alt"]
@@ -2703,21 +2722,20 @@ def main():
           and getattr(ylw48, "bgcolor", None) == "#ffd166",
           f"{getattr(grn48, 'bgcolor', None)}/{getattr(ylw48, 'bgcolor', None)}")
     # 3.2. «Исполнен пункт» → диалог, выбор п.2, дата по умолчанию — сегодня
+    # Раунд 22 (задача 2): RadioGroup заменён на ЧЕКБОКСЫ (мульти-выбор).
     ylw48.on_click(None)
     dlg48 = page.dialogs[-1] if page.dialogs else None
     check("done19: диалог «Исполнен пункт» открыт (AlertDialog через page.open)",
           dlg48 is not None)
-    rgs48 = [c for c in walk(dlg48) if isinstance(c, ft.RadioGroup)] if dlg48 else []
-    check("done19: в диалоге список пунктов (RadioGroup)", len(rgs48) == 1)
+    cbs48 = [c for c in walk(dlg48) if isinstance(c, ft.Checkbox)] if dlg48 else []
+    check("done22: в диалоге мульти-выбор — чекбоксы по числу пунктов", len(cbs48) == 2)
     conf48 = [c for c in walk(dlg48) if isinstance(c, ft.ElevatedButton)
-              and getattr(c, "text", None) == "Отметить исполненным"] if dlg48 else []
-    check("done19: кнопка «Отметить исполненным» есть", len(conf48) == 1)
-    if rgs48:
-        rg48 = rgs48[0]
-        # выбрать второй пункт (п.2), как в примере пользователя
-        rg48.value = "td2"
-        if getattr(rg48, "on_change", None) is not None:
-            rg48.on_change(type("E", (), {"control": type("C", (), {"value": "td2"})()})())
+              and getattr(c, "text", None) == "Отметить исполненными"] if dlg48 else []
+    check("done22: кнопка «Отметить исполненными» есть", len(conf48) == 1)
+    cb_t2 = [c for c in cbs48 if getattr(c, "data", None) == "td2"]
+    check("done22: у чекбокса пункта п.2 data == id пункта", len(cb_t2) == 1)
+    if cb_t2:
+        cb_t2[0].value = True  # отметить галочкой п.2, как в примере пользователя
     if conf48:
         today_iso48 = datetime.now().date().isoformat()
         conf48[0].on_click(None)
@@ -3333,6 +3351,313 @@ def main():
     out61 = buf61.getvalue()
     check("log21: «Zagruzheno kriminalistov» — одна строка за процесс, не спам",
           out61.count("kriminalistov") <= 1, f"{len(out61.splitlines())} строк(и)")
+
+    # ══════════════════════════════════════════════════════════════════
+    # Раунд 22 (PROMPT_контроли_доработка22.md)
+    # ══════════════════════════════════════════════════════════════════
+
+    # ── 62. Раунд 22, задачи 2/3/5: контроль БЕЗ id — лечение и гарды ──────
+    from core.controls_data import (
+        _heal_missing_ids, ensure_control_id,
+        get_attachment_source_path, resolve_attachment as _res_att22,
+        delete_attachment as _del_att22, delete_all_attachments as _del_all22,
+        attachment_abs, get_attachments_path,
+    )
+    # 62а. healing на уровне load_controls: id из префикса папки вложений
+    from core.controls_data import get_controls_file as _gcf22
+    raw62 = [
+        {"incoming_number": "Иссоп-216-194-26/дсп", "receive_date": None,
+         "executors": ["Семисенко И.Ю."], "controller": "Потемкин С.А.",
+         "attachments": ["aabbccdd/foto.png", "aabbccdd/scan.pdf"]},   # id отсутствует
+        {"id": "", "incoming_number": "Иссоп-216-195-26/дсп",
+         "executors": ["Чашин Э.А."], "attachments": []},               # id пустой
+        {"id": "keep-1", "incoming_number": "Иссоп-216-196-26/дсп", "attachments": []},
+    ]
+    _seed_raw(raw62)
+    ctl62 = load_controls()
+    by_inc62 = {c.incoming_number: c for c in ctl62}
+    check("id22: контроль без id получил id из папки вложений (файл остаётся на месте)",
+          by_inc62["Иссоп-216-194-26/дсп"].id == "aabbccdd",
+          by_inc62["Иссоп-216-194-26/дсп"].id)
+    _healed62 = by_inc62["Иссоп-216-195-26/дсп"].id
+    check("id22: контроль с пустым id и без вложений — новый uuid (не пустой)",
+          isinstance(_healed62, str) and len(_healed62) >= 8, f"{_healed62!r}")
+    check("id22: нормальный id не тронут", by_inc62["Иссоп-216-196-26/дсп"].id == "keep-1")
+    ctl62b = load_controls()
+    by_inc62b = {c.incoming_number: c for c in ctl62b}
+    check("id22: вылеченные id СОХРАНЕНЫ (при повторной загрузке те же, не перевыдаются)",
+          by_inc62b["Иссоп-216-194-26/дсп"].id == "aabbccdd"
+          and by_inc62b["Иссоп-216-195-26/дсп"].id == _healed62)
+    # 62б. heal с конфликтом префиксов/разными префиксами — безопасный uuid
+    raw62c = [
+        {"id": "aabbccdd", "incoming_number": "Б-ЗАНЯТ", "attachments": []},  # id занят
+        {"incoming_number": "Б-ПРЕФ", "attachments": ["aabbccdd/x.png"]},  # префикс занят
+        {"incoming_number": "Б-РАЗНЫЕ", "attachments": ["p1/a.png", "p2/b.png"]},  # разные
+    ]
+    check("id22: _heal_missing_ids — занятый префикс не переиспользуется",
+          _heal_missing_ids(raw62c) is True
+          and raw62c[0]["id"] == "aabbccdd"
+          and raw62c[1]["id"] != "aabbccdd"
+          and raw62c[2]["id"] not in ("p1", "p2")
+          and len({d["id"] for d in raw62c}) == 3,
+          f"{raw62c[1]['id']}/{raw62c[2]['id']}")
+    # 62в. ensure_control_id — страховка в карточке
+    _c62 = Control(id=None, incoming_number="Е-1", attachments=["zz99/f.png"])
+    check("id22: ensure_control_id берёт id из вложений",
+          ensure_control_id(_c62) is True and _c62.id == "zz99", _c62.id)
+    check("id22: ensure_control_id не трогает контроль с id",
+          ensure_control_id(Control(id="have-1")) is False)
+    _c62b = Control(id=None, incoming_number="Е-2")
+    check("id22: ensure_control_id без вложений — новый uuid",
+          ensure_control_id(_c62b) is True and bool(_c62b.id))
+    # 62г. гарды вложений против TypeError Path/None (кейс из ЛОГ.txt)
+    check("att22: get_attachment_source_path(None, ...) → None (без TypeError)",
+          get_attachment_source_path(None, "x/y.png") is None
+          and get_attachment_source_path("", "x/y.png") is None)
+    check("att22: resolve_attachment(None, ...) → None",
+          _res_att22(None, "x/y.png", {}) is None)
+    try:
+        _del_att22(None, "x/y.png", {})
+        _del_all22(None, {})
+        check("att22: delete_attachment/delete_all_attachments(None) — без исключений", True)
+    except Exception as _e22:
+        check("att22: delete_attachment/delete_all_attachments(None) — без исключений",
+              False, str(_e22))
+    # 62д. фолбэк предпросмотра по rel-пути (файл лежит в папке uuid из rel)
+    _dir22 = get_attachments_path() / "aabbccdd"
+    _dir22.mkdir(parents=True, exist_ok=True)
+    _f22 = _dir22 / "foto.png"
+    _f22.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+    check("att22: attachment_abs находит файл по rel-пути (превью-фолбэк)",
+          attachment_abs("aabbccdd/foto.png").exists())
+    check("att22: resolve чужим id НЕ находит — фолбэк покрывает именно этот разрыв",
+          _res_att22("another-id", "aabbccdd/foto.png", {}) is None)
+    try:
+        _f22.unlink()
+        _dir22.rmdir()
+    except OSError:
+        pass
+
+    # ── 63. Раунд 22, задача 1: sync_due_after_tasks — правила сдвига ──────
+    from core.controls_models import sync_due_after_tasks as _sync22, ControlTask as _CT22
+
+    def _mk22(due=None, end=None, ctype="once", tasks=()):
+        return Control(id="s22", incoming_number="С-22", control_type=ctype,
+                       due_date=due, end_date=end,
+                       tasks=[_CT22(id=f"t{i}", title=t[0], due_date=t[1], is_done=t[2])
+                              for i, t in enumerate(tasks, 1)])
+
+    # сценарий пользователя: п.1/п.3 — 31.08, п.10 — 28.08; п.10 исполнен
+    _s22 = _mk22(due="2026-08-28", tasks=[("п. 1", "2026-08-31", False),
+                                          ("п. 3", "2026-08-31", False),
+                                          ("п. 10", "2026-08-28", True)])
+    _sync22(_s22)
+    check("sync22: «следующая дата» исполненного пункта сдвинулась на ближайший оставшийся",
+          _s22.due_date == "2026-08-31", _s22.due_date)
+    # срок разового раньше последнего оставшегося пункта — сдвигается на него
+    _s22b = _mk22(due="2026-08-28", end="2026-02-16",
+                  tasks=[("п. 1", "2026-09-01", False), ("п. 2", "2026-02-16", True)])
+    _sync22(_s22b)
+    check("sync22: срок разового (раньше оставшихся пунктов) сдвинут на последний",
+          _s22b.end_date == "2026-09-01", _s22b.end_date)
+    # ручной срок ПОЗЖЕ всех пунктов сохраняется
+    _s22c = _mk22(due="2026-08-28", end="2026-12-31",
+                  tasks=[("п. 1", "2026-09-01", False)])
+    _sync22(_s22c)
+    check("sync22: ручной срок позже пунктов НЕ затирается", _s22c.end_date == "2026-12-31")
+    # ручная «следующая дата» вне дат исполненных пунктов сохраняется
+    _s22d = _mk22(due="2026-08-29",
+                  tasks=[("п. 1", "2026-08-31", False), ("п. 10", "2026-08-28", True)])
+    _sync22(_s22d)
+    check("sync22: ручная due вне пунктов сохраняется", _s22d.due_date == "2026-08-29")
+    # due пуста при наличии пунктов → проставляется ближайшей
+    _s22e = _mk22(due=None, tasks=[("п. 1", "2026-08-31", False)])
+    _sync22(_s22e)
+    check("sync22: пустая due проставляется ближайшим неисполненным пунктом",
+          _s22e.due_date == "2026-08-31", _s22e.due_date)
+    # все пункты исполнены — даты не трогаем
+    _s22f = _mk22(due="2026-08-28", end="2026-08-28",
+                  tasks=[("п. 1", "2026-08-28", True)])
+    _sync22(_s22f)
+    check("sync22: все пункты исполнены — due/end остаются (контроль ждёт закрытия)",
+          _s22f.due_date == "2026-08-28" and _s22f.end_date == "2026-08-28")
+    # периодический: сдвигается только due, конечная дата не трогается
+    _s22g = _mk22(due="2026-08-28", end="2026-02-16", ctype="periodic",
+                  tasks=[("п. 1", "2026-09-01", False), ("п. 2", "2026-08-28", True)])
+    _sync22(_s22g)
+    check("sync22: у периодического due сдвигается, end (дата окончания цикла) сохраняется",
+          _s22g.due_date == "2026-09-01" and _s22g.end_date == "2026-02-16",
+          f"{_s22g.due_date}/{_s22g.end_date}")
+    # due совпадает и с исполненным, и с неисполненным пунктом — НЕ протухшая
+    _s22h = _mk22(due="2026-08-31",
+                  tasks=[("п. 1", "2026-08-31", False), ("п. 10", "2026-08-31", True)])
+    _sync22(_s22h)
+    check("sync22: due, актуальная среди неисполненных, сохраняется",
+          _s22h.due_date == "2026-08-31")
+
+    # ── 64. Раунд 22, задачи 1/2 (UI): жёлтая кнопка мульти-выбор + сдвиг ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("u22", "Ю-22", executors=["Миронович Д.В."], tasks=[
+        {"id": "u1", "title": "п. 1", "assignees": ["Миронович Д.В."],
+         "due_date": "2026-08-31", "is_done": False, "done_date": None, "comment": ""},
+        {"id": "u3", "title": "п. 3", "assignees": ["Свеженко А.С."],
+         "due_date": "2026-08-31", "is_done": False, "done_date": None, "comment": ""},
+        {"id": "u10", "title": "п. 10", "assignees": ["Ливенский В.О."],
+         "due_date": "2026-08-28", "is_done": False, "done_date": None, "comment": ""},
+    ])])
+    # due 28.08 (дата п.10) + срок разового; receive_date — пустая (кейс импорта)
+    _raw64 = json.load(open(_gcf22(), encoding="utf-8"))
+    _raw64["controls"][0]["due_date"] = "2026-08-28"
+    _raw64["controls"][0]["end_date"] = "2026-02-16"
+    _raw64["controls"][0]["receive_date"] = None
+    json.dump(_raw64, open(_gcf22(), "w", encoding="utf-8"), ensure_ascii=False)
+    page, tab, _ = build(1280)
+    rows64 = _visible_rows(tab)
+    check("ui22: строка Ю-22 видна", len(rows64) == 1 and "Ю-22" in _visible_texts(tab))
+    rows64[0].on_click(None)
+    ylw64 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+             and getattr(c, "text", None) == "Исполнен пункт"]
+    check("ui22: жёлтая «Исполнен пункт» в карточке", len(ylw64) == 1)
+    if ylw64:
+        ylw64[0].on_click(None)
+        dlg64 = page.dialogs[-1] if page.dialogs else None
+        cbs64 = [c for c in walk(dlg64) if isinstance(c, ft.Checkbox)] if dlg64 else []
+        check("ui22: в диалоге — 3 чекбокса (по числу пунктов)", len(cbs64) == 3,
+              f"{len(cbs64)}")
+        # отметить СРАЗУ ДВА пункта (п.10 и п.3) — сценарий «несколько сразу»
+        for _b64 in cbs64:
+            if getattr(_b64, "data", None) in ("u10", "u3"):
+                _b64.value = True
+        conf64 = [c for c in walk(dlg64) if isinstance(c, ft.ElevatedButton)
+                  and getattr(c, "text", None) == "Отметить исполненными"]
+        if conf64:
+            conf64[0].on_click(None)
+            all64 = load_controls()
+            ctl64 = next((c for c in all64 if c.incoming_number == "Ю-22"), None)
+            _t64 = {t.id: t for t in (ctl64.tasks if ctl64 else [])}
+            check("ui22: отмечены ОБА пункта за один диалог (п.10 и п.3)",
+                  bool(ctl64) and _t64["u10"].is_done and _t64["u3"].is_done
+                  and not _t64["u1"].is_done)
+            check("ui22: «следующая дата» сдвинулась с исполненных на оставшийся (31.08)",
+                  ctl64 is not None and ctl64.due_date == "2026-08-31",
+                  f"{ctl64.due_date if ctl64 else None}")
+            check("ui22: срок разового сдвинут до последнего оставшегося пункта",
+                  ctl64 is not None and ctl64.end_date == "2026-08-31",
+                  f"{ctl64.end_date if ctl64 else None}")
+            check("ui22: контроль ОДИН (без задвоения строки)",
+                  len([c for c in all64 if c.incoming_number == "Ю-22"]) == 1)
+            # теперь «Сохранить» с пустой датой поступления — НЕ тихий отказ
+            save64 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                      and getattr(c, "text", None) == "Сохранить"]
+            check("ui22: кнопка «Сохранить» в карточке есть", len(save64) == 1)
+            if save64:
+                save64[0].on_click(None)
+                after64 = load_controls()
+                same64 = [c for c in after64 if c.incoming_number == "Ю-22"]
+                check("ui22: «Сохранить» отработал — контроль не задвоился",
+                      len(same64) == 1, f"{len(same64)}")
+                _today64 = datetime.now().date().isoformat()
+                check("ui22: пустая «Дата поступления» проставлена автоматически (сегодня)",
+                      bool(same64) and same64[0].receive_date == _today64,
+                      f"{same64[0].receive_date if same64 else None}")
+                check("ui22: статусы пунктов пережили «Сохранить» карточки",
+                      bool(same64) and {t.id: t.is_done for t in same64[0].tasks}
+                      == {"u1": False, "u3": True, "u10": True})
+                check("ui22: сдвинутые даты не откатились «Сохранить»",
+                      bool(same64) and same64[0].due_date == "2026-08-31"
+                      and same64[0].end_date == "2026-08-31")
+
+    # ── 65. Раунд 22, задача 2 (UI): импорт присваивает id сразу ───────────
+    try:
+        from openpyxl import Workbook as _Wb22
+        save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                       "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                       "extra_people": [], "person_roles": {}, "hidden_people": []})
+        _seed_raw([])   # пустая база — «удалил и заново импортировал»
+        wb65 = _Wb22()
+        ws65 = wb65.active
+        ws65.append(["КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ"])
+        ws65.append(list(TABLE_HEADERS))
+        ws65.append([1, "Иссоп-216-194-26/дсп", "", "СУ",
+                     "Задание п. 1 - Миронович 31.08.2026, п. 3 - Свеженко 31.08.2026",
+                     "Миронович Д.В., Свеженко А.С.", "Потемкин С.А.",
+                     "16.02.2026", "", ""])
+        ws65.append([2, "Иссоп-216-195-26/дсп", "10.08.2026", "СУ",
+                     "Контроль без пунктов", "Семисенко И.Ю.", "Потемкин С.А.",
+                     "20.08.2026", "", ""])
+        p65 = os.path.join(tempfile.gettempdir(), "round22_import_test.xlsx")
+        wb65.save(p65)
+        page, tab, _ = build(1280)
+        picker65 = getattr(page, "_controls_import_picker", None)
+        check("import22: FilePicker импорта зарегистрирован", picker65 is not None)
+        if picker65 is not None:
+            import types as _types65
+            _ev65 = _types65.SimpleNamespace(
+                path=None, files=[_types65.SimpleNamespace(path=p65)])
+            # on_result — EventHandler: вызываем через хелпер харнесса
+            _invoke_event_handler(picker65.on_result, _ev65)
+            dlg65 = page.dialogs[-1] if page.dialogs else None
+            check("import22: диалог предпросмотра открыт", dlg65 is not None)
+            conf65 = [c for c in walk(dlg65) if isinstance(c, ft.ElevatedButton)
+                      and getattr(c, "text", None) == "Импортировать"] if dlg65 else []
+            if conf65:
+                conf65[0].on_click(None)
+                imp65 = load_controls()
+                check("import22: оба контроля импортированы", len(imp65) == 2,
+                      f"{len(imp65)}")
+                check("import22: импортированным контролям id ПРИСВОЕНЫ сразу",
+                      all(bool(c.id) for c in imp65),
+                      f"{[c.id for c in imp65]}")
+                check("import22: id уникальны (никакого общего None)",
+                      len({c.id for c in imp65}) == len(imp65))
+                first65 = next((c for c in imp65
+                                if c.incoming_number == "Иссоп-216-194-26/дсп"), None)
+                check("import22: пункты со сроками импортированы (п.1/п.3)",
+                      first65 is not None and len(first65.tasks) == 2
+                      and all(t.due_date == "2026-08-31" for t in first65.tasks),
+                      f"{[(t.title, t.due_date) for t in first65.tasks] if first65 else None}")
+                # сохраняемый файл — id на диске, перезагрузка их не перевыдаёт
+                _ids65 = {c.incoming_number: c.id for c in load_controls()}
+                check("import22: id стабильны после перезагрузки",
+                      _ids65 == {c.incoming_number: c.id for c in imp65})
+    except Exception:
+        traceback.print_exc()
+        check("import22: сквозной импорт .xlsx без исключений", False)
+
+    # ── 66. Раунд 22, задача 4: «Прочие» — человек вне справочника ─────────
+    # Кейс пользователя: в справочнике 16 криминалистов, чип «И» снят → человек
+    # пропадал из фильтра, контроли уезжали в «Прочие».
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": ["Авакян Арсен Артурович"],
+                   "person_roles": {"Авакян Арсен Артурович": ["controller"]},
+                   "hidden_people": []})
+    # NB: «Чащин» (с щ) vs справочный «Чашин» — за порогом fuzzy (0.667 < 0.80),
+    # поэтому в тесте корректное написание; опечаточный кейс — «Авахян/Авакян».
+    _seed_raw([
+        _ctrl("x22a", "ПР-1", executors=["Авахян А.А."]),   # опечатка из Excel
+        _ctrl("x22b", "ПР-2", executors=["Чашин Э.А."]),
+        _ctrl("x22c", "ПР-3", executors=["Незнакомцев П.П."]),
+    ])
+    page, tab, _ = build()
+    ex66 = _find_dd(tab, "Все исполнители")
+    check("ppl22: человек с ролью ТОЛЬКО «К» остаётся в фильтре исполнителей",
+          ex66 is not None
+          and "Авакян Арсен Артурович" in [o.key for o in (ex66.options or [])])
+    check("ppl22: фильтр по нему применяется",
+          _set_filter(tab, "Все исполнители", "Авакян Арсен Артурович"))
+    vis66 = _visible_texts(tab)
+    check("ppl22: контроль находится даже по написанию с опечаткой («Авахян»)",
+          "ПР-1" in vis66 and "ПР-2" not in vis66 and "ПР-3" not in vis66,
+          f"видно: {sorted(vis66)}")
+    check("ppl22: фильтр «Прочие» применился",
+          _set_filter(tab, "Все исполнители", FILTER_OTHER))
+    vis66 = _visible_texts(tab)
+    check("ppl22: в «Прочие» — только человек ВНЕ справочника",
+          "ПР-1" not in vis66 and "ПР-2" not in vis66 and "ПР-3" in vis66,
+          f"видно: {sorted(vis66)}")
 
     print()
     if FAILURES:
