@@ -947,9 +947,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     continue
                 ass = ", ".join(short_name(x) for x in t.assignees) if t.assignees else ""
                 if ass:
-                    line += " — " + ass
+                    line += " - " + ass
                 if t.due_date:
-                    line += " — " + _display_date(t.due_date)
+                    line += " - " + _display_date(t.due_date)
                 if t.is_done:
                     # Раунд 19 (задача 3.2): в содержании — фактическая дата исполнения
                     line += f" (исполнен {_display_date(t.done_date)})" if t.done_date else " (исполнено)"
@@ -1296,8 +1296,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # Simple date fields with clear inside, open shared calendar (no clipping)
     # Раунд 17 (задача 2): даты ужаты под общую строку фильтров — шрифт 11,
     # крестик 18 px.
-    filter_from_text = ft.Text("С: —", size=11, color=GLASS["text_secondary"], no_wrap=True)
-    filter_to_text = ft.Text("По: —", size=11, color=GLASS["text_secondary"], no_wrap=True)
+    filter_from_text = ft.Text("С: -", size=11, color=GLASS["text_secondary"], no_wrap=True)
+    filter_to_text = ft.Text("По: -", size=11, color=GLASS["text_secondary"], no_wrap=True)
 
     filter_from_clear = ft.IconButton(icon=ft.icons.CLEAR, icon_size=12, icon_color=GLASS["text_muted"], width=18, height=18, padding=0, visible=False, tooltip="Очистить")
     filter_to_clear = ft.IconButton(icon=ft.icons.CLEAR, icon_size=12, icon_color=GLASS["text_muted"], width=18, height=18, padding=0, visible=False, tooltip="Очистить")
@@ -1306,11 +1306,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         iso = state["f_from"]
         if iso:
             d = parse_date(iso)
-            filter_from_text.value = f"С: {d.strftime('%d.%m.%Y')}" if d else "С: —"
+            filter_from_text.value = f"С: {d.strftime('%d.%m.%Y')}" if d else "С: -"
             filter_from_text.color = GLASS["text"]
             filter_from_clear.visible = True
         else:
-            filter_from_text.value = "С: —"
+            filter_from_text.value = "С: -"
             filter_from_text.color = GLASS["text_secondary"]
             filter_from_clear.visible = False
         try:
@@ -1323,11 +1323,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         iso = state["f_to"]
         if iso:
             d = parse_date(iso)
-            filter_to_text.value = f"По: {d.strftime('%d.%m.%Y')}" if d else "По: —"
+            filter_to_text.value = f"По: {d.strftime('%d.%m.%Y')}" if d else "По: -"
             filter_to_text.color = GLASS["text"]
             filter_to_clear.visible = True
         else:
-            filter_to_text.value = "По: —"
+            filter_to_text.value = "По: -"
             filter_to_text.color = GLASS["text_secondary"]
             filter_to_clear.visible = False
         try:
