@@ -604,15 +604,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         return ft.IconButton(icon=icon, icon_size=size, icon_color=color, tooltip=tooltip, width=30, height=30, padding=0, on_click=handler)
 
     # Header
+    # Раунд 17 (задача 3): заголовок ДВУХСТРОЧНЫЙ — высота 34 -> 50 px, текст
+    # переносится (max_lines=2, без no_wrap). Длинные названия («Содержание»,
+    # «Исполнители», «Срок исполн.») больше не обрезаются. Геометрия по X та же:
+    # порядок контролов [bar][ячейка][разделитель]... и padding как у строк.
     header_row = ft.Container(
         content=ft.Row(controls=[], spacing=1, tight=True),
-        height=34,
+        height=50,
         bgcolor="transparent",
         border=ft.border.only(bottom=ft.BorderSide(1, GLASS["border_divider"])),
         # Раунд 9 (БАГ 2): padding заголовка = padding строк, чтобы разделители
         # колонок стояли строго на одних X-координатах. Раунд 14: spacing 1,
         # padding 6 — экономия ~25 px в бюджете строки.
-        padding=ft.padding.symmetric(horizontal=6, vertical=2),
+        padding=ft.padding.symmetric(horizontal=6, vertical=4),
     )
 
     # Раунд 7 (задача 5): ссылки на контейнеры заголовков для resize без пересоздания
@@ -626,7 +630,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # контролами между ячейками — точно как в строках, поэтому X-координаты
         # линий заголовка и строк совпадают 1-в-1.
         text_cont = ft.Container(
-            content=ft.Text(lbl, size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"], no_wrap=True, tooltip="Сортировка"),
+            # Раунд 17 (задача 3): max_lines=2 БЕЗ no_wrap — заголовок
+            # переносится на вторую строку (стрелка сортировки остаётся суффиксом
+            # текста); overflow=ELLIPSIS — крайний случай, когда и 2 строк мало.
+            content=ft.Text(lbl, size=11, weight=ft.FontWeight.BOLD, color=GLASS["text_secondary"],
+                            no_wrap=False, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS,
+                            tooltip="Сортировка"),
             width=width,
             padding=ft.padding.only(left=6, right=4),
             alignment=ft.alignment.center if center else ft.alignment.center_left,
@@ -698,9 +707,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             on_horizontal_drag_start=_ds,
             on_horizontal_drag_update=_du,
             on_horizontal_drag_end=_de,
+            # Раунд 17 (задача 3): хэндл на всю высоту двухстрочного заголовка.
             content=ft.Container(
                 width=10,
-                height=34,
+                height=50,
                 bgcolor="transparent",
                 border_radius=2,
             ),
@@ -731,7 +741,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Раунд 9 (БАГ 2): та же последовательность контролов, что и в строках —
         # [bar][ячейка][разделитель][ячейка][разделитель]... с одинаковым spacing,
         # поэтому вертикальные линии заголовка и строк стоят на одних X.
-        _hsep = ft.Container(width=1, height=30, bgcolor="#26ffffff")
+        # Раунд 17 (задача 3): разделители выше под двухстрочный заголовок.
+        _hsep = ft.Container(width=1, height=42, bgcolor="#26ffffff")
         controls = [
             ft.Container(width=_W["bar"]),
             _header_cell("№", _W["num"], "num", center=True),
@@ -1088,9 +1099,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _mk_mode_btn(mode: str, label: str, icon) -> ft.Container:
         sel = state["mode"] == mode
+        # Раунд 17 (задача 2): кнопки ужаты (шрифт 11, иконка 12, padding 8).
         btn = ft.Container(
-            content=ft.Row(controls=[ft.Icon(icon, size=14, color="#ffffff" if sel else GLASS["text_secondary"]), ft.Text(label, size=12, weight=ft.FontWeight.W_600, color="#ffffff" if sel else GLASS["text_secondary"], no_wrap=True)], spacing=5, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            height=30, padding=ft.padding.symmetric(horizontal=12), border_radius=8, alignment=ft.alignment.center,
+            content=ft.Row(controls=[ft.Icon(icon, size=12, color="#ffffff" if sel else GLASS["text_secondary"]), ft.Text(label, size=11, weight=ft.FontWeight.W_600, color="#ffffff" if sel else GLASS["text_secondary"], no_wrap=True)], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            height=30, padding=ft.padding.symmetric(horizontal=8), border_radius=8, alignment=ft.alignment.center,
             bgcolor=GLASS["accent"] if sel else GLASS["surface"], border=None if sel else ft.border.all(1, GLASS["border"]), ink=True,
             on_click=lambda e, m=mode: _set_mode(m),
         )
@@ -1099,22 +1111,25 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     mode_row = ft.Container(
         content=ft.Row(controls=[_mk_mode_btn("active", "Активные", ft.icons.PLAYLIST_PLAY), _mk_mode_btn("archive", "Архив", ft.icons.ARCHIVE_OUTLINED)], spacing=4, tight=True),
-        height=38, bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border"]), border_radius=10, padding=ft.padding.symmetric(horizontal=3, vertical=3),
+        height=36, bgcolor=GLASS["surface"], border=ft.border.all(1, GLASS["border"]), border_radius=10, padding=ft.padding.symmetric(horizontal=3, vertical=3),
     )
 
     # Filters
-    search_field = _glass_textfield(hint="Поиск по содержанию, номеру…", width=320, expand=True)
+    # Раунд 17 (задача 2): обе строки фильтров объединены в ОДНУ — ширины полей
+    # ужаты (статус 160->132, тип 140->116, ФИО 190->140, поиск фикс 240 вместо
+    # expand, т.к. строка горизонтально скроллится — expand в ней невозможен).
+    search_field = _glass_textfield(hint="Поиск по содержанию, номеру…", width=240)
     search_field.prefix_icon = ft.icons.SEARCH
     def _on_search(e=None):
         state["search"] = search_field.value or ""
         _apply_filters()
     search_field.on_change = _on_search
 
-    status_filter_dd = _glass_dropdown("Все статусы", 160, [ft.dropdown.Option("all", "Все статусы"), ft.dropdown.Option(OVERDUE, "Просрочено"), ft.dropdown.Option(TODAY, "Сегодня"), ft.dropdown.Option(SOON, "Скоро"), ft.dropdown.Option(IN_PROGRESS, "В работе"), ft.dropdown.Option(DONE, "Исполнено"), ft.dropdown.Option(COMPLETED, "Завершён")])
-    type_filter_dd = _glass_dropdown("Все типы", 140, [ft.dropdown.Option("all", "Все типы"), ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")])
-    initiator_filter_dd = _glass_dropdown("Все инициаторы", 190, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators, settings)])
-    executor_filter_dd = _glass_dropdown("Все исполнители", 190, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
-    controller_filter_dd = _glass_dropdown("Все контролеры", 190, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
+    status_filter_dd = _glass_dropdown("Все статусы", 132, [ft.dropdown.Option("all", "Все статусы"), ft.dropdown.Option(OVERDUE, "Просрочено"), ft.dropdown.Option(TODAY, "Сегодня"), ft.dropdown.Option(SOON, "Скоро"), ft.dropdown.Option(IN_PROGRESS, "В работе"), ft.dropdown.Option(DONE, "Исполнено"), ft.dropdown.Option(COMPLETED, "Завершён")])
+    type_filter_dd = _glass_dropdown("Все типы", 116, [ft.dropdown.Option("all", "Все типы"), ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")])
+    initiator_filter_dd = _glass_dropdown("Все инициаторы", 140, [ft.dropdown.Option("all", "Все инициаторы")] + [ft.dropdown.Option(i) for i in initiator_filter_options(initiators, settings)])
+    executor_filter_dd = _glass_dropdown("Все исполнители", 140, [ft.dropdown.Option("all", "Все исполнители")] + [ft.dropdown.Option(n, short_name(n)) for n in executor_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
+    controller_filter_dd = _glass_dropdown("Все контролеры", 140, [ft.dropdown.Option("all", "Все контролеры")] + [ft.dropdown.Option(n, short_name(n)) for n in controller_canonical] + [ft.dropdown.Option(FILTER_OTHER, "Прочие")])
 
     def _on_filter_change(e=None):
         state["f_status"] = status_filter_dd.value or "all"
@@ -1134,11 +1149,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     # ── Filter dates — shared calendar overlay at tab level (Bug 6 & 7 fix) ──
     # Simple date fields with clear inside, open shared calendar (no clipping)
-    filter_from_text = ft.Text("С: —", size=12, color=GLASS["text_secondary"], no_wrap=True)
-    filter_to_text = ft.Text("По: —", size=12, color=GLASS["text_secondary"], no_wrap=True)
+    # Раунд 17 (задача 2): даты ужаты под общую строку фильтров — шрифт 11,
+    # крестик 18 px.
+    filter_from_text = ft.Text("С: —", size=11, color=GLASS["text_secondary"], no_wrap=True)
+    filter_to_text = ft.Text("По: —", size=11, color=GLASS["text_secondary"], no_wrap=True)
 
-    filter_from_clear = ft.IconButton(icon=ft.icons.CLEAR, icon_size=14, icon_color=GLASS["text_muted"], width=22, height=22, padding=0, visible=False, tooltip="Очистить")
-    filter_to_clear = ft.IconButton(icon=ft.icons.CLEAR, icon_size=14, icon_color=GLASS["text_muted"], width=22, height=22, padding=0, visible=False, tooltip="Очистить")
+    filter_from_clear = ft.IconButton(icon=ft.icons.CLEAR, icon_size=12, icon_color=GLASS["text_muted"], width=18, height=18, padding=0, visible=False, tooltip="Очистить")
+    filter_to_clear = ft.IconButton(icon=ft.icons.CLEAR, icon_size=12, icon_color=GLASS["text_muted"], width=18, height=18, padding=0, visible=False, tooltip="Очистить")
 
     def _update_filter_from_display():
         iso = state["f_from"]
@@ -1345,28 +1362,42 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     _rebuild_filter_cal()
 
     # Filter date field containers with clear inside (Bug 7)
+    # Раунд 17 (задача 2): 120 -> 118 px, иконка-календарь убрана (клик по всему
+    # полю открывает общий календарь — иконка была декоративной).
     filter_from_container = ft.Container(
-        content=ft.Row(controls=[filter_from_text, filter_from_clear, ft.Icon(ft.icons.CALENDAR_MONTH, size=16, color=GLASS["text_secondary"])], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        width=120, height=38, bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]), border_radius=10,
-        padding=ft.padding.symmetric(horizontal=10, vertical=6), alignment=ft.alignment.center_left,
+        content=ft.Row(controls=[filter_from_text, filter_from_clear], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        width=118, height=36, bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]), border_radius=10,
+        padding=ft.padding.symmetric(horizontal=8, vertical=6), alignment=ft.alignment.center_left,
         on_click=lambda e: _open_filter_cal(True, state["f_from"]),
     )
     filter_to_container = ft.Container(
-        content=ft.Row(controls=[filter_to_text, filter_to_clear, ft.Icon(ft.icons.CALENDAR_MONTH, size=16, color=GLASS["text_secondary"])], spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        width=120, height=38, bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]), border_radius=10,
-        padding=ft.padding.symmetric(horizontal=10, vertical=6), alignment=ft.alignment.center_left,
+        content=ft.Row(controls=[filter_to_text, filter_to_clear], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        width=118, height=36, bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]), border_radius=10,
+        padding=ft.padding.symmetric(horizontal=8, vertical=6), alignment=ft.alignment.center_left,
         on_click=lambda e: _open_filter_cal(False, state["f_to"]),
     )
     filter_from_clear.on_click = _clear_from
     filter_to_clear.on_click = _clear_to
 
-    filter_row1 = glass_panel(
-        content=ft.Row(controls=[search_field, status_filter_dd, type_filter_dd, ft.Container(expand=True), mode_row], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        height=52, radius=12, padding=ft.padding.symmetric(horizontal=12, vertical=8),
-    )
-    # Bug 7: крестики очистки встроены внутрь поля даты (suffix), убрать отдельные кнопки из ряда
-    filter_row2 = glass_panel(
-        content=ft.Row(controls=[initiator_filter_dd, executor_filter_dd, controller_filter_dd, filter_from_container, filter_to_container, ft.Container(expand=True), ft.TextButton("Сброс", on_click=_reset_filters, style=ft.ButtonStyle(color=GLASS["accent"]))], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+    # Раунд 17 (задача 2): filter_row1 + filter_row2 ОБЪЕДИНЕНЫ в одну строку
+    # filter_row — экономия ~60 px по вертикали для таблицы. Компоновка: слева
+    # поиск, компактные выпадающие фильтры (статус/тип/инициатор/исполнитель/
+    # контролёр), даты «С:»/«По:», «Сброс» и переключатель «Активные/Архив»
+    # справа. Row scroll=AUTO: при окнах уже ~1450 px строка плавно прокручивается
+    # горизонтально вместо RenderFlex overflow (окно по умолчанию 1280, min 900).
+    # Bug 7: крестики очистки встроены внутрь поля даты (suffix).
+    filter_row = glass_panel(
+        content=ft.Row(
+            controls=[search_field, status_filter_dd, type_filter_dd,
+                      initiator_filter_dd, executor_filter_dd, controller_filter_dd,
+                      filter_from_container, filter_to_container,
+                      ft.IconButton(icon=ft.icons.FILTER_ALT_OFF_OUTLINED, icon_size=18,
+                                    icon_color=GLASS["accent"], tooltip="Сбросить фильтры",
+                                    width=30, height=30, padding=0, on_click=_reset_filters),
+                      mode_row],
+            spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            scroll=ft.ScrollMode.AUTO,
+        ),
         height=52, radius=12, padding=ft.padding.symmetric(horizontal=12, vertical=8),
     )
 
@@ -2860,17 +2891,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             # секции НЕ скроллится и её высота ограничена refs_card (паттерн
             # «bounded column + scroll inside»), запрет AGENTS §15.11 касается
             # expand ВНУТРИ Column(scroll=AUTO).
-            # Раунд 16 (задачи 2–3): кастомный on_scroll/_make_row_scroller УБРАН —
-            # в Flet 0.23.2 это давало KeyError 'sd'/'dir' (баг OnScrollEvent,
-            # признан апстримом, чинится только апгрейдом Flet). Скролл — чисто
-            # нативный. scroll=ADAPTIVE: клиент (scrollable_control.dart) оборачивает
-            # в Scrollbar с thumbVisibility=true на десктопе — ВИДИМЫЙ бегунок.
-            # Шаг колеса — нативный (клиент 0.23.2 на Windows дополнительно прыгает
-            # +80 px через AdjustableScrollController — это зашито в клиенте,
-            # из Python не кастомизируется; точный шаг 1–2 строки недостижим
-            # без on_scroll, который и падал). ft.ListView не подошёл: в 0.23.2
-            # он не принимает scroll=..., без него Scrollbar не оборачивается вообще.
-            col = ft.Column(spacing=2, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+            # Раунд 17 (задача 1): scroll=ALWAYS вместо ADAPTIVE. В клиенте
+            # 0.23.2 (scrollable_control.dart) thumbVisibility вычисляется так:
+            #   always -> true БЕЗУСЛОВНО;
+            #   adaptive -> true только если !kIsWeb и платформа не iOS/Android
+            # (для adaptive есть ветка с false, поэтому на живом Windows-клиенте
+            # бегунок у пользователя не появился). ALWAYS гарантирует постоянный
+            # видимый бегунок. Цвет/толщина бегунка — через локальную
+            # ScrollbarTheme на refs_card (см. ниже): дефолтный thumb светлой
+            # page-темы не читается на тёмном фоне.
+            # Шаг колеса: клиент Windows жёстко добавляет +80 px к каждому жесту
+            # (AdjustableScrollController, adjustable_scroll_controller.dart) +
+            # нативная дельта движка (~60 px) — из Python не настраивается, а
+            # кастомный on_scroll с scroll_to в 0.23.2 падает с KeyError
+            # 'sd'/'dir' (раунд 16). Точное управление — перетаскивание бегунка
+            # (interactive=True в теме).
+            col = ft.Column(spacing=2, scroll=ft.ScrollMode.ALWAYS, expand=True)
             field = _glass_textfield(hint="Новое значение…", expand=True)
             field.height = 32
             edit_state = {"idx": None}
@@ -3054,6 +3090,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             clip_behavior=ft.ClipBehavior.HARD_EDGE,
             padding=ft.padding.all(16),
         )
+        # Раунд 17 (задача 1): ЛОКАЛЬНАЯ тема «Справочников» со ScrollbarTheme —
+        # тот же приём, что и hover_color таблицы в раунде 15 (клиент оборачивает
+        # контрол с .theme в Theme(...), theme.dart: parseScrollBarTheme читает
+        # thumb_color/thickness/radius/track_*). Дефолтный бегунок светлой
+        # page-темы незаметен на тёмном фоне — теперь яркий, толстый, с дорожкой
+        # и draggable (interactive=True): точная прокрутка — за бегунок.
+        _refs_scroll_theme = ft.Theme(use_material3=True)
+        _refs_scroll_theme.scrollbar_theme = ft.ScrollbarTheme(
+            thumb_visibility=True,
+            track_visibility=True,
+            interactive=True,
+            thumb_color="#66ffffff",
+            track_color="#14ffffff",
+            thickness=8,
+            radius=4,
+            cross_axis_margin=2,
+        )
+        refs_card.theme = _refs_scroll_theme
 
         def _refs_on_pan_update(e):
             try:
@@ -3318,13 +3372,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     title_row = glass_panel(content=title_content, height=60, radius=12, padding=ft.padding.symmetric(horizontal=16, vertical=8))
 
     # Main column
+    # Раунд 17 (задача 2): одна строка фильтров вместо двух.
     main_column = ft.Column(
         controls=[
             title_row,
             ft.Container(height=4),
-            filter_row1,
-            ft.Container(height=4),
-            filter_row2,
+            filter_row,
             ft.Container(height=8),
             counters_row,
             ft.Container(height=8),

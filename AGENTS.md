@@ -3094,7 +3094,8 @@ python tests/test_controls_smoke.py   # ALL OK (301 проверка)
 
 ## 48. Вкладка «Контроли» — раунд 17 (скролл справочников + компактный заголовок таблицы)
 
-**Дата:** 2026-08-11. **Статус:** задачи раунда 17 поставлены, работа не начата.
+**Дата:** 2026-08-11. **Статус:** раунд 17 выполнен (результаты — в §49);
+промпт исторический: `PROMPT_контроли_доработка17.md`.
 
 ### 48.1 Статус после раунда 16
 
@@ -3143,3 +3144,90 @@ python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab im
 python tests/test_controls_smoke.py   # ALL OK
 ```
 
+
+## 49. Вкладка «Контроли» — раунд 17 завершён (скролл справочников + одна строка фильтров + двухстрочный заголовок)
+
+**Дата:** 2026-08-11. **Статус:** выполнено, запушено в `arena/019fec02-porayonka`.
+
+### 49.1 Что сделано
+
+1. **Скролл в «Справочниках» — видимый бегунок (задача 1).**
+   - Списки: `Column(scroll=ADAPTIVE)` → `Column(scroll=ALWAYS)`. По исходнику
+     клиента Flet 0.23.2 (`scrollable_control.dart`): `thumbVisibility` у
+     `always` — `true` **безусловно**, а у `adaptive` — только если
+     `!kIsWeb && platform != iOS/Android` (есть ветка `false`; на живом
+     Windows-клиенте пользователя бегунок не появился — раунд 16 не помог).
+   - `refs_card` получил ЛОКАЛЬНУЮ тему `ft.Theme` со
+     `ScrollbarTheme(thumb_visibility=True, track_visibility=True,
+     interactive=True, thumb_color=#66ffffff, track_color=#14ffffff,
+     thickness=8, radius=4, cross_axis_margin=2)` — тот же механизм, что и
+     `hover_color` таблицы в раунде 15 (клиент оборачивает любой контрол с
+     `.theme` в `Theme(...)`, `theme.dart: parseScrollBarTheme` читает
+     `thumb_color/thickness/radius/track_*`). Дефолтный бегунок светлой
+     page-темы сливался с тёмным фоном. `interactive=True` — бегунок
+     перетаскивается мышью (точная прокрутка).
+   - `on_scroll` по-прежнему не подписан (KeyError `'sd'`/`'`dir'` раунда 16 не
+     возвращается).
+
+2. **Две строки фильтров объединены в одну `filter_row` (задача 2).**
+   - `filter_row1`/`filter_row2` удалены; `main_column`: title_row →
+     filter_row → counters_row → таблица. Освобождено ~60 px по вертикали.
+   - Компоновка: слева поиск (фикс. 240 — `expand` невозможен, т.к. строка
+     скроллится), компактные дропдауны (статус 132, тип 116, инициатор/
+     исполнитель/контролёр 140), даты «С:»/«По:» (118, без декоративной
+     иконки-календаря, шрифт 11, крестик 18), IconButton «Сбросить фильтры»
+     (FILTER_ALT_OFF_OUTLINED), переключатель «Активные/Архив» справа (ужат:
+     шрифт 11, иконка 12).
+   - `filter_row` — `Row(scroll=ScrollMode.AUTO)`: на окнах < ~1450 px
+     (умолчание окна 1280, min 900) строка плавно прокручивается горизонтально
+     вместо `RenderFlex overflow`; при 1568 px (окно пользователя) влезает
+     целиком без прокрутки.
+
+3. **`header_row` стал двухстрочным (задача 3).**
+   - Высота 34 → **50 px**; текст ячеек: `no_wrap=False, max_lines=2,
+     overflow=ELLIPSIS` (размер 11, BOLD — без изменений). «Содержание»,
+     «Исполнители», «Срок исполн.» переносятся и не обрезаются.
+   - Стрелка сортировки — суффикс текста (как раньше).
+   - Разделители 30 → 42 px; drag-хэндлы колонок — на всю высоту 50;
+     X-геометрия (порядок `[bar][ячейка][разделитель]...`, padding 6) и
+     drag-ресайз не тронуты.
+
+### 49.2 Шаг колеса — почему «1–2 строки» недостижимы в Flet 0.23.2
+
+Исследовано по исходникам клиента v0.23.2 (GitHub, тег `v0.23.2`):
+
+- `widgets/adjustable_scroll_controller.dart`: на Windows ЛЮБОЙ
+  `ScrollController` — `AdjustableScrollController(extraScrollSpeed=80)`,
+  жёстко добавляющий **+80 px** к каждому пользовательскому жесту прокрутки
+  поверх нативной дельты движка (~60 px/щелчок). Итого ~140+ px за щелчок —
+  это «почти страница» при строке ~30 px. Параметр зашит в клиенте, из Python
+  не настраивается.
+- Перехват колеса без побочек невозможен: `Column(on_scroll=...)` падает с
+  KeyError (раунд 16, `scroll_notification_control.dart` +
+  `flet_core/scrollable_control.py: OnScrollEvent`); `GestureDetector.on_scroll`
+  — это `Listener(behavior: translucent, onPointerSignal: ...)`
+  (`gesture_detector.dart`), который **не поглощает** событие: нативный
+  Scrollable под ним тоже получает колесо → двойная прокрутка + гонка с
+  `scroll_to`. Блокирующих примитивов (`AbsorbPointer/IgnorePointer`) в
+  Python-API 0.23.2 нет.
+- Принятое решение: `scroll=ALWAYS` + яркий draggable-бегунок (см. выше).
+  Точное позиционирование — перетаскиванием бегунка.
+
+### 49.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile ui/controls/controls_tab.py ui/controls/russian_calendar.py \
+  ui/controls/glass_theme.py ui/controls/control_card_modal.py \
+  ui/controls/controls_settings_modal.py main.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # ALL OK (316 проверок)
+```
+
+### 49.4 Сериализация ScrollbarTheme (0.23.2)
+
+`ft.Theme` — dataclass; поле `scrollbar_theme` сериализуется
+`EmbedJsonEncoder` в ключ `scrollbar_theme` JSON темы; клиентский
+`parseScrollBarTheme` (`theme.dart`) читает `thumb_visibility`,
+`track_visibility`, `thumb_color`, `track_color`, `thickness`, `radius`,
+`cross_axis_margin`, `interactive`. Проверено smoke-тестами (`refs17`).
