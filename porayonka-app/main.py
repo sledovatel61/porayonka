@@ -231,10 +231,15 @@ def main(page: ft.Page) -> None:
         )
 
     # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
+    # Раунд 21 (задача 8): порядок вкладок — «Контроли» (первая и по
+    # умолчанию), «Зональные», «Следственные отделы». Контейнеры сохраняют
+    # прежние имена (tab1 = отделы, tab2 = зональные, tab3 = контроли),
+    # ПОРЯДОК задаётся маппингом в _switch_tab/_mk_tab_btn — логика
+    # вкладок (polling, сохранение) не затронута.
     tab1_container = ft.Container(
         content=tab1_content,
         expand=True,
-        visible=True,
+        visible=False,
     )
     tab2_container = ft.Container(
         content=tab2_content,
@@ -244,7 +249,7 @@ def main(page: ft.Page) -> None:
     tab3_container = ft.Container(
         content=tab3_content,
         expand=True,
-        visible=False,
+        visible=True,
     )
     content_area = ft.Stack(
         controls=[tab1_container, tab2_container, tab3_container],
@@ -267,10 +272,12 @@ def main(page: ft.Page) -> None:
                 pass
 
     def _switch_tab(index: int):
+        # Раунд 21 (задача 8): индексы кнопок — НОВЫЙ порядок
+        # (0=Контроли, 1=Зональные, 2=Следственные отделы).
         active_tab["value"] = index
-        tab1_container.visible = (index == 0)
+        tab3_container.visible = (index == 0)
         tab2_container.visible = (index == 1)
-        tab3_container.visible = (index == 2)
+        tab1_container.visible = (index == 2)
         _restyle_tabs()
         try:
             content_area.update()
@@ -307,9 +314,10 @@ def main(page: ft.Page) -> None:
         return btn, ico
 
     active_tab = {"value": 0}
-    btn_tab1, icon_tab1 = _mk_tab_btn(0, "Следственные отделы", ft.icons.ACCOUNT_BALANCE_OUTLINED)
+    # Раунд 21 (задача 8): «Контроли» — первая и активная по умолчанию
+    btn_tab1, icon_tab1 = _mk_tab_btn(0, "Контроли", ft.icons.RULE_FOLDER)
     btn_tab2, icon_tab2 = _mk_tab_btn(1, "Зональные", ft.icons.MAP_OUTLINED)
-    btn_tab3, icon_tab3 = _mk_tab_btn(2, "Контроли", ft.icons.RULE_FOLDER)
+    btn_tab3, icon_tab3 = _mk_tab_btn(2, "Следственные отделы", ft.icons.ACCOUNT_BALANCE_OUTLINED)
 
     tab_bar = ft.Container(
         content=ft.Row(

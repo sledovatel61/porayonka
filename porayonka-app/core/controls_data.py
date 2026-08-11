@@ -279,11 +279,14 @@ def get_all_people_names(settings: Optional[dict] = None) -> List[str]:
     hidden = set()
     if settings:
         extra = list(settings.get("extra_people", []) or [])
-        hidden = {(h or "").strip().casefold() for h in (settings.get("hidden_people", []) or [])}
+        # Раунд 21 (задача 1): сравнение с нормализацией пробелов (`_person_norm`)
+        # — двойной пробел в записи hidden_people больше не даёт «вечную» скрытую
+        # запись, которую невозможно снять добавлением.
+        hidden = {_person_norm(h).casefold() for h in (settings.get("hidden_people", []) or [])}
     out = []
     seen = set()
     for n in get_criminalists_only() + list(DEFAULT_CONTROLLERS) + extra:
-        if (n or "").strip().casefold() in hidden:
+        if _person_norm(n).casefold() in hidden:
             continue
         surname = (n.strip().split()[0] if n.strip() else "").casefold()
         if not surname or surname in seen:
@@ -518,30 +521,44 @@ def remove_initiator(settings: dict, name: str) -> bool:
     return True
 
 
+def _person_norm(name: str) -> str:
+    """Нормализация ФИО для сравнений: схлопнуть множественные пробелы, trim."""
+    return " ".join((name or "").split())
+
+
 def add_extra_person(settings: dict, name: str) -> bool:
-    """Добавить ФИО в справочник людей (`extra_people`). True, если добавлено.
+    """Добавить ФИО в справочник людей (`extra_people`). True, если человек
+    появился в справочнике (добавлен в extra ИЛИ снято скрытие с базового).
 
     Раунд 20 (задача 4): добавление СНИМАЕТ скрытие (`hidden_people`) с того же
-    ФИО. Раньше сценарий «случайно удалил базового человека крестиком, пытаюсь
-    вернуть через "Добавить"» был ловушкой: запись падала в extra_people, но
-    get_all_people_names() фильтрует ВСЕ источники по hidden_people — человек
-    не появлялся ни в справочнике, ни в фильтрах («физически добавляешь, но в
-    списке не появляется», кейс «Гайнутдинов Станислав Игоревич» из ЛОГ.txt
-    11.08.2026)."""
-    name = (name or "").strip()
+    ФИО.
+    Раунд 21 (задача 1): скрытие снимается СНАЧАЛА — до проверки дубликата.
+    На машине пользователя сложилась пара «ФИО есть в extra_people И то же ФИО
+    в hidden_people» (добавление раундом 19, когда unhide ещё не было): dupe-
+    check возвращал False ДО снятия скрытия — восстановить «Гайнутдинова
+    Станислава Игоревича» через «Добавить» было невозможно («физически
+    добавляешь, но в списке не появляется»). Короткая форма «Гайнутдинов С.И.»
+    добавлялась — дубликата/скрытия для неё не было, что и подтвердило
+    механику. Плюс нормализация пробелов (`_person_norm`) в сравнениях —
+    случайный двойной пробел больше не обходит скрытие."""
+    name = _person_norm(name)
     if not name:
         return False
-    cur = list(settings.get("extra_people", []) or [])
-    if any(name.casefold() == x.strip().casefold() for x in cur):
-        return False
+    changed = False
     hidden = list(settings.get("hidden_people", []) or [])
-    nxt_hidden = [h for h in hidden if (h or "").strip().casefold() != name.casefold()]
+    nxt_hidden = [h for h in hidden if _person_norm(h).casefold() != name.casefold()]
     if len(nxt_hidden) != len(hidden):
         settings["hidden_people"] = nxt_hidden
-    cur.append(name)
-    settings["extra_people"] = cur
-    save_settings(settings)
-    return True
+        changed = True
+    cur = list(settings.get("extra_people", []) or [])
+    if not any(name.casefold() == _person_norm(x).casefold() for x in cur):
+        cur.append(name)
+        settings["extra_people"] = cur
+        changed = True
+    if changed:
+        save_settings(settings)
+        return True
+    return False
 
 
 def remove_extra_person(settings: dict, name: str) -> bool:

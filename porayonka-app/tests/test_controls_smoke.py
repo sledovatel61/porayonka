@@ -1082,8 +1082,9 @@ def main():
           wsx["A1"].fill.patternType == "solid" and wsx["A1"].fill.fgColor.rgb == "FF00B050")
     check("excel: шапка во 2-й строке (вх. № ВХСОП-____-__)",
           str(wsx["B2"].value).startswith("вх. № ВХСОП"))
-    check("excel: G2 — «За кем контроль (Потёмкин С.А. / Чащин Э.А.)»",
-          "Потёмкин С.А." in str(wsx["G2"].value))
+    # Раунд 21 (задача 6): заголовок без личных фамилий — просто «За кем контроль»
+    check("excel: G2 — «За кем контроль» (без фамилий в скобках)",
+          str(wsx["G2"].value) == "За кем контроль")
     check("excel: H2 — «Разовый / постоянный»", "Разовый / постоянный" in str(wsx["H2"].value))
     check("excel: автофильтр A2:J4 (от шапки до последней строки данных)",
           wsx.auto_filter.ref == "A2:J4", wsx.auto_filter.ref)
@@ -3098,6 +3099,240 @@ def main():
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
+
+    # ── 55. Раунд 21, задача 1: восстановление скрытого («Гайнутдинов») ──────
+    from core.controls_data import add_extra_person as _aep21b
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    # ловушка, сложившаяся у пользователя: ФИО одновременно в extra И в hidden
+    st55 = {"extra_people": ["Гайнутдинов Станислав Игоревич"],
+            "hidden_people": ["Гайнутдинов Станислав Игоревич"]}
+    names55 = get_all_people_names(st55)
+    check("refs21: пара extra+hidden — человек невидим до восстановления (ловушка)",
+          all("гайнутдинов" not in (n or "").casefold() for n in names55))
+    check("refs21: повторное добавление снимает скрытие (раньше — мёртвый False)",
+          _aep21b(st55, "Гайнутдинов Станислав Игоревич") is True)
+    check("refs21: hidden_people вычищен", st55.get("hidden_people") == [],
+          f"{st55.get('hidden_people')}")
+    check("refs21: человек виден в справочнике после восстановления",
+          any("гайнутдинов" in (n or "").casefold() for n in get_all_people_names(st55)))
+    check("refs21: видимый дубликат по-прежнему не добавляется",
+          _aep21b(st55, "гайнутдинов станислав игоревич") is False)
+    # скрытие, записанное с двойными пробелами, снимается нормальной строкой
+    st55c = {"extra_people": [], "hidden_people": ["Гайнутдинов  Станислав   Игоревич"]}
+    check("refs21: двойные пробелы в hidden нормализуются при фильтрации",
+          all("гайнутдинов" not in (n or "").casefold() for n in get_all_people_names(st55c)))
+    check("refs21: «кривое» скрытие снимается добавлением нормальной строки",
+          _aep21b(st55c, "Гайнутдинов Станислав Игоревич") is True
+          and st55c.get("hidden_people") == [])
+    check("refs21: человек виден и после «кривого» скрытия",
+          any("гайнутдинов" in (n or "").casefold() for n in get_all_people_names(st55c)))
+
+    # ── 56. Раунд 21, задача 3: inline-формат пунктов в содержании ──────────
+    from core.controls_models import parse_content_tasks as _pct21, resolve_task_assignees as _rta21
+    src56 = ("Распоряжение 8/216-р/17дсп п. 2 - Миронович 01.05.2026, п. 3 - Авахян 01.05.2026, "
+             "п. 5б Семисенко - 01.09.2026, п. 6 Семисенко, Чащин - 16.02.2026, "
+             "п. 7 Гайнутдинов - 01.04.2026, п. 8 - 30.07.2026")
+    clean56, tasks56 = _pct21(src56)
+    got56 = [(t.title, ",".join(t.assignees), t.due_date) for t in tasks56]
+    check("import21: inline-формат — 6 пунктов", len(tasks56) == 6, f"{len(tasks56)}")
+    check("import21: inline — номера/исполнители/сроки разобраны",
+          got56 == [("п. 2", "Миронович", "2026-05-01"),
+                    ("п. 3", "Авахян", "2026-05-01"),
+                    ("п. 5б", "Семисенко", "2026-09-01"),
+                    ("п. 6", "Семисенко,Чащин", "2026-02-16"),
+                    ("п. 7", "Гайнутдинов", "2026-04-01"),
+                    ("п. 8", "", "2026-07-30")], f"{got56}")
+    check("import21: inline — содержание очищено до реквизитов",
+          clean56 == "Распоряжение 8/216-р/17дсп", clean56)
+    clean56b, tasks56b = _pct21("Распоряжение 2/216-р от 15.01.2026 Чашин Э.А. п.3 к 05.05.2026, п. 5 к 05.09.2026")
+    check("import21: цепочный формат (раунд 20) не сломан",
+          clean56b == "Распоряжение 2/216-р от 15.01.2026"
+          and [t.title for t in tasks56b] == ["п. 3", "п. 5"]
+          and all(t.assignees == ["Чашин Э.А."] for t in tasks56b),
+          f"{clean56b} / {[(t.title, t.assignees) for t in tasks56b]}")
+    _rta21(tasks56, ["Миронович Д.В.", "Авахян А.А.", "Семисенко И.Ю.", "Чащин Э.А.", "Гайнутдинов С.И."])
+    check("import21: «голые» фамилии привязаны к известным ФИО",
+          tasks56[0].assignees == ["Миронович Д.В."]
+          and tasks56[3].assignees == ["Семисенко И.Ю.", "Чащин Э.А."]
+          and tasks56[4].assignees == ["Гайнутдинов С.И."],
+          f"{[t.assignees for t in tasks56]}")
+    check("import21: пункт без исполнителя резолвером не ломается",
+          tasks56[5].assignees == [] and tasks56[5].due_date == "2026-07-30")
+    _t56x = _pct21("Задание п. 1 - Иванов 01.09.2026")[1]
+    _rta21(_t56x, ["Иванов И.И.", "Иванов П.П."])
+    check("import21: неоднозначная фамилия (2 Ивановых) остаётся как есть",
+          bool(_t56x) and _t56x[0].assignees == ["Иванов"])
+
+    # ── 57. Раунд 21, задача 3: сквозной импорт inline-формата из .xlsx ─────
+    try:
+        from openpyxl import Workbook as _Wb21
+        wb57 = _Wb21()
+        ws57 = wb57.active
+        ws57.append(["КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ"])
+        ws57.append(list(TABLE_HEADERS))
+        ws57.append([3, "Иссоп-216-1017-26/дсп", "10.02.2026", "СУ", src56,
+                     "Чащин Э.А., Миронович Д.В., Авахян А.А., Семисенко И.Ю., Гайнутдинов С.И.",
+                     "Потемкин С.А.", "01.09.2026", "01.09.2026", ""])
+        p57 = os.path.join(tempfile.gettempdir(), "round21_import_test.xlsx")
+        wb57.save(p57)
+        parsed57, stats57 = import_from_excel(p57, [])
+        ok57 = len(parsed57) == 1 and len(parsed57[0].tasks) == 6
+        check("import21: импорт .xlsx раскидывает пункты по карточке", ok57,
+              f"tasks={len(parsed57[0].tasks) if parsed57 else 'нет'}")
+        if ok57:
+            ctl57 = parsed57[0]
+            check("import21: импорт — содержание без перечня пунктов",
+                  ctl57.content == "Распоряжение 8/216-р/17дсп", ctl57.content)
+            surnames57 = [(e or "").split()[0].casefold() for e in ctl57.executors if e]
+            check("import21: исполнители без дублей фамилий",
+                  len(surnames57) == len(set(surnames57)), f"{ctl57.executors}")
+            check("import21: «голые» фамилии подтянулись к колонке «Исполнитель»",
+                  any(t.title == "п. 2" and t.assignees == ["Миронович Д.В."] for t in ctl57.tasks),
+                  f"{[ (t.title, t.assignees) for t in ctl57.tasks][:2]}")
+            check("import21: п.6 сохранил двух исполнителей",
+                  any(t.title == "п. 6" and len(t.assignees) == 2 for t in ctl57.tasks))
+            check("import21: п.8 сохранён без исполнителя",
+                  any(t.title == "п. 8" and not t.assignees and t.due_date == "2026-07-30"
+                      for t in ctl57.tasks))
+    except Exception:
+        traceback.print_exc()
+        check("import21: сквозной импорт .xlsx без исключений", False)
+
+    # ── 58. Раунд 21, задача 3: пересборка пунктов не затирает черновик ─────
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("c21", "ТЕСТ-21")])
+    page, tab, _ = build(1280)
+    check("draft21: карточка (edit) открыта", _open_card(tab))
+    add58 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+             and "Добавить пункт" in (getattr(c, "text", None) or "")]
+    check("draft21: «Добавить пункт» найдена", len(add58) >= 1, f"{len(add58)}")
+    if add58:
+        add58[0].on_click(None)   # пункт 1
+        add58[0].on_click(None)   # пункт 2 — пересборка пункта 1
+        cols58 = find_card_columns(tab)
+        rc58 = cols58[1] if cols58 else None
+        tmultis58 = [m for m in walk(rc58) if hasattr(m, "_get_selected")] if rc58 is not None else []
+        check("draft21: два пункта = два мультивыбора ответственных",
+              len(tmultis58) == 2, f"{len(tmultis58)}")
+        if len(tmultis58) == 2:
+            cb58 = [x for x in walk(tmultis58[0]) if isinstance(x, ft.Checkbox)
+                    and getattr(x, "tooltip", None) == "Семисенко Иван Юрьевич"]
+            check("draft21: чекбокс исполнителя в п.1 найден", len(cb58) == 1, f"{len(cb58)}")
+            tf58c = [t for t in walk(rc58) if isinstance(t, ft.TextField)
+                     and getattr(t, "hint_text", None) == "Комментарий…"]
+            if cb58:
+                cb58[0].on_change(_types50.SimpleNamespace(
+                    control=_types50.SimpleNamespace(value=True)))
+            if tf58c:
+                tf58c[0].value = "черновой коммент п.1"
+            add58[0].on_click(None)   # пункт 3 — ПЕРЕСБОРКА: ловушка раунда 20
+            tmultis58b = [m for m in walk(rc58) if hasattr(m, "_get_selected")]
+            check("draft21: после добавления п.3 мультивыборов три", len(tmultis58b) == 3,
+                  f"{len(tmultis58b)}")
+            sel58 = tmultis58b[0]._get_selected() if tmultis58b else []
+            check("draft21: выбор ответственного п.1 НЕ затёрт пересборкой",
+                  "Семисенко Иван Юрьевич" in sel58, f"{sel58}")
+            tf58d = [t for t in walk(rc58) if isinstance(t, ft.TextField)
+                     and getattr(t, "hint_text", None) == "Комментарий…"]
+            check("draft21: комментарий п.1 НЕ затёрт пересборкой",
+                  bool(tf58d) and tf58d[0].value == "черновой коммент п.1",
+                  f"{tf58d[0].value if tf58d else 'нет поля'}")
+            # заголовки пунктов и сохранение
+            titles58 = [t for t in walk(rc58) if isinstance(t, ft.TextField)
+                        and getattr(t, "hint_text", None) == "Пункт (напр. п.1)"]
+            for i58, t58 in enumerate(titles58, 1):
+                t58.value = f"п. {i58}"
+            save58 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                      and getattr(c, "text", None) == "Сохранить"]
+            if save58:
+                save58[0].on_click(None)
+                hit58 = [c for c in load_controls() if c.incoming_number == "ТЕСТ-21"]
+                ok58 = (hit58 and len(hit58[0].tasks) == 3
+                        and hit58[0].tasks[0].assignees == ["Семисенко Иван Юрьевич"]
+                        and hit58[0].tasks[0].comment == "черновой коммент п.1")
+                check("draft21: сохранение — 3 пункта, ответственный и коммент п.1 на месте",
+                      bool(ok58),
+                      f"{[(t.title, t.assignees, t.comment) for t in hit58[0].tasks] if hit58 else 'не найден'}")
+
+    # ── 59. Раунд 21, задача 3: в списке видны ВСЕ пункты со сроками ────────
+    _seed_raw([_ctrl("c21b", "ТЕСТ-21Б", tasks=[
+        {"id": f"t{i}", "title": f"п. {i}", "assignees": [a], "due_date": d,
+         "is_done": False, "done_date": None, "comment": ""}
+        for i, (a, d) in enumerate([("Гайнутдинов С.И.", "2026-08-31"),
+                                    ("Бережной К.Н.", "2026-08-31"),
+                                    ("Грубников Г.Г.", "2026-08-28")], 1)])])
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    page, tab, _ = build(1280)
+    texts59 = [t for t in walk(tab) if isinstance(t, ft.Text)
+               and "контроль ТЕСТ-21Б" in (t.value or "") and "п. 3" in (t.value or "")]
+    check("content21: ячейка содержания со всеми пунктами найдена", len(texts59) >= 1,
+          f"{len(texts59)}")
+    if texts59:
+        check("content21: текст ячейки — заголовок + все 3 пункта (исполнители и сроки)",
+              "п. 1 — Гайнутдинов С.И. — 31.08.2026" in texts59[0].value
+              and "п. 2 — Бережной К.Н. — 31.08.2026" in texts59[0].value
+              and "п. 3 — Грубников Г.Г. — 28.08.2026" in texts59[0].value,
+              (texts59[0].value or "")[:120])
+        check("content21: max_lines покрывает все строки (равно числу строк)",
+              (texts59[0].max_lines or 0) >= 4, f"max_lines={texts59[0].max_lines}")
+
+    # ── 60. Раунд 21, задача 5: антидубль прикрепления файлов ───────────────
+    from ui.controls.controls_tab import _attach_event_is_duplicate, _filter_new_attach_files
+    st60 = {}
+    sig60 = ("/tmp/a.png",)
+    check("attach21: первое событие выбора — не дубль",
+          _attach_event_is_duplicate(st60, sig60, now=100.0) is False)
+    check("attach21: тот же набор сразу — дубль (кейс ×13)",
+          _attach_event_is_duplicate(st60, sig60, now=100.5) is True)
+    check("attach21: тот же набор после окна 3 с — не дубль",
+          _attach_event_is_duplicate(st60, sig60, now=104.5) is False)
+    check("attach21: другой набор — не дубль",
+          _attach_event_is_duplicate(st60, ("/tmp/b.png",), now=104.6) is False)
+    _f60a = _types50.SimpleNamespace(path="C:\\scans\\фото.png")
+    _f60b = _types50.SimpleNamespace(path="/x/уже есть.png")
+    _f60c = _types50.SimpleNamespace(path="D:\\другое\\фото.png")
+    fresh60, skipped60 = _filter_new_attach_files([_f60a, _f60b, _f60c], {"уже есть.png"})
+    check("attach21: фильтр имён — остаётся один новый файл",
+          len(fresh60) == 1 and fresh60[0] is _f60a and skipped60 == 2,
+          f"{len(fresh60)}/{skipped60}")
+
+    # ── 61. Раунд 21, задачи 6-9: заголовок, полугодие, вкладки, лог ────────
+    check("hdr21: TABLE_HEADERS[6] — «За кем контроль» (без фамилий в скобках)",
+          TABLE_HEADERS[6] == "За кем контроль", TABLE_HEADERS[6])
+    from ui.controls.controls_tab import _PERIOD_LABELS as _PL21, _period_key as _PK21
+    from core.controls_exporter import parse_periodicity as _pp21, _period_label as _plbl21
+    check("period21: «Каждое полугодие» в опциях периодичности (182 дня)",
+          ("semiannual", "Каждое полугодие", 182) in _PL21)
+    check("period21: _period_key(182) = semiannual", _PK21(182) == "semiannual")
+    check("period21: импорт «каждое полугодие» → periodic/182",
+          _pp21("каждое полугодие") == ("periodic", 182), f"{_pp21('каждое полугодие')}")
+    check("period21: подпись 182 дней — «каждые полгода»",
+          _plbl21(182) == "каждые полгода", _plbl21(182))
+    main21 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
+    src_main21 = open(main21, encoding="utf-8").read()
+    check("tabs21: вкладка индекса 0 — «Контроли»",
+          '_mk_tab_btn(0, "Контроли"' in src_main21)
+    check("tabs21: «Следственные отделы» — третья вкладка",
+          '_mk_tab_btn(2, "Следственные отделы"' in src_main21)
+    check("tabs21: контроли видимы по умолчанию (остальные скрыты)",
+          "tab3_container.visible = (index == 0)" in src_main21
+          and "tab1_container.visible = (index == 2)" in src_main21)
+    from core import zonal_data as _zd21
+    _zd21._CRIM_LOAD_LOGGED["done"] = False
+    buf61 = io.StringIO()
+    with contextlib.redirect_stdout(buf61):
+        _zd21.load_criminalists()
+        _zd21.load_criminalists()
+        _zd21.load_criminalists()
+    out61 = buf61.getvalue()
+    check("log21: «Zagruzheno kriminalistov» — одна строка за процесс, не спам",
+          out61.count("kriminalistov") <= 1, f"{len(out61.splitlines())} строк(и)")
 
     print()
     if FAILURES:

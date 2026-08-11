@@ -299,17 +299,28 @@ def clear_zonal_submissions() -> None:
 # КРИМИНАЛИСТЫ (РАЗДЕЛЁННОЕ ХРАНЕНИЕ)
 # ────────────────────────────────────────────────────────────
 
+# Раунд 21 (задача 9): load_criminalists() вызывается на КАЖДОЕ чтение
+# справочника людей (фильтры, карточки, опции), и лог «Zagruzheno
+# kriminalistov: 16» спамил десятки строк на сеанс. Печатаем его ОДИН раз за
+# процесс; ошибки печатаются всегда (они важны).
+_CRIM_LOAD_LOGGED = {"done": False}
+
+
 def load_criminalists() -> List[Criminalist]:
     """Загрузить список криминалистов (из файла или дефолтный)"""
     filepath = get_criminalists_file()
     if not filepath.exists():
-        print("[ZONAL_DATA] Fayl kriminalistov ne nayden, ispolzuem defoltnyy")
+        if not _CRIM_LOAD_LOGGED["done"]:
+            print("[ZONAL_DATA] Fayl kriminalistov ne nayden, ispolzuem defoltnyy")
+            _CRIM_LOAD_LOGGED["done"] = True
         return get_initial_criminalists()
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
         criminalists = [_criminalist_from_dict(c) for c in data.get("criminalists", [])]
-        print(f"[ZONAL_DATA] Zagruzheno kriminalistov: {len(criminalists)}")
+        if not _CRIM_LOAD_LOGGED["done"]:
+            print(f"[ZONAL_DATA] Zagruzheno kriminalistov: {len(criminalists)}")
+            _CRIM_LOAD_LOGGED["done"] = True
         return criminalists if criminalists else get_initial_criminalists()
     except Exception as e:
         print(f"[ZONAL_DATA] Oshibka zagruzki kriminalistov: {e}")

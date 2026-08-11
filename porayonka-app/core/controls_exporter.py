@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple
 from .controls_models import (
     Control, ControlTask, ControlMilestone, ONE_TIME, PERIODIC,
     effective_due_date, deadline_status, parse_date, short_name,
-    parse_content_tasks,
+    parse_content_tasks, resolve_task_assignees,
     OVERDUE, TODAY, SOON, COMPLETED,
 )
 
@@ -27,7 +27,10 @@ TABLE_HEADERS = [
     "Инициатор",
     "Содержание (если один из нескольких пунктов - указать пункт)",
     "Исполнитель (ФИО)",
-    "За кем контроль (Потёмкин С.А. / Чащин Э.А.)",
+    # Раунд 21 (задача 6): личные фамилии из подзаголовка убраны — просто
+    # «За кем контроль» (запрос пользователя; импорт матчит колонку по
+    # подстроке «контроль», поэтому старые файлы читаются как раньше).
+    "За кем контроль",
     "Разовый / постоянный",
     "Следующая дата исполнения",
     "Исполнено + дата",
@@ -67,8 +70,9 @@ def _months_plural(n: int) -> str:
 
 def _period_label(days: int) -> str:
     """Человекочитаемая периодичность: «еженедельно», «каждые 3 месяца»..."""
+    # Раунд 21 (задача 7): полугодовая периодичность (182 дня) — «каждые полгода».
     labels = {1: "ежедневно", 7: "еженедельно", 30: "ежемесячно",
-              91: "ежеквартально", 365: "ежегодно"}
+              91: "ежеквартально", 182: "каждые полгода", 365: "ежегодно"}
     if days in labels:
         return labels[days]
     if days > 0 and days % 30 == 0:
@@ -295,6 +299,8 @@ def parse_periodicity(text: str) -> Tuple[str, int]:
     if not t or t in ("разовый", "рази"):
         return ONE_TIME, 0
     rules = [
+        # Раунд 21 (задача 7): «каждое полугодие» / «раз в полгода» (182 дн).
+        (lambda s: "полугод" in s or "полгода" in s, PERIODIC, 182),
         (lambda s: "ежегод" in s, PERIODIC, 365),
         (lambda s: "ежемес" in s, PERIODIC, 30),
         (lambda s: "ежекварт" in s, PERIODIC, 91),
@@ -472,12 +478,29 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
     # содержания — в ПУНКТЫ карточки (ControlTask со сроком и ответственным),
     # а не мёртвым текстом (пример — строка 41 эталона). Ответственные пунктов
     # добавляются в исполнители контроля, если их нет в колонке «Исполнитель».
+    # Раунд 21 (задача 3): поддержан INLINE-формат («п. 2 - Миронович
+    # 01.05.2026», несколько фамилий через запятую, пункт без исполнителя —
+    # см. parse_content_tasks); «голые» фамилии привязываются к известным ФИО
+    # (колонка «Исполнитель» + справочник людей) — иначе в исполнителях
+    # плодились дубли «Миронович» / «Миронович Д.В.».
     content_tasks: List[ControlTask] = []
     try:
         content, content_tasks = parse_content_tasks(content)
     except Exception:
         content_tasks = []
     executors = split_executors(_get(5))
+    if content_tasks:
+        # Привязка «голых» фамилий ДВУМЯ проходами: сначала по колонке
+        # «Исполнитель» (её форма канонична для строки — «Миронович Д.В.»),
+        # иначе справочник даёт неоднозначность «Миронович Д.В.» vs «Миронович
+        # Дмитрий Владимирович» и фамилия остаётся голой (дубли в исполнителях).
+        # Остаток (нет в колонке) — по справочнику людей.
+        resolve_task_assignees(content_tasks, executors)
+        try:
+            from .controls_data import load_settings, get_all_people_names
+            resolve_task_assignees(content_tasks, list(get_all_people_names(load_settings())))
+        except Exception:
+            pass
     for _t in content_tasks:
         for _a in _t.assignees:
             if _a and not any((_e or "").strip().casefold() == _a.casefold() for _e in executors):

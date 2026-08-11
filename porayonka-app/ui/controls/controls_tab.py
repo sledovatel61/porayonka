@@ -173,6 +173,9 @@ _PERIOD_LABELS = [
     ("weekly", "Еженедельно", 7),
     ("monthly", "Ежемесячно", 30),
     ("quarterly", "Ежеквартально", 91),
+    # Раунд 21 (задача 7): «Каждое полугодие» — по скрину пользователя
+    # («Нужно добавить каждое полугодие.png», выпадающий список периодичности).
+    ("semiannual", "Каждое полугодие", 182),
     ("yearly", "Ежегодно", 365),
     ("custom", "Свой интервал", 0),
 ]
@@ -212,6 +215,48 @@ def _ensure_file_picker(page: ft.Page, attr: str, on_result):
         except Exception:
             traceback.print_exc()
     return getattr(page, attr)
+
+
+def _attach_event_is_duplicate(state: dict, sig: tuple, now=None, window: float = 3.0) -> bool:
+    """Раунд 21 (задача 5): детект ПОВТОРНОГО result-события FilePicker.
+
+    Клиент Flet 0.23.2 на Windows присылает одно и то же событие выбора файла
+    несколько раз подряд (у пользователя одно фото прикреплялось 13 раз за
+    один клик; повтор после удаления — снова ×13). Повторы прилетают пачкой
+    сразу — поэтому событие с ТЕМ ЖЕ набором файлов (подпись `sig`) внутри
+    окна `window` секунд считается дублем и игнорируется. Осознанный повторный
+    выбор того же файла спустя секунды не блокируется окном (его отсекает
+    проверка имени файла на стороне вызывающего кода — см. _on_attach_picked).
+    Возвращает True, если событие — дубль; подпись запоминается в
+    state["last_attach_sig"].
+    """
+    if now is None:
+        now = time.monotonic()
+    last = state.get("last_attach_sig")
+    state["last_attach_sig"] = (sig, now)
+    return bool(last and last[0] == sig and (now - last[1]) < window)
+
+
+def _filter_new_attach_files(files, existing_names):
+    """Раунд 21 (задача 5): отобрать из события FilePicker только файлы, чьего
+    ИМЕНИ ещё нет среди вложений — и внутри самого события (дубли имени в
+    одном выборе оставляют один). Без этого повторное событие копировало тот
+    же файл как name_1, name_2, ... — «13 одинаковых фотографий».
+    Возвращает (новые_файлы, число_пропущенных).
+    """
+    fresh, skipped = [], 0
+    seen = set(existing_names or set())
+    for fobj in files or []:
+        fpath = getattr(fobj, "path", None)
+        if not fpath:
+            continue
+        base = str(fpath).replace("\\", "/").split("/")[-1]
+        if base in seen:
+            skipped += 1
+            continue
+        seen.add(base)
+        fresh.append(fobj)
+    return fresh, skipped
 
 def _glass_textfield(value="", hint="", width=None, expand=False, multiline=False, min_lines=1, max_lines=4, read_only=False, dense=True):
     return ft.TextField(
@@ -310,6 +355,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         "known_ids": set(),              # снимок id для персональных уведомлений (задача 2)
         "my_status_map": {},             # id -> deadline_status для моих контролей (задача 2)
         "known_attachments": {},         # id -> tuple(attachments) для синка вложений (задача 5)
+        "last_attach_sig": None,         # раунд 21 (задача 5): антидубль result-события FilePicker
         "card_w": int(settings.get("card_width", 0) or 920),
         "card_h": int(settings.get("card_height", 0) or 780),
         # Раунд 16 (задача 4): размеры окна справочников — из настроек (дефолт 680x560)
@@ -912,7 +958,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         content_tooltip = content_text
 
         # Раунд 14 (задача 2): кегль возвращён к 12–13 (в раунде 13 было 11 — мелко)
-        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=2, color=GLASS["text"], size=13)]
+        # Раунд 21 (задача 3): в «Содержании» показываются ВСЕ пункты со всеми
+        # исполнителями и сроками, каждый с новой строки — max_lines = числу
+        # строк (раньше жёсткие 2 строки обрезали п.2/п.3 с многоточием; высота
+        # строки растёт под контент — так и задумано, см. промпт раунда 21).
+        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=max(2, len(content_lines)), color=GLASS["text"], size=13)]
         if ctl.attachments:
             content_controls.append(ft.Container(
                 content=ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=12, color=GLASS["accent"]), ft.Text(str(len(ctl.attachments)), size=10, color=GLASS["accent"], no_wrap=True)], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -2223,7 +2273,32 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Раунд 15 (задача 3): STRETCH — карточки пунктов на всю ширину секции.
         tasks_col = ft.Column(spacing=8, tight=True,
                               horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        def _harvest_task_drafts():
+            """Раунд 21 (задача 3): снять ЖИВЫЕ значения виджетов пунктов в
+            черновик detail_state перед любой пересборкой/сохранением.
+            Выбор «Отв. п. N» и введённый комментарий хранятся только в
+            контролах (selected-список мультивыбора / TextField), а черновик
+            t_ui["assignees"]/["comment"] остаётся старым. Пересборка
+            (_add_task/_remove_task) строила новые виджеты из УСТАРЕВШЕГО
+            черновика — и молча затирала выбранных ответственных: у пользователя
+            после сохранения исчезали исполнители п.1 и п.2, а п.3 (последний
+            добавленный, не пересобирался) выживал (ЛОГ/скрины 11.08.2026)."""
+            for ui in detail_state["tasks"]:
+                ac = ui.get("_ass_container")
+                if ac is not None and hasattr(ac, "_get_selected"):
+                    try:
+                        ui["assignees"] = list(ac._get_selected())
+                    except Exception:
+                        pass
+                cf = ui.get("comment_field")
+                if cf is not None:
+                    try:
+                        ui["comment"] = cf.value or ""
+                    except Exception:
+                        pass
+
         def _rebuild_task_cards():
+            _harvest_task_drafts()
             tasks_col.controls.clear()
             for idx, t_ui in enumerate(detail_state["tasks"]):
                 tasks_col.controls.append(_build_single_task_card(t_ui, idx))
@@ -2578,6 +2653,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             files = getattr(e, "files", None)
             if not files:
                 return
+            # Раунд 21 (задача 5): антидубль события FilePicker — клиент шлёт
+            # result несколько раз подряд («фото прикрепилось 13 раз.png»).
+            _sig = tuple(sorted(str(getattr(_f, "path", None) or getattr(_f, "name", "")) for _f in files))
+            if _attach_event_is_duplicate(state, _sig):
+                return
             # Раунд 13 (задача 5): у новой карточки control_id уже uuid (см.
             # _open_detail), но страховка на краевых случаях — генерируем, если
             # вдруг None/пусто. Иначе shared_dir / ... / None -> TypeError.
@@ -2587,6 +2667,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 detail_state["control_id"] = cid
             added = []
             failed = 0
+            # Раунд 21 (задача 5): файл с уже прикреплённым именем не копируем
+            # повторно — иначе повторные события/повторные выборы порождали бы
+            # name_1, name_2, ... (те самые «13 одинаковых фото»).
+            existing_names = {str(rel).split("/")[-1] for rel in detail_state["attachments"]}
+            files, skipped = _filter_new_attach_files(files, existing_names)
             for fobj in files:
                 try:
                     fpath = fobj.path
@@ -2594,6 +2679,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     continue
                 if not fpath:
                     continue
+                _base = str(fpath).replace("\\", "/").split("/")[-1]
                 try:
                     import os
                     sz = os.path.getsize(fpath) / (1024*1024)
@@ -2616,8 +2702,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if rel and rel not in detail_state["attachments"]:
                     detail_state["attachments"].append(rel)
                     added.append(rel)
+                    existing_names.add(_base)
                 elif not rel:
                     failed += 1
+            if not added and skipped and not failed:
+                # Раунд 21 (задача 5): все выбранные файлы уже прикреплены
+                from ui.toast import show_toast
+                show_toast(page, "Файл уже прикреплён", icon=ft.icons.ATTACH_FILE)
+                return
             if added:
                 # файлы видны сразу: перестроить список вложений
                 _rebuild_attach()

@@ -6,7 +6,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, date
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 ONE_TIME = "once"        # разовый
 PERIODIC = "periodic"    # постоянный / периодический
@@ -165,10 +165,28 @@ class ControlTask:
 # может быть двойной (через дефис).
 _PERSON_FULL_RE = r"[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ]\s*\.\s*[А-ЯЁ]\s*\.?"
 
+# «Голая фамилия» (без инициалов) — встречается в inline-формате
+# («п. 2 - Миронович 01.05.2026»).
+_PERSON_BARE_RE = re.compile(r"^[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?$")
+
 _CONTENT_TOKEN_RE = re.compile(
     r"(?P<name>" + _PERSON_FULL_RE + r")"
     r"|(?P<pmark>[пП]\s*\.\s*(?P<num>\d+(?:\s*\.\s*\d+)*)"
     r"(?:\s*к\s*(?P<date>\d{1,2}\s*\.\s*\d{1,2}\s*\.\s*\d{2,4}))?)"
+)
+
+# Раунд 21 (задача 3): маркер пункта. Номер — «9», «9.3», «5б», «5,6»
+# (произвольная цифро-точечная цепочка + опциональная СЛИТНАЯ буква —
+# буква через пробел запрещена, иначе «п.3 к 05.05.2026» съедало «к»,
+# а «п. 6 Семисенко» — «С» фамилии). Отрицательный просмотр — не съедать
+# начало даты («п. 8 - 30.07.2026»).
+_ITEM_MARK_RE = re.compile(
+    r"[пП]\s*\.\s*(?P<num>\d+(?:\s*[.,]\s*\d+)*[а-яА-ЯёЁa-zA-Z]?)(?![\d.])"
+)
+
+# Дата DD.MM.YYYY / DD.MM.YY (с пробелами вокруг точек, опц. «г.» хвостом).
+_CONTENT_DATE_RE = re.compile(
+    r"(?P<date>\d{1,2}\s*\.\s*\d{1,2}\s*\.\s*\d{2,4})\s*г?\.?"
 )
 
 
@@ -191,37 +209,88 @@ def _content_item_date(raw: str) -> Optional[str]:
     return None
 
 
-def parse_content_tasks(content: str) -> Tuple[str, List[ControlTask]]:
-    """Выделить из «Содержания» пункты «п. N к DD.MM.YYYY» с владельцами-ФИО.
+def _parse_item_persons(pre: str) -> List[str]:
+    """Извлечь ФИО/фамилии из текста между маркером пункта и датой.
 
-    Возвращает (очищенное содержание, список ControlTask). Если пунктов со
-    сроками нет — исходное содержание без изменений и пустой список.
-    Очищенное содержание = текст до начала региона пунктов + текст после
-    региона (напр. префикс «Распоряжение 2/216-р от 15.01.2026»).
+    Знает два формата: полные «Фамилия И.О.» и «голые» фамилии («Миронович»),
+    перечисленные через запятую/«и» («Семисенко, Чащин - 16.02.2026»).
+    Служебные токены («к», тире, мусор) отбрасываются.
+    """
+    out: List[str] = []
+    for chunk in re.split(r"[,;]|\s+и\s+", pre or ""):
+        tok = chunk.strip().strip("-–—:;.кК").strip()
+        if not tok:
+            continue
+        m = re.search(_PERSON_FULL_RE, tok)
+        if m:
+            out.append(_norm_person_name(m.group(0)))
+        elif _PERSON_BARE_RE.match(tok):
+            out.append(tok)
+    return out
+
+
+def parse_content_tasks(content: str) -> Tuple[str, List[ControlTask]]:
+    """Выделить из «Содержания» пункты со сроками в ControlTask.
+
+    Поддерживаются ОБА формата записи в исходной таблице (раунд 21, задача 3):
+      1) цепочка: «... Чашин Э.А. п.3 к 05.05.2026, п. 5 к 05.09.2026,
+         Миронович Д.В. п. 9.3 к 20.05.2026» — ФИО владеет цепочкой пунктов
+         до следующего ФИО («к <дата>» обязательна);
+      2) inline: «... п. 2 - Миронович 01.05.2026, п. 6 Семисенко, Чащин -
+         16.02.2026, п. 8 - 30.07.2026» — исполнители (в т.ч. голыми
+         фамилиями) внутри пункта, «к» необязательна; пункт может быть без
+         исполнителя (сохраняется со сроком, без ответственного).
+    Пункт БЕЗ даты в своём сегменте задачей не считается вовсе (иначе
+    «ОПК п. 1» и подобные порождали бы пустые пункты); если ни одного пункта
+    со сроком нет — содержание возвращается без изменений.
+    Возвращает (очищенное содержание, список ControlTask): очищенное
+    содержание = текст до начала региона пунктов + текст после региона.
     """
     text = (content or "").strip()
     if not text:
         return content, []
 
+    marks = list(_ITEM_MARK_RE.finditer(text))
+    if not marks:
+        return content, []
+
     tasks: List[ControlTask] = []
     consumed_spans: List[Tuple[int, int]] = []
-    cur_name: Optional[str] = None
-    cur_name_span: Optional[Tuple[int, int]] = None
+    chain_name: Optional[str] = None
+    chain_span: Optional[Tuple[int, int]] = None
+    prev_date_end: Optional[int] = None
 
-    for m in _CONTENT_TOKEN_RE.finditer(text):
-        if m.group("name"):
-            cur_name = _norm_person_name(m.group("name"))
-            cur_name_span = (m.start("name"), m.end("name"))
-            continue
-        iso = _content_item_date(m.group("date") or "")
-        if iso is None:
+    for i, m in enumerate(marks):
+        seg_start = m.end()
+        seg_end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        seg = text[seg_start:seg_end]
+        dm = _CONTENT_DATE_RE.search(seg)
+        if dm is None:
             continue  # пункт без срока — игнорируем (не трогаем содержание)
-        num = re.sub(r"\s*\.\s*", ".", m.group("num"))
-        assignees = [cur_name] if cur_name else []
-        if cur_name and cur_name_span:
-            consumed_spans.append(cur_name_span)
-        consumed_spans.append((m.start("pmark"), m.end()))
-        tasks.append(ControlTask(title=f"п. {num}", assignees=assignees, due_date=iso))
+        iso = _content_item_date(dm.group("date"))
+        if iso is None:
+            continue
+        num = re.sub(r"\s+", "", m.group("num")).replace(",", ".")
+        # inline-исполнители — текст сегмента до даты; «голые» фамилии тоже
+        names = _parse_item_persons(seg[:dm.start()])
+        if not names:
+            # цепочка: владелец — ближайшее ФИО ПОЛНОЙ формы в зазоре между
+            # предыдущей датой и этим маркером; «голая» фамилия владельцем
+            # цепочки не становится (она — inline-исполнитель своего пункта).
+            gap_start = prev_date_end if prev_date_end is not None else 0
+            gap = text[gap_start:m.start()]
+            fulls = list(re.finditer(_PERSON_FULL_RE, gap))
+            if fulls:
+                last = fulls[-1]
+                chain_name = _norm_person_name(last.group(0))
+                chain_span = (gap_start + last.start(), gap_start + last.end())
+            if chain_name:
+                names = [chain_name]
+                if chain_span:
+                    consumed_spans.append(chain_span)
+        consumed_spans.append((m.start(), seg_start + dm.end()))
+        prev_date_end = seg_start + dm.end()
+        tasks.append(ControlTask(title=f"п. {num}", assignees=names, due_date=iso))
 
     if not tasks:
         return content, []
@@ -233,6 +302,34 @@ def parse_content_tasks(content: str) -> Tuple[str, List[ControlTask]]:
     if not clean:
         clean = text  # страховка: пустое содержание хуже исходного
     return clean, tasks
+
+
+def resolve_task_assignees(tasks: List[ControlTask], known_names: List[str]) -> None:
+    """Раунд 21 (задача 3): привязать «голые фамилии» пунктов к известным ФИО.
+
+    Inline-формат содержания даёт фамилии без инициалов («Миронович»). Если
+    среди известных имён (колонка «Исполнитель» + справочник людей) ровно одно
+    с такой фамилией — подставляем его («Миронович Д.В.»), чтобы в карточке и в
+    списке исполнителей не плодились дубли «Миронович» / «Миронович Д.В.».
+    Формы с инициалами и неоднозначные совпадения не трогаем.
+    """
+    by_surname: Dict[str, set] = {}
+    for kn in known_names or []:
+        parts = (kn or "").split()
+        if not parts:
+            continue
+        by_surname.setdefault(parts[0].casefold(), set()).add(kn)
+    for t in tasks or []:
+        resolved: List[str] = []
+        for a in t.assignees:
+            parts = (a or "").split()
+            if len(parts) == 1 and _PERSON_BARE_RE.match(parts[0]):
+                cands = by_surname.get(parts[0].casefold())
+                if cands and len(cands) == 1:
+                    resolved.append(next(iter(cands)))
+                    continue
+            resolved.append(a)
+        t.assignees = resolved
 
 
 @dataclass
