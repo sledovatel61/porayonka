@@ -93,6 +93,22 @@
   * карточка: равномерная рамка border.all + radius 16 + HARD_EDGE (углы не
     прозрачные).
 
+Раунд 16 (PROMPT_контроли_доработка16.md):
+  * левая статусная полоса строки — строго 4 px, полная высота строки (Positioned
+    left=0/top=0/bottom=0 поверх Stack строки, клип HARD_EDGE по скруглению);
+    bar не ресайзабелен и НЕ сохраняется в col_widths; засевший в settings
+    bar>4 сбрасывается при старте (ключ вычищается из json); номер строки на
+    нейтральном фоне плашки;
+  * KeyError 'sd'/'dir': кастомный _make_row_scroller УДАЛЁН (баг OnScrollEvent
+    Flet 0.23.2 — клиент присылает нотификации без 'sd'/'dir'); списки
+    справочников — Column(scroll=ADAPTIVE, expand=True) БЕЗ on_scroll: нативный
+    скролл + постоянный видимый бегунок (thumbVisibility=true на десктопе,
+    scrollable_control.dart); ft.ListView в 0.23.2 не принимает scroll=...
+    (ScrollableControl не оборачивается) — поэтому бегунок невозможен с ListView;
+  * размеры карточки и «Справочников» запоминаются: card_width/card_height и
+    refs_width/refs_height в controls_settings.json; карточка при открытии
+    применяет сохранённые размеры БЕЗ обрезки до 780 (клампы как при drag).
+
 Раунд 15 (PROMPT_контроли_доработка15.md):
   * hover строк — НАТИВНЫЙ Flutter InkWell (ink=True на строке + локальная тема
     таблицы с hover_color #12ffffff), Python on_hover УДАЛЁН полностью: без
@@ -1208,6 +1224,23 @@ def main():
               int(st9.get("card_width") or 0) > 920, f"w={st9.get('card_width')}")
         check("card-resize: высота сохранена в настройки",
               int(st9.get("card_height") or 0) > 780, f"h={st9.get('card_height')}")
+        # Раунд 16 (задача 4): размеры ВОССТАНАВЛИВАЮТСЯ при переоткрытии
+        # (раньше высота резалась в max 780 на открытии — «не запоминается»).
+        saved_w = int(st9.get("card_width") or 0)
+        saved_h = int(st9.get("card_height") or 0)
+        close_btns = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                      and getattr(c, "icon", None) == ft.icons.CLOSE
+                      and not getattr(c, "tooltip", None)]
+        if close_btns:
+            close_btns[0].on_click(None)  # закрыть карточку
+            _open_card(tab, via_add=False)
+            cards = [c for c in walk(tab) if isinstance(c, ft.Container)
+                     and getattr(c, "bgcolor", None) == "#242a3e"]
+            check("card16: при переоткрытии размеры из settings применены",
+                  len(cards) >= 1 and cards[0].width == max(600, min(1216, saved_w))
+                  and cards[0].height == max(400, min(791, saved_h)),
+                  f"w={cards[0].width if cards else None} h={cards[0].height if cards else None}"
+                  f" saved={saved_w}x{saved_h}")
 
     # ── 27. Раунд 9, БАГ 2: разделители заголовка и строк выровнены ──
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
@@ -1406,6 +1439,14 @@ def main():
         tot += (row_.spacing or 0) * (len(ctrls) - 1)
         return tot + extra_padding
 
+    def _row_inner(row_):
+        # Раунд 16 (задача 1): контент плашки строки — Stack([паддинг-Container(Row
+        # колонок), Positioned-полоса статуса]). Возвращаем внутренний Row колонок.
+        st_ = row_.content
+        if isinstance(st_, ft.Stack):
+            return st_.controls[0].content
+        return st_
+
     page, tab, _ = build(1280)
     hdr = _header_row_of(tab)
     check("width13: заголовок таблицы найден", hdr is not None)
@@ -1415,7 +1456,7 @@ def main():
     rows_w = _visible_rows(tab)
     check("width13: строки есть", len(rows_w) >= 1)
     if rows_w:
-        tot_r = _row_total(rows_w[0].content, 12 + 2)  # padding 6*2 + рамка 2 (раунд 14)
+        tot_r = _row_total(_row_inner(rows_w[0]), 12 + 2)  # padding 6*2 + рамка 2 (раунд 14)
         check("width13: строка + отступы <= 1240 при 1280", tot_r <= 1240, f"sum={tot_r}")
     # Раунд 15 (задача 2): ЯВНАЯ ширина панели/строк — вся ширина контента вкладки
     # (1280-64=1216 панель, 1214 строка/заголовок). Иначе shrink-wrap -> пустота справа.
@@ -1452,7 +1493,7 @@ def main():
               tot_h2 <= 1240, f"sum={tot_h2}")
     rows_w2 = _visible_rows(tab)
     if rows_w2:
-        tot_r2 = _row_total(rows_w2[0].content, 14)
+        tot_r2 = _row_total(_row_inner(rows_w2[0]), 14)
         check("width13: строка с раздутыми col_widths <= 1240", tot_r2 <= 1240, f"sum={tot_r2}")
     # широкий экран: гибкие колонки РАСТЯГИВАЮТСЯ (кэпы 480/220 раунда 13 убраны —
     # они и давали пустое место справа), сумма ТОЧНО заполняет ширину окна
@@ -1496,17 +1537,22 @@ def main():
     dlg13 = _refs_overlay_of(tab)
     check("ref13: overlay справочников открыт", dlg13 is not None)
     # компактные строки: кнопки 26px, spacing списков 2
-    # Раунд 15 (задача 4): фикс-высоты 180 больше нет — списки expand=True и
-    # растут при растягивании окна; находим их по scroll=AUTO + on_scroll.
+    # Раунд 16 (задачи 2–3): списки — Column(scroll=ADAPTIVE, expand=True), БЕЗ
+    # кастомного on_scroll (нативный скролл, видимый бегунок, нет KeyError).
     ref_lists = [c for c in walk(dlg13) if isinstance(c, ft.Column)
-                 and getattr(c, "scroll", None) == ft.ScrollMode.AUTO
-                 and getattr(c, "on_scroll", None) is not None]
+                 and getattr(c, "scroll", None) == ft.ScrollMode.ADAPTIVE
+                 and (getattr(c, "expand", 0) or 0) > 0]
     check("ref13: списки компактные (spacing=2)",
           len(ref_lists) >= 2 and all(c.spacing == 2 for c in ref_lists),
           f"{[c.spacing for c in ref_lists]}")
     check("ref15: списки справочников expand=True (растут при resize)",
           len(ref_lists) >= 2 and all((c.expand or 0) > 0 for c in ref_lists)
           and all(getattr(c, "height", None) is None for c in ref_lists))
+    check("ref16: scroll=ADAPTIVE у списков (видимый бегунок на десктопе)",
+          len(ref_lists) >= 2)
+    check("ref16: у списков НЕТ подписки on_scroll (нет KeyError 'sd'/'dir')",
+          len(ref_lists) >= 2
+          and all(c._get_attr("onScroll") is None for c in ref_lists))
     ref_btns_small = [c for c in walk(dlg13) if isinstance(c, ft.IconButton)
                       and getattr(c, "tooltip", None) in ("Переименовать", "Удалить")]
     check("ref13: кнопки записей компактные (26px)",
@@ -1739,25 +1785,106 @@ def main():
             check("refs15: обе секции списков expand (растут при resize)",
                   len(sections15) >= 2, f"{len(sections15)} секций")
         lists14 = [c for c in walk(ovl14) if isinstance(c, ft.Column)
-                   and getattr(c, "scroll", None) == ft.ScrollMode.AUTO
-                   and getattr(c, "on_scroll", None) is not None]
-        check("refs14: у списков on_scroll (построчная прокрутка)",
-              len(lists14) >= 2 and all(getattr(c, "on_scroll", None) is not None for c in lists14),
+                   and getattr(c, "scroll", None) == ft.ScrollMode.ADAPTIVE
+                   and (getattr(c, "expand", 0) or 0) > 0]
+        # Раунд 16 (задачи 2–3): НИКАКОЙ подписки on_scroll — её наличие в Flet
+        # 0.23.2 включало ScrollNotificationControl, чьи нотификации без ключей
+        # 'sd'/'dir' роняли конвертер OnScrollEvent (KeyError десятками в логе).
+        check("refs16: у списков НЕТ on_scroll (нативный скролл, без KeyError)",
+              len(lists14) >= 2
+              and all(c._get_attr("onScroll") is None for c in lists14),
               f"{len(lists14)} списков")
+        check("refs16: scroll=ADAPTIVE — видимый бегунок (thumbVisibility=true)",
+              len(lists14) >= 2)
         check("refs15: списки expand=True (заполняют секцию при растягивании)",
               len(lists14) >= 2 and all((c.expand or 0) > 0 for c in lists14))
-        if lists14:
-            # щелчок колеса (delta=100) => шаг 2 строки (64 px): offset = 500-(100-64)
-            _invoke_event_handler(lists14[0].on_scroll,
-                                  type("E", (), {"delta": 100.0, "pixels": 500.0})())
-            last = getattr(lists14[0], "_row_scroll_last", None)
-            check("refs14: колесо прокручивает на 2 строки, а не на 100px",
-                  last == 464.0, f"last={last}")
-            # обратное направление: d=-100, px=400 => off = 400-(-100+64) = 436
-            _invoke_event_handler(lists14[1].on_scroll,
-                                  type("E", (), {"delta": -100.0, "pixels": 400.0})())
-            last2 = getattr(lists14[1], "_row_scroll_last", None)
-            check("refs14: колесо вверх — шаг 2 строки", last2 == 436.0, f"last2={last2}")
+        # Раунд 16 (задача 4): размеры окна справочников сохраняются в settings
+        # и применяются при переоткрытии.
+        if gds14 and stacks14:
+            _invoke_event_handler(gds14[0].on_pan_end, type("E", (), {})())
+            st_ref = load_settings()
+            check("refs16: refs_width сохранён в settings",
+                  int(st_ref.get("refs_width") or 0) == 680 + 60,
+                  f"w={st_ref.get('refs_width')}")
+            check("refs16: refs_height сохранён в settings",
+                  int(st_ref.get("refs_height") or 0) == 560 + 40,
+                  f"h={st_ref.get('refs_height')}")
+            # закрыть и переоткрыть — размеры должны восстановиться
+            apply16 = _refs_apply_of(ovl14)
+            if apply16:
+                apply16[0].on_click(None)
+            refb14b = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                       and getattr(c, "text", None) == "Справочники"]
+            refb14b[0].on_click(None)
+            ovl14b = _refs_overlay_of(tab)
+            stacks14b = [c for c in walk(ovl14b) if isinstance(c, ft.Stack)] if ovl14b else []
+            rcard_b = stacks14b[0].controls[0] if stacks14b else None
+            check("refs16: переоткрытое окно — размеры восстановлены из settings",
+                  rcard_b is not None and rcard_b.width == 740 and rcard_b.height == 600,
+                  f"w={getattr(rcard_b, 'width', None)} h={getattr(rcard_b, 'height', None)}")
+
+    # ── 39. Раунд 16, задача 1: левая статусная полоса — строго 4 px ──
+    # В settings cобран «битый» col_widths с bar=40 — причина «больших цветных
+    # блоков» на приёмке: общий кламп max(40, v) раздувал сохранённые 4 px.
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [],
+                   "col_widths": {"bar": 40, "num": 50, "incoming": 200}})
+    _seed_raw([_ctrl("b16", "Б-16", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+    st16 = load_settings()
+    check("bar16: устаревший ключ bar вычищен из col_widths при старте",
+          "bar" not in (st16.get("col_widths") or {}),
+          f"{st16.get('col_widths')}")
+    # заголовок: первый элемент — прозрачный спейсер полосы шириной 4
+    hdr16 = _header_row_of(tab)
+    check("bar16: заголовок найден", hdr16 is not None)
+    if hdr16:
+        spacer16 = hdr16.controls[0]
+        check("bar16: спейсер полосы в заголовке = 4 px (bar=40 из settings проигнорирован)",
+              getattr(spacer16, "width", None) == 4, f"w={getattr(spacer16, 'width', None)}")
+        check("bar16: спейсер без цвета (прозрачный)",
+              getattr(spacer16, "bgcolor", None) in (None, "transparent"))
+        check("bar16: остальные сохранённые ширины применены (num=50)",
+              getattr(hdr16.controls[1], "width", None) == 50,
+              f"w={getattr(hdr16.controls[1], 'width', None)}")
+    rows16 = _visible_rows(tab)
+    check("bar16: строки есть", len(rows16) >= 1)
+    if rows16:
+        stc16 = rows16[0].content
+        check("bar16: контент строки — Stack (полоса отдельным слоем)",
+              isinstance(stc16, ft.Stack))
+        if isinstance(stc16, ft.Stack) and len(stc16.controls) >= 2:
+            bar16 = stc16.controls[1]
+            check("bar16: полоса строго 4 px",
+                  getattr(bar16, "width", None) == 4, f"w={getattr(bar16, 'width', None)}")
+            check("bar16: полоса пришита к левому краю (left=0)",
+                  getattr(bar16, "left", None) == 0)
+            check("bar16: полоса на полную высоту (top=0/bottom=0)",
+                  getattr(bar16, "top", None) == 0 and getattr(bar16, "bottom", None) == 0)
+            check("bar16: полоса цветная по статусу (для Б-16 — in_progress)",
+                  getattr(bar16, "bgcolor", None) == GLASS["in_progress"],
+                  f"bg={getattr(bar16, 'bgcolor', None)}")
+            inner16 = stc16.controls[0]
+            row16 = getattr(inner16, "content", None)
+            numcell16 = row16.controls[1] if isinstance(row16, ft.Row) else None
+            check("bar16: номер строки на нейтральном фоне (без заливки)",
+                  numcell16 is not None
+                  and getattr(numcell16, "bgcolor", None) in (None, "transparent"))
+        # drag любой границы колонки — bar НЕ сохраняется в col_widths
+        def _gd_sub_h(g, attr):
+            eh = getattr(g, attr, None)
+            return len(getattr(eh, "_EventHandler__handlers", {})) if eh is not None else 0
+        drags16 = [c for c in walk(tab) if isinstance(c, ft.GestureDetector)
+                   and _gd_sub_h(c, "on_horizontal_drag_update") > 0]
+        if drags16:
+            _invoke_event_handler(drags16[0].on_horizontal_drag_update,
+                                  type("E", (), {"delta_x": 10})())
+            _invoke_event_handler(drags16[0].on_horizontal_drag_end, type("E", (), {})())
+            st16b = load_settings()
+            check("bar16: после drag колонок bar НЕ сохраняется в col_widths",
+                  "bar" not in (st16b.get("col_widths") or {}),
+                  f"{st16b.get('col_widths')}")
 
     print()
     if FAILURES:
