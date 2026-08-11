@@ -33,221 +33,34 @@
 [MAIN] [OK] Vkladka Zonalnye sozdana
 [MAIN] Создаю вкладку Контроли...
 [CONTROLS_TAB] Glass Dark v2 - init
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
 [CONTROLS_TAB] Glass Dark v2 ready
 [MAIN] [OK] Vkladka Kontroli sozdana
 [ZONAL_TAB] Resize: tiles_per_row -> 6 (w=1920.0)
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
-[ZONAL_DATA] Zagruzheno kriminalistov: 16
+log4cplus:ERROR No appenders could be found for logger (DSL).
+log4cplus:ERROR Please initialize the log4cplus system properly.
 Traceback (most recent call last):
-  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 69, in _safe_update
-    control.update()
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 315, in update
-    self.__page.update(self)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 720, in update
-    r = self.__update(*controls)
-        ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 832, in __update
-    commands, added_controls, removed_controls = self.__prepare_update(*controls)
-                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\page.py", line 848, in __prepare_update
-    control.build_update_commands(
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 464, in build_update_commands
-    ctrl.build_update_commands(
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\flet_core\control.py", line 480, in build_update_commands
-    assert self.__uid is not None
-           ^^^^^^^^^^^^^^^^^^^^^^
-AssertionError
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 2634, in _confirm
+    delete_attachment(detail_state["control_id"], rel, settings)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\core\controls_data.py", line 820, in delete_attachment
+    local = get_attachment_source_path(control_id, rel_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\core\controls_data.py", line 731, in get_attachment_source_path
+    return get_attachment_dir(control_id) / safe if safe else None
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\core\controls_data.py", line 68, in get_attachment_dir
+    path = get_attachments_path() / control_id
+           ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\ui\controls\controls_tab.py", line 2634, in _confirm
+    delete_attachment(detail_state["control_id"], rel, settings)
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\core\controls_data.py", line 820, in delete_attachment
+    local = get_attachment_source_path(control_id, rel_path)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\core\controls_data.py", line 731, in get_attachment_source_path
+    return get_attachment_dir(control_id) / safe if safe else None
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\Исходная программа\porayonka-app v2 DARK final\porayonka-app\core\controls_data.py", line 68, in get_attachment_dir
+    path = get_attachments_path() / control_id
+           ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+TypeError: unsupported operand type(s) for /: 'WindowsPath' and 'NoneType'
