@@ -519,13 +519,25 @@ def remove_initiator(settings: dict, name: str) -> bool:
 
 
 def add_extra_person(settings: dict, name: str) -> bool:
-    """Добавить ФИО в справочник людей (`extra_people`). True, если добавлено."""
+    """Добавить ФИО в справочник людей (`extra_people`). True, если добавлено.
+
+    Раунд 20 (задача 4): добавление СНИМАЕТ скрытие (`hidden_people`) с того же
+    ФИО. Раньше сценарий «случайно удалил базового человека крестиком, пытаюсь
+    вернуть через "Добавить"» был ловушкой: запись падала в extra_people, но
+    get_all_people_names() фильтрует ВСЕ источники по hidden_people — человек
+    не появлялся ни в справочнике, ни в фильтрах («физически добавляешь, но в
+    списке не появляется», кейс «Гайнутдинов Станислав Игоревич» из ЛОГ.txt
+    11.08.2026)."""
     name = (name or "").strip()
     if not name:
         return False
     cur = list(settings.get("extra_people", []) or [])
     if any(name.casefold() == x.strip().casefold() for x in cur):
         return False
+    hidden = list(settings.get("hidden_people", []) or [])
+    nxt_hidden = [h for h in hidden if (h or "").strip().casefold() != name.casefold()]
+    if len(nxt_hidden) != len(hidden):
+        settings["hidden_people"] = nxt_hidden
     cur.append(name)
     settings["extra_people"] = cur
     save_settings(settings)

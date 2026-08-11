@@ -2,10 +2,11 @@
 # Модели данных для вкладки «Контроли» (schema v2)
 # Формат дат в моделях — строка ISO «YYYY-MM-DD» для простоты сериализации.
 import difflib
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, date
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 ONE_TIME = "once"        # разовый
 PERIODIC = "periodic"    # постоянный / периодический
@@ -147,6 +148,91 @@ class ControlTask:
             done_date=d.get("done_date"),
             comment=d.get("comment", ""),
         )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Раунд 20 (задача 3): разбор ПУНКТОВ внутри «Содержания» при импорте из Excel.
+# Первоисточник («Контроли ОКРИМ.xlsx», колонка «Содержание (если один из
+# нескольких пунктов - указать пункт)») хранит пункты текстом, напр. строка 41:
+#   «Распоряжение 2/216-р от 15.01.2026 Чашин Э.А. п.3 к 05.05.2026, п. 5 к
+#    05.09.2026, п. 7 к 05.10.2026, Миронович Д.В. п. 9.3 к 20.05.2026»
+# ФИО владеет цепочкой пунктов до следующего ФИО. Пункт без «к <дата>» задачей
+# НЕ считается (иначе «ОПК п. 1» и подобные порождали бы пустые пункты); если
+# ни одного пункта со сроком нет — содержание возвращается без изменений.
+# ────────────────────────────────────────────────────────────────────────────
+
+# «Фамилия И.О.»; инициалы с точками и опциональными пробелами, фамилия
+# может быть двойной (через дефис).
+_PERSON_FULL_RE = r"[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ]\s*\.\s*[А-ЯЁ]\s*\.?"
+
+_CONTENT_TOKEN_RE = re.compile(
+    r"(?P<name>" + _PERSON_FULL_RE + r")"
+    r"|(?P<pmark>[пП]\s*\.\s*(?P<num>\d+(?:\s*\.\s*\d+)*)"
+    r"(?:\s*к\s*(?P<date>\d{1,2}\s*\.\s*\d{1,2}\s*\.\s*\d{2,4}))?)"
+)
+
+
+def _norm_person_name(raw: str) -> str:
+    """Привести «Чашин Э. А.»/«Чашин Э А» к каноническому «Чашин Э.А.»."""
+    s = " ".join((raw or "").split())
+    s = re.sub(r"([А-ЯЁ])\s*\.\s*([А-ЯЁ])\s*\.", r"\1.\2.", s)
+    s = re.sub(r"([А-ЯЁ])\s*\.", r"\1.", s)
+    return s
+
+
+def _content_item_date(raw: str) -> Optional[str]:
+    """«05.09.2026»/«05.09.26» (с пробелами вокруг точек) → ISO или None."""
+    dstr = re.sub(r"\s+", "", raw or "")
+    for fmt in ("%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return datetime.strptime(dstr, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def parse_content_tasks(content: str) -> Tuple[str, List[ControlTask]]:
+    """Выделить из «Содержания» пункты «п. N к DD.MM.YYYY» с владельцами-ФИО.
+
+    Возвращает (очищенное содержание, список ControlTask). Если пунктов со
+    сроками нет — исходное содержание без изменений и пустой список.
+    Очищенное содержание = текст до начала региона пунктов + текст после
+    региона (напр. префикс «Распоряжение 2/216-р от 15.01.2026»).
+    """
+    text = (content or "").strip()
+    if not text:
+        return content, []
+
+    tasks: List[ControlTask] = []
+    consumed_spans: List[Tuple[int, int]] = []
+    cur_name: Optional[str] = None
+    cur_name_span: Optional[Tuple[int, int]] = None
+
+    for m in _CONTENT_TOKEN_RE.finditer(text):
+        if m.group("name"):
+            cur_name = _norm_person_name(m.group("name"))
+            cur_name_span = (m.start("name"), m.end("name"))
+            continue
+        iso = _content_item_date(m.group("date") or "")
+        if iso is None:
+            continue  # пункт без срока — игнорируем (не трогаем содержание)
+        num = re.sub(r"\s*\.\s*", ".", m.group("num"))
+        assignees = [cur_name] if cur_name else []
+        if cur_name and cur_name_span:
+            consumed_spans.append(cur_name_span)
+        consumed_spans.append((m.start("pmark"), m.end()))
+        tasks.append(ControlTask(title=f"п. {num}", assignees=assignees, due_date=iso))
+
+    if not tasks:
+        return content, []
+
+    region_start = min(s for s, _ in consumed_spans)
+    region_end = max(e for _, e in consumed_spans)
+    clean = (text[:region_start] + " " + text[region_end:]).strip(" ,;—–-")
+    clean = re.sub(r"\s{2,}", " ", clean).strip()
+    if not clean:
+        clean = text  # страховка: пустое содержание хуже исходного
+    return clean, tasks
 
 
 @dataclass

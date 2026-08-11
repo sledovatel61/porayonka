@@ -313,7 +313,9 @@ def _open_card(tab, via_add=False):
 
 def find_card_columns(tab):
     """Вернуть (left_container, right_container, middle_content) открытой карточки
-    и None, если карточка не открыта."""
+    и None, если карточка не открыта.
+    Раунд 20 (задача 2): широкий вариант — middle_scroll.content это Row
+    [левая колонка, панель пунктов]; узкий — Column со стопкой секций."""
     allc = walk(tab)
     ov = [c for c in allc if getattr(c, "bgcolor", None) == "#cc04070f"]
     if not ov:
@@ -325,21 +327,25 @@ def find_card_columns(tab):
     card = stack.controls[0]
     col = card.content
     mid = col.controls[1]  # middle_scroll
-    mscol = mid.content
-    middle_content = mscol.controls[0]
-    if hasattr(middle_content, "controls") and isinstance(middle_content.controls, list):
-        items = middle_content.controls
-        if len(items) >= 2:
-            return items[0], items[1], middle_content
-    return None
+    mc = getattr(mid, "content", None)
+    if mc is None:
+        return None
+    items = getattr(mc, "controls", None)
+    if not isinstance(items, list) or len(items) < 2:
+        return None
+    return items[0], items[1], mc
 
 
 def panels_of(col_container):
-    """Все glass-панели внутри контейнера колонки (непустой content)."""
+    """Все glass-панели внутри контейнера колонки (непустой content).
+    Раунд 20 (задача 2): правая колонка — ОДНА панель «Пункты задания»
+    (у Container нет controls) — тогда возвращаем её саму."""
     if col_container is None:
         return []
     col = getattr(col_container, "content", col_container)
-    controls = getattr(col, "controls", [])
+    controls = getattr(col, "controls", None)
+    if controls is None:
+        return [col] if getattr(col, "content", None) is not None else []
     return [p for p in controls if getattr(p, "content", None) is not None]
 
 
@@ -511,11 +517,12 @@ def main():
     check("карточка (new) открыта", cols is not None)
     if cols:
         lc, rc, midrow = cols
-        # Раунд 15 (задача 3): колонки карточки ГИБКИЕ — expand 11/8 в Row без
+        # Раунд 15 (задача 3): колонки карточки ГИБКИЕ — expand в Row без
         # tight (адаптируются к ширине карточки), явных width больше нет.
+        # Раунд 20 (задача 2): соотношение 10/9 — правой (пункты) стало шире.
         check("контейнер левой колонки expand>0 (гибкая)", (getattr(lc, "expand", 0) or 0) > 0, f"expand={lc.expand}")
         check("контейнер правой колонки expand>0 (гибкая)", (getattr(rc, "expand", 0) or 0) > 0, f"expand={rc.expand}")
-        check("левая колонка шире правой (11/8)",
+        check("левая колонка шире правой (10/9)",
               (getattr(lc, "expand", 0) or 0) > (getattr(rc, "expand", 0) or 0))
         lpanels = panels_of(lc)
         rpanels = panels_of(rc)
@@ -586,10 +593,11 @@ def main():
         check("карточка жива после добавления точки", cols is not None)
         if cols:
             lc, rc, _ = cols
-            # точка создаёт milestone-карточку с полем «Точка (описание)»
-            fields = [t for t in walk(rc) if isinstance(t, ft.TextField)
+            # точка создаёт milestone-карточку с полем «Точка (описание)»;
+            # раунд 20 (задача 2): «Промежуточные точки» — в ЛЕВОЙ колонке.
+            fields = [t for t in walk(lc) if isinstance(t, ft.TextField)
                       and (t.hint_text or "").startswith("Точка")]
-            check("точка добавлена (поле точки в правой колонке)", len(fields) >= 1,
+            check("точка добавлена (поле точки в левой колонке)", len(fields) >= 1,
                   f"{len(fields)} полей")
 
     # ── 7. Раунд 15 (задача 1): hover НАТИВНЫЙ (InkWell), Python on_hover удалён ──
@@ -2863,6 +2871,233 @@ def main():
         opts49b = [o.key for o in (cdd49b.options or [])] if cdd49b else []
         check("scroll19: fallback — без отмеченных контролёров список из DEFAULT_CONTROLLERS",
               "Потемкин С.А." in opts49b)
+
+    # ── 50. Раунд 20, задача 4: сериализация UI (ui/update_lock.py) ──────────
+    import threading as _th50
+    import types as _types50
+    from ui.update_lock import install_update_serialization, ui_lock
+    import ui.update_lock as _ul50
+
+    class _FakePage50:
+        def __init__(self):
+            self.updates = 0
+
+        def update(self, *a):
+            self.updates += 1
+
+        def run_thread(self, handler, *a, **kw):
+            handler(*a, **kw)
+
+    fp50 = _FakePage50()
+    install_update_serialization(fp50)
+    got_lock50 = {"v": None}
+
+    def _other_thread_try50():
+        got_lock50["v"] = ui_lock().acquire(blocking=False)
+        if got_lock50["v"]:
+            ui_lock().release()
+
+    def _handler50():
+        th = _th50.Thread(target=_other_thread_try50)
+        th.start()
+        th.join()
+
+    fp50.run_thread(_handler50)
+    check("lock20: тело обработчика исполняется под глобальным UI-lock",
+          got_lock50["v"] is False, f"чужой acquire={got_lock50['v']}")
+    re50 = {"ok": False}
+
+    def _handler50b():
+        fp50.update()  # вложенный update под тем же RLock
+        re50["ok"] = True
+
+    fp50.run_thread(_handler50b)
+    check("lock20: RLock реентерабелен (update внутри обработчика)",
+          re50["ok"] and fp50.updates >= 1)
+    n50 = len(_ul50._installed_pages)
+    install_update_serialization(fp50)
+    check("lock20: установка идемпотентна", len(_ul50._installed_pages) == n50)
+
+    # ── 51. Раунд 20, задача 3: пункты «п. N к <дата>» из содержания при импорте ──
+    from core.controls_models import parse_content_tasks as _pct20
+    src51 = ("Распоряжение 2/216-р от 15.01.2026 Чашин Э.А. п.3 к 05.05.2026, "
+             "п. 5 к 05.09.2026, п. 7 к 05.10.2026, Миронович Д.В. п. 9.3 к 20.05.2026")
+    clean51, tasks51 = _pct20(src51)
+    check("import20: строка 41 эталона — 4 пункта", len(tasks51) == 4, f"{len(tasks51)}")
+    got51 = [(t.title, (t.assignees or [""])[0], t.due_date) for t in tasks51]
+    check("import20: владельцы и сроки пунктов разобраны верно",
+          got51 == [("п. 3", "Чашин Э.А.", "2026-05-05"),
+                    ("п. 5", "Чашин Э.А.", "2026-09-05"),
+                    ("п. 7", "Чашин Э.А.", "2026-10-05"),
+                    ("п. 9.3", "Миронович Д.В.", "2026-05-20")], f"{got51}")
+    check("import20: содержание очищено от перечня пунктов",
+          clean51 == "Распоряжение 2/216-р от 15.01.2026", clean51)
+    for no_items in ("Распоряжение 103/216-р от 04.08.2022 ОПК п. 1",
+                     "Протокол поручений ПСК 15-26 от 09.06.2026",
+                     "протокол поручений руководителя СУ от 15.04.2026 межведомственная "
+                     "рабочая группа по незаконным финансовым операциям № 54 от 29.01.2026"):
+        c51x, t51x = _pct20(no_items)
+        check("import20: без «п. N к <дата>» содержание не трогаем",
+              not t51x and c51x == no_items, no_items[:42])
+    try:
+        from openpyxl import Workbook
+        from core.controls_exporter import TABLE_HEADERS as _TH51
+        wb51 = Workbook()
+        ws51 = wb51.active
+        ws51.append(["КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ"])
+        ws51.append(list(_TH51))
+        ws51.append([41, "Исоп-216-193-26", "15.01.2026", "СУ", src51,
+                     "Чашин Э.А., Миронович Д.В.", "Чашин Э.А.", "ежемесячно",
+                     "05.09.2026", ""])
+        p51 = os.path.join(tempfile.gettempdir(), "round20_import_test.xlsx")
+        wb51.save(p51)
+        parsed51, stats51 = import_from_excel(p51, [])
+        ok51 = len(parsed51) == 1 and len(parsed51[0].tasks) == 4
+        check("import20: импорт из .xlsx создаёт пункты карточки", ok51,
+              f"tasks={len(parsed51[0].tasks) if parsed51 else 'нет'}")
+        if ok51:
+            ctl51 = parsed51[0]
+            check("import20: содержание импортированной карточки очищено",
+                  ctl51.content == "Распоряжение 2/216-р от 15.01.2026", ctl51.content)
+            ex51 = {e.casefold() for e in ctl51.executors}
+            check("import20: ответственные пунктов — в исполнителях контроля",
+                  {"чашин э.а.", "миронович д.в."} <= ex51, f"{ctl51.executors}")
+    except Exception:
+        traceback.print_exc()
+        check("import20: сквозной импорт .xlsx без исключений", False)
+
+    # ── 52. Раунд 20, задача 4: повторное добавление снимает hidden_people ──
+    from core.controls_data import add_extra_person as _aep20
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "hidden_people": ["Гайнутдинов Станислав Игоревич"]})
+    st52 = load_settings()
+    ok52 = _aep20(st52, "Гайнутдинов Станислав Игоревич")
+    check("refs20: добавление ранее скрытого человека — True", ok52)
+    st52b = load_settings()
+    check("refs20: hidden_people вычищен от этого ФИО",
+          not any("гайнутдинов" in (h or "").casefold() for h in (st52b.get("hidden_people") or [])))
+    names52 = get_all_people_names(st52b)
+    check("refs20: человек снова виден в списке справочника",
+          any("гайнутдинов" in (n or "").casefold() for n in names52),
+          f"{len(names52)} имён")
+
+    # ── 53. Раунд 20, задача 2: перекомпоновка карточки ──────────────────────
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("c20", "ТЕСТ-20", executors=["Семисенко Иван Юрьевич"],
+                     tasks=[{"id": "t20a", "title": "п. 1", "assignees": ["Грубников Георгий Григорьевич"],
+                             "due_date": "2026-09-23", "is_done": False, "done_date": None, "comment": ""},
+                            {"id": "t20b", "title": "п. 2", "assignees": ["Семисенко Иван Юрьевич"],
+                             "due_date": "2026-08-14", "is_done": False, "done_date": None, "comment": ""}])])
+    page, tab, _ = build(1280)
+    rows53 = _visible_rows(tab)
+    check("layout20: строка контроля есть", len(rows53) >= 1)
+    if rows53:
+        rows53[0].on_click(None)
+    cols53 = find_card_columns(tab)
+    check("layout20: карточка открыта (две колонки)", cols53 is not None)
+    if cols53:
+        lc53, rc53, _ = cols53
+        lt53 = [t.value for t in walk(lc53) if isinstance(t, ft.Text) and t.value]
+        rt53 = [t.value for t in walk(rc53) if isinstance(t, ft.Text) and t.value]
+        check("layout20: «Сроки» — в левой колонке", "Сроки" in lt53)
+        check("layout20: «Сроки» расположены под комментарием",
+              "Комментарий" in lt53 and "Сроки" in lt53
+              and lt53.index("Комментарий") < lt53.index("Сроки"),
+              f"{[x for x in lt53 if x in ('Комментарий', 'Сроки')]}")
+        check("layout20: «Промежуточные точки» и «Скан задания» переехали влево",
+              "Промежуточные точки" in lt53 and "Скан задания" in lt53)
+        check("layout20: справа ТОЛЬКО пункты (нет «Сроки»/точек/скана)",
+              "Пункты задания" in rt53 and "Сроки" not in rt53
+              and "Промежуточные точки" not in rt53 and "Скан задания" not in rt53)
+        scr53 = [c for c in walk(rc53) if isinstance(c, ft.Column)
+                 and getattr(c, "scroll", None) == ft.ScrollMode.ALWAYS
+                 and getattr(c, "expand", None)]
+        check("layout20: список пунктов скроллится сам, на всю высоту панели",
+              len(scr53) >= 1, f"{len(scr53)}")
+        check("layout20: левая колонка — собственный постоянный скролл",
+              getattr(getattr(lc53, "content", None), "scroll", None) == ft.ScrollMode.ALWAYS)
+        check("layout20: у панели пунктов видимый бегунок (ScrollbarTheme)",
+              getattr(getattr(rc53, "theme", None) or getattr(getattr(rc53, "content", None), "theme", None),
+                      "scrollbar_theme", None) is not None)
+
+    # ── 54. Раунд 20, задачи 1–2: автоподтягивание исполнителей, удаление пункта ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": ["Кудрявцев Василий Александрович"],
+                   "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("c20", "ТЕСТ-20", executors=["Семисенко Иван Юрьевич"],
+                     tasks=[{"id": "t20a", "title": "п. 1", "assignees": ["Грубников Георгий Григорьевич"],
+                             "due_date": "2026-09-23", "is_done": False, "done_date": None, "comment": ""},
+                            {"id": "t20b", "title": "п. 2", "assignees": ["Семисенко Иван Юрьевич"],
+                             "due_date": "2026-08-14", "is_done": False, "done_date": None, "comment": ""}])])
+    page, tab, _ = build(1280)
+    rows54 = _visible_rows(tab)
+    if rows54:
+        rows54[0].on_click(None)
+    exec_multi54 = None
+    ass_multis54 = []
+    for c in walk(tab):
+        if isinstance(c, ft.Container) and hasattr(c, "_get_selected"):
+            texts54 = [t.value for t in walk(c) if isinstance(t, ft.Text) and t.value]
+            if "Исполнители" in texts54:
+                exec_multi54 = c
+            if any((x or "").startswith("Отв.") for x in texts54):
+                ass_multis54.append(c)
+    check("sync20: мультивыбор «Исполнители» найден", exec_multi54 is not None)
+    if exec_multi54 is not None:
+        sel54 = exec_multi54._get_selected()
+        check("sync20: ответственные пунктов подтянуты в исполнители при открытии",
+              "Грубников Георгий Григорьевич" in sel54 and "Семисенко Иван Юрьевич" in sel54,
+              f"{sel54}")
+    # live-синк: отметка нового ответственного в пункте сразу в «Исполнители»
+    check("sync20: мультивыбор ответственного пункта найден", len(ass_multis54) >= 1,
+          f"{len(ass_multis54)}")
+    if ass_multis54 and exec_multi54 is not None:
+        target_name54, target_cb54 = None, None
+        for cbx in [x for x in walk(ass_multis54[0]) if isinstance(x, ft.Checkbox)]:
+            full54 = getattr(cbx, "tooltip", None)
+            if full54 and full54 not in exec_multi54._get_selected() and getattr(cbx, "on_change", None):
+                target_name54, target_cb54 = full54, cbx
+                break
+        if target_cb54 is not None:
+            target_cb54.on_change(_types50.SimpleNamespace(control=_types50.SimpleNamespace(value=True)))
+            check("sync20: live-отметка ответственного сразу в «Исполнители»",
+                  target_name54 in exec_multi54._get_selected(), f"{target_name54}")
+        else:
+            check("sync20: есть свободное имя для live-проверки", False, "все опции уже выбраны?")
+    # удаление добавленного пункта без закрытия карточки
+    cols54 = find_card_columns(tab)
+    rc54 = cols54[1] if cols54 else None
+    del54 = [c for c in walk(rc54) if isinstance(c, ft.IconButton)
+             and getattr(c, "icon", None) == ft.icons.DELETE_OUTLINE] if rc54 is not None else []
+    titles54 = [t.value for t in walk(rc54) if isinstance(t, ft.TextField)
+                and (t.value or "").startswith("п.")] if rc54 is not None else []
+    check("del20: у пунктов видна кнопка удаления", len(del54) >= 2, f"{len(del54)}")
+    check("del20: до удаления два пункта", titles54 == ["п. 1", "п. 2"], f"{titles54}")
+    if len(del54) >= 2:
+        del54[0].on_click(None)
+        titles54b = [t.value for t in walk(rc54) if isinstance(t, ft.TextField)
+                     and (t.value or "").startswith("п.")]
+        check("del20: случайно добавленный пункт убирается без закрытия карточки",
+              titles54b == ["п. 2"], f"{titles54b}")
+    # сохранение: исполнители = объединение, пункт удалён
+    save54 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Сохранить"]
+    if save54:
+        save54[0].on_click(None)
+        stored54 = load_controls()
+        hit54 = [c for c in stored54 if c.incoming_number == "ТЕСТ-20"]
+        ok54 = (hit54 and "Грубников Георгий Григорьевич" in (hit54[0].executors or [])
+                and len(hit54[0].tasks) == 1)
+        check("del20+sync20: сохранение — исполнители объединены, пункт удалён",
+              bool(ok54), f"{hit54[0].executors if hit54 else 'не найден'}")
+    # нейтральные настройки/данные после раунда 20
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
 
     print()
     if FAILURES:

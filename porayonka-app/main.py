@@ -40,6 +40,16 @@ from ui.toast import show_save_toast, show_reset_toast, show_error_toast
 def main(page: ft.Page) -> None:
     """Точка входа Flet-приложения"""
 
+    # Раунд 20 (задача 4): сериализация ВСЕХ тел обработчиков событий и
+    # page.update() одним глобальным RLock — устраняет гонку «пересборка
+    # дерева vs diff-движок» (AssertionError __uid, «мертвые фильтры»).
+    # Ставим первой строкой: события могут прийти уже во время построения.
+    try:
+        from ui.update_lock import install_update_serialization
+        install_update_serialization(page)
+    except Exception:
+        pass
+
     # ── Настройки окна ──────────────────────────────────────────
     page.title = "Порайонка — СК РФ Ростовская область"
     page.window.width = 1280

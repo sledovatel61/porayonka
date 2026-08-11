@@ -10,6 +10,7 @@ from typing import List, Optional, Tuple
 from .controls_models import (
     Control, ControlTask, ControlMilestone, ONE_TIME, PERIODIC,
     effective_due_date, deadline_status, parse_date, short_name,
+    parse_content_tasks,
     OVERDUE, TODAY, SOON, COMPLETED,
 )
 
@@ -467,7 +468,20 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
     receive = parse_excel_date(_get(2))
     initiator = str(_get(3) or "").strip()
     content = str(_get(4) or "").strip()
+    # Раунд 20 (задача 3): «п. N к DD.MM.YYYY» с ФИО-владельцем внутри
+    # содержания — в ПУНКТЫ карточки (ControlTask со сроком и ответственным),
+    # а не мёртвым текстом (пример — строка 41 эталона). Ответственные пунктов
+    # добавляются в исполнители контроля, если их нет в колонке «Исполнитель».
+    content_tasks: List[ControlTask] = []
+    try:
+        content, content_tasks = parse_content_tasks(content)
+    except Exception:
+        content_tasks = []
     executors = split_executors(_get(5))
+    for _t in content_tasks:
+        for _a in _t.assignees:
+            if _a and not any((_e or "").strip().casefold() == _a.casefold() for _e in executors):
+                executors.append(_a)
     controller = str(_get(6) or "").strip()
     # Раунд 18 (задача 2): колонка H «Разовый / постоянный» используется
     # КОМБИНИРОВАННО (эталон пользователя):
@@ -506,7 +520,7 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
     if ctype == PERIODIC and period_days == 0:
         period_days = 7
 
-    return Control(
+    ctl = Control(
         id=None,  # будет сгенерирован
         incoming_number=incoming,
         receive_date=receive,
@@ -522,6 +536,9 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
         done_date=done_date,
         comment=comment,
     )
+    # Раунд 20 (задача 3): пункты задания из текста содержания
+    ctl.tasks = content_tasks
+    return ctl
 
 
 def _from_full_row(full: dict, incoming: str) -> Optional[Control]:

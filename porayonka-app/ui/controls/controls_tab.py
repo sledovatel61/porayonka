@@ -39,6 +39,7 @@ FILTER_OTHER = "__other__"  # пункт «Прочие» в фильтрах и
 from core.controls_exporter import ControlsExcelExporter, import_from_excel, TABLE_HEADERS, control_type_text
 from .glass_theme import GLASS, with_alpha, glass_panel
 from .russian_calendar import create_russian_date_field, create_russian_calendar_expanded
+from ui.update_lock import install_update_serialization, ui_lock
 
 STATUS_ICONS = {
     OVERDUE: ft.icons.EVENT_BUSY,
@@ -263,6 +264,13 @@ def _field_with_label(label: str, control):
 
 def create_controls_tab(page: ft.Page) -> ft.Column:
     print("[CONTROLS_TAB] Glass Dark v2 - init")
+    # Раунд 20 (задача 4): сериализация обработчиков/обновлений (идемпотентно;
+    # в боевом входе ставится и из main.py первой строкой) — страховка для
+    # тестовых харнессов, создающих вкладку напрямую.
+    try:
+        install_update_serialization(page)
+    except Exception:
+        pass
     settings = load_settings()
     soon_days = int(settings.get("soon_days", 3) or 3)
     available_names = get_criminalist_names()
@@ -1666,7 +1674,35 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Раунд 19 (задача 4): яркий постоянный бегунок внутри мультивыбора —
         # та же локальная тема, что и у справочников (раунд 17).
         container.theme = _scrollbar_theme()
+
+        def _add_selected(names):
+            """Раунд 20 (задача 1): ДОБАВИТЬ имена к выбору программно (без
+            снятия существующих) — автоподтягивание ответственных пунктов в
+            «Исполнители». Неизвестные справочнику имена добавляются опцией,
+            чтобы чекбокс существовал и выбор не терялся."""
+            added = False
+            for nm in (names or []):
+                if not nm:
+                    continue
+                if nm not in selected:
+                    selected.append(nm)
+                    added = True
+                if nm not in available:
+                    available.append(nm)
+            if not added:
+                return
+            badge.value = f"Выбрано: {len(selected)}"
+            summary.value = ", ".join(short_name(x) for x in selected) or "не выбрано"
+            summary.tooltip = ", ".join(selected)
+            try:
+                _safe_update(badge)
+                _safe_update(summary)
+            except Exception:
+                traceback.print_exc()
+            _rebuild_list()
+
         container._get_selected = lambda: list(selected)
+        container._add_selected = _add_selected
         container._available = list(available)  # для тестов раунда 19
         return container
 
@@ -1994,7 +2030,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Раунд 5: НЕ используем expand=True у полей карточки — внутри scroll-колонки
         # (middle_scroll) это схлопывает левую колонку до нулевой высоты (AGENTS 15.11).
         # Ширины задаём явные, где поле в Row.
-        incoming_field = _glass_textfield(value=ctl.incoming_number if ctl else "", hint="Входящий № ВХСОП *", width=300)
+        incoming_field = _glass_textfield(value=ctl.incoming_number if ctl else "", hint="Входящий № ВХСОП *", width=240)
         receive_field_text = ft.Text(_display_date(detail_state["receive_date"]), size=13, color=GLASS["text"])
         receive_box = ft.Container(
             content=ft.Row(controls=[receive_field_text, ft.Container(expand=True), ft.Icon(ft.icons.CALENDAR_MONTH, size=18, color=GLASS["text_secondary"])], spacing=6, tight=True),
@@ -2068,11 +2104,38 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 ctrl_available.append(ctl.controller)
         exec_container = _build_inline_multi(exec_available, list(ctl.executors) if ctl else [], "Исполнители")
 
+        def _sync_exec_from_tasks(*_):
+            """Раунд 20 (задача 1): ответственные всех пунктов задания
+            АВТОМАТИЧЕСКИ подтягиваются в «Исполнители» карточки — если админ
+            заполнил пункты и не выбирал исполнителей вручную, они не теряются
+            (таблица/фильтры читают ctl.executors). Только ДОБАВЛЕНИЕ: ручное
+            снятие галки с исполнителя не стирается чужим перестроением.
+            Вызывается при открытии карточки и на каждое изменение «Отв. п. N»."""
+            union: List[str] = []
+            for ui in detail_state["tasks"]:
+                sel: List[str] = []
+                ac = ui.get("_ass_container")
+                if ac is not None and hasattr(ac, "_get_selected"):
+                    try:
+                        sel = list(ac._get_selected())
+                    except Exception:
+                        sel = list(ui.get("assignees", []))
+                else:
+                    sel = list(ui.get("assignees", []))
+                for nm in sel:
+                    if nm and not any(nm.casefold() == u.casefold() for u in union):
+                        union.append(nm)
+            if union and hasattr(exec_container, "_add_selected"):
+                try:
+                    exec_container._add_selected(union)
+                except Exception:
+                    traceback.print_exc()
+
         # Раунд 5: ширины подогнаны под левую панель (500 - padding*2 ≈ 476), чтобы строка
         # «За кем контроль / Тип / Периодичность» не переполнялась и не клипировалась.
-        controller_dd = _glass_dropdown("За кем контроль", 180, [ft.dropdown.Option(n, short_name(n)) for n in ctrl_available], value=ctl.controller if (ctl and ctl.controller) else None)
-        type_dd = _glass_dropdown("Тип", 120, [ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")], value=ctl.control_type if ctl else ONE_TIME)
-        period_dd = _glass_dropdown("Периодичность", 140, [ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS], value=_period_key(ctl.period_days if ctl else 7))
+        controller_dd = _glass_dropdown("За кем контроль", 160, [ft.dropdown.Option(n, short_name(n)) for n in ctrl_available], value=ctl.controller if (ctl and ctl.controller) else None)
+        type_dd = _glass_dropdown("Тип", 105, [ft.dropdown.Option(ONE_TIME, "Разовый"), ft.dropdown.Option(PERIODIC, "Постоянный")], value=ctl.control_type if ctl else ONE_TIME)
+        period_dd = _glass_dropdown("Периодичность", 130, [ft.dropdown.Option(k, l) for k, l, _ in _PERIOD_LABELS], value=_period_key(ctl.period_days if ctl else 7))
         period_dd.visible = (ctl.control_type if ctl else ONE_TIME) == PERIODIC
         custom_days_field = _glass_textfield(value=str(ctl.period_days) if ctl else "7", hint="Интервал дней", width=110)
         custom_days_field.visible = _period_key(ctl.period_days if ctl else 7) == "custom"
@@ -2188,7 +2251,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             task_due_box.on_click = lambda e, s=_set_task_due: _open_global_cal(lambda iso: s(iso), t_ui["due_ref"]["value"])
 
             # Раунд 19 (задача 4): ответственные пункта — только роль «И»
-            ass_container = _build_inline_multi(exec_available, t_ui.get("assignees", []), f"Отв. {title_f.value[:10] or 'пункт'}", compact=True)
+            # Раунд 20 (задача 1): on_change — автоподтягивание в «Исполнители».
+            ass_container = _build_inline_multi(exec_available, t_ui.get("assignees", []), f"Отв. {title_f.value[:10] or 'пункт'}", on_change_cb=lambda _sel: _sync_exec_from_tasks(), compact=True)
             t_ui["_ass_container"] = ass_container
 
             # Checkbox for done - normal size checkbox
@@ -2207,8 +2271,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             comment_f.height = 32
             t_ui["comment_field"] = comment_f
 
+            # Раунд 20 (задача 2): заголовок пункта — на ГИБКОЙ ширине
+            # (expand=True вместо фиксированных 300 px): при узкой правой колонке
+            # кнопка удаления пункта обрезалась за краем панели и «убрать случайно
+            # добавленный пункт» было нельзя (Приём: milestone-строка ниже уже
+            # использует flex-ребёнка в tight-Row — легально при ограниченной
+            # ширине секции STRETCH).
+            try:
+                title_f.width = None
+                title_f.expand = True
+            except Exception:
+                pass
             card_controls = [
-                ft.Row(controls=[ft.Icon(ft.icons.DRAG_INDICATOR, size=14, color=GLASS["text_muted"]), title_f, ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"], on_click=lambda e, ui=t_ui: _remove_task(ui))], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row(controls=[ft.Icon(ft.icons.DRAG_INDICATOR, size=14, color=GLASS["text_muted"]), title_f, ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"], tooltip="Удалить пункт", on_click=lambda e, ui=t_ui: _remove_task(ui))], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 ass_container,
                 ft.Row(controls=[task_due_box, is_done_check], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ]
@@ -2265,6 +2340,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     "task_id": t.id,
                 })
         _rebuild_task_cards()
+        # Раунд 20 (задача 1): при открытии карточки исполнители = объединение
+        # ручного выбора и ответственных пунктов (старые данные, где вручную
+        # не выбирали, показывают полный состав сразу).
+        _sync_exec_from_tasks()
 
         # Milestones
         milestones_col = ft.Column(spacing=8, tight=True,
@@ -2833,13 +2912,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Comment
         left_col.controls.append(glass_panel(content=_field_with_label("Комментарий", comment_field), radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
-        # Right column - Bug 8 fix: no expand
-        right_col = ft.Column(spacing=14, tight=True,
-                              horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-
         # Section Сроки — no always open calendar (Bug 9 fix), only fields that open shared global calendar
         # Раунд 19 (задача 3.1): если контроль исполнен — зелёная сводка
         # «Исполнен: <дата фактического исполнения>» в начале секции.
+        # Раунд 20 (задача 2): секция «Сроки» ПЕРЕНЕСЕНА в левую колонку под
+        # комментарий — слева данные карточки и сроки, справа только пункты.
         sroki_controls = [ft.Text("Сроки", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"])]
         if ctl and ctl.done:
             sroki_controls.append(ft.Container(
@@ -2858,65 +2935,78 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _field_with_label("Конечная дата", end_box),
         ]
         sroki_content = ft.Column(controls=sroki_controls, spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-        right_col.controls.append(glass_panel(content=sroki_content, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
+        left_col.controls.append(glass_panel(content=sroki_content, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
-        # Pункты задания
-        tasks_section = ft.Column(controls=[
-            ft.Row(controls=[ft.Icon(ft.icons.FORMAT_LIST_BULLETED, size=16, color=GLASS["text"]), ft.Text("Пункты задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("+ Добавить пункт", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add_task)], spacing=6, tight=True),
-            tasks_col,
+        # Раунд 20 (задача 2): «Промежуточные точки» и «Скан задания» — тоже в
+        # левую колонку (раньше висели справа под пунктами и съедали их высоту,
+        # а слева оставалась пустая «мёртвая» зона).
+        miles_section = ft.Column(controls=[
+            ft.Row(controls=[ft.Icon(ft.icons.TIMELINE, size=15, color=GLASS["text"]), ft.Text("Промежуточные точки", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("+ Добавить точку", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=28, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add_mile)], spacing=6, tight=True),
+            milestones_col,
         ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-        right_col.controls.append(glass_panel(content=tasks_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
-
-        # Milestones
-        if (ctl.control_type if ctl else ONE_TIME) == PERIODIC or True:
-            miles_section = ft.Column(controls=[
-                ft.Row(controls=[ft.Icon(ft.icons.TIMELINE, size=15, color=GLASS["text"]), ft.Text("Промежуточные точки", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("+ Добавить точку", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=28, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add_mile)], spacing=6, tight=True),
-                milestones_col,
-            ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-            right_col.controls.append(glass_panel(content=miles_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
+        left_col.controls.append(glass_panel(content=miles_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Scan
         scan_section = ft.Column(controls=[
             ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("Прикрепить файл", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), icon=ft.icons.ATTACH_FILE, on_click=_pick_attach)], spacing=6, tight=True),
             attach_col,
         ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-        right_col.controls.append(glass_panel(content=scan_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
+        left_col.controls.append(glass_panel(content=scan_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Decide layout based on page width
-        # Bug 8 fix: no expand inside scroll, fixed widths
         try:
             is_narrow = (page.width or 1280) < 1100
         except Exception:
             is_narrow = False
 
-        # Раунд 15 (задача 3): колонки ГИБКИЕ — flex 11/8 вместо фиксированных
-        # 500/374 px. Row БЕЗ tight (MainAxisSize.max): внутри вертикального
-        # скролла карточки (SingleChildScrollView) поперечная ось ограничена
-        # шириной viewport'а, поэтому Row занимает всю внутреннюю ширину карточки,
-        # а expand-обёртки делят её ~58%/~42%. При растягивании карточки колонки
-        # и поля (TextField на всю ширину) тянутся вместе с ней. Вертикальный expand
-        # внутри scroll-КОЛОНКИ по-прежнему не используется (AGENTS §15.11/22) —
-        # здесь expand только горизонтальный (внутри Row), что разрешено.
+        # ── Раунд 20 (задача 2): ПРАВАЯ панель — только «Пункты задания» ─────
+        # Липкая шапка (иконка + заголовок + «+ Добавить пункт») всегда на
+        # месте; на широком экране список пунктов скроллится САМ на всю высоту
+        # свободной зоны карточки (больше не нужно «много скроллить вниз» общим
+        # скроллом), а левая колонка имеет собственный скролл — пустого места
+        # нет, всё помещается. Паттерн тот же, что у справочников (раунд 17) и
+        # middle_scroll (раунд 5): скролл внутри ОГРАНИЧЕННОЙ по высоте зоны.
+        tasks_header = ft.Row(controls=[ft.Icon(ft.icons.FORMAT_LIST_BULLETED, size=16, color=GLASS["text"]), ft.Text("Пункты задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("+ Добавить пункт", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), on_click=_add_task)], spacing=6, tight=True)
         if is_narrow:
-            middle_content = ft.Column(controls=[left_col, right_col], spacing=14, tight=True,
-                                       horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+            tasks_panel_content = ft.Column(controls=[tasks_header, tasks_col], spacing=8, tight=True,
+                                            horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         else:
-            middle_content = ft.Row(controls=[
-                ft.Container(content=left_col, expand=11, alignment=ft.alignment.top_left),
-                ft.Container(content=right_col, expand=8, alignment=ft.alignment.top_left),
-            ], spacing=14, vertical_alignment=ft.CrossAxisAlignment.START)
+            tasks_panel_content = ft.Column(controls=[
+                tasks_header,
+                ft.Column(controls=[tasks_col], spacing=0, tight=True,
+                          scroll=ft.ScrollMode.ALWAYS, expand=True,
+                          horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
+            ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        right_panel = glass_panel(content=tasks_panel_content, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"])
+        # Яркий постоянный бегунок у скролла пунктов — как в справочниках.
+        right_panel.theme = _scrollbar_theme()
 
-        # Middle scroll: bounded by the card's fixed height (via expand in the bounded
-        # card Column), so its inner scroll column scrolls internally instead of growing
-        # unbounded / collapsing. Matches the control_card_modal pattern.
-        # Раунд 15 (задача 3): STRETCH — middle_content занимает всю внутреннюю
-        # ширину карточки (поперечная ось скролла ограничена — это легально).
-        middle_scroll = ft.Container(
-            content=ft.Column(controls=[middle_content], spacing=0, tight=True,
-                              scroll=ft.ScrollMode.AUTO,
-                              horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
-            expand=True,
-        )
+        if is_narrow:
+            # Узкий экран: всё стопкой, общий наружный скролл (прежний паттерн).
+            middle_scroll = ft.Container(
+                content=ft.Column(controls=[left_col, right_panel], spacing=14, tight=True,
+                                  scroll=ft.ScrollMode.AUTO,
+                                  horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
+                expand=True,
+            )
+        else:
+            # Широкий: две НЕЗАВИСИМО скроллящиеся колонки на всю высоту зоны.
+            # vertical_alignment=STRETCH у Row тянет обе колонки на полную
+            # высоту middle_scroll — скроллы внутри ограничены и легальны
+            # (§15.11 запрещает expand ВНУТРИ scroll-колонки — здесь его нет:
+            # левая колонка сама scroll-колонка, правая — bounded-панель со
+            # скроллом пунктов в остатке высоты после липкой шапки).
+            left_col.scroll = ft.ScrollMode.ALWAYS
+            left_col.tight = False
+            left_wrap = ft.Container(content=left_col, expand=10)
+            left_wrap.theme = _scrollbar_theme()
+            middle_scroll = ft.Container(
+                content=ft.Row(controls=[
+                    left_wrap,
+                    ft.Container(content=right_panel, expand=9),
+                ], spacing=14, vertical_alignment=ft.CrossAxisAlignment.STRETCH),
+                expand=True,
+            )
 
         # Header and footer fixed
         header = ft.Container(
@@ -3790,8 +3880,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         поллинга теперь маршаллизуются сюда и сериализуются с обработчиками
         событий. Имя атрибута с манглингом — page.py 0.23.2: self.__loop=loop."""
         def _run():
+            # Раунд 20 (задача 4): маршаллизованный колбэк исполняется под
+            # глобальным UI-lock — как и тела обработчиков событий
+            # (ui/update_lock.py): перестройки дерева и page.update()
+            # неделимы между всеми потоками.
             try:
-                fn()
+                with ui_lock():
+                    fn()
             except Exception:
                 traceback.print_exc()
         loop = None
