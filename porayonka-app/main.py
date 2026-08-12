@@ -50,6 +50,22 @@ def main(page: ft.Page) -> None:
     except Exception:
         pass
 
+    # Раунд 23 (задача 2): редакция дистрибутива (admin/user) — диагностика;
+    # автозапуск в Windows (только frozen-сборка; чтобы пользователи не
+    # забывали запускать приложение после включения ПК).
+    try:
+        from core.edition import load_edition
+        _ed = load_edition()
+        print(f"[MAIN] Redakciya: {_ed.get('role')}"
+              + (f" ({_ed.get('user_name')})" if _ed.get('user_name') else ""))
+    except Exception:
+        pass
+    try:
+        from core import autostart
+        autostart.enable_autostart()  # no-op вне Windows / dev-запуска
+    except Exception:
+        pass
+
     # ── Настройки окна ──────────────────────────────────────────
     page.title = "Порайонка — СК РФ Ростовская область"
     page.window.width = 1280
@@ -349,6 +365,15 @@ def main(page: ft.Page) -> None:
 
     page.update()
 
+    # Раунд 23 (задача 2): значок в системном трее («Открыть»/«Выход») —
+    # приложение живёт в трее и всегда на слуху (pystray — опциональная
+    # зависимость сборки; без неё — просто работаем без трея).
+    try:
+        from ui.tray_icon import start_tray
+        page._tray_icon = start_tray(page)
+    except Exception:
+        pass
+
     # Сохранение при закрытии окна (страховка в дополнение к autosave)
     def _on_window_event(e):
         if e.data == "close":
@@ -385,4 +410,19 @@ def main(page: ft.Page) -> None:
 # ТОЧКА ВХОДА
 # ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    ft.app(target=main)
+    # Раунд 23 (задача 3): нативный клиент Flet 0.23.2 (движок Flutter) не
+    # поддерживает Windows 7 — он требует Win10+. Для пользовательских
+    # Win7-машин — web-режим (открывается в установленном браузере Win7):
+    #   python main.py --web [--host 0.0.0.0] [--port 8555]
+    # Админские Win10/11-машины — нативный режим по умолчанию.
+    import sys
+    if "--web" in sys.argv:
+        host, port = "127.0.0.1", 8555
+        if "--host" in sys.argv:
+            host = sys.argv[sys.argv.index("--host") + 1]
+        if "--port" in sys.argv:
+            port = int(sys.argv[sys.argv.index("--port") + 1])
+        print(f"[MAIN] Web-rezhim: http://{host}:{port}")
+        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host=host, port=port)
+    else:
+        ft.app(target=main)

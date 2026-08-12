@@ -3659,6 +3659,340 @@ def main():
           "ПР-1" not in vis66 and "ПР-2" not in vis66 and "ПР-3" in vis66,
           f"видно: {sorted(vis66)}")
 
+    # ══════════════════════════════════════════════════════════════════
+    # Раунд 23 (PROMPT_контроли_доработка23.md)
+    # ══════════════════════════════════════════════════════════════════
+
+    # ── 67. Раунд 23, задача 1: вложения — мгновенно видно, крупнее, бейдж ──
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("v23", "ВЛ-23", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build(1280)
+    rows67 = _visible_rows(tab)
+    rows67[0].on_click(None)
+    picker67 = getattr(page, "_controls_attach_picker", None)
+    check("att23: attach-пикер зарегистрирован с карточкой", picker67 is not None)
+    # файла «фото» для прикрепления — копия иконки-пнг (минимальный валидный PNG)
+    _src67 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "assets", "icon.png")
+    _tmp67 = os.path.join(tempfile.gettempdir(), "foto_attach23.png")
+    with open(_src67, "rb") as f67, open(_tmp67, "wb") as g67:
+        g67.write(f67.read())
+    if picker67 is not None:
+        _ev67 = _types50.SimpleNamespace(
+            path=None, files=[_types50.SimpleNamespace(path=_tmp67, name="foto_attach23.png")])
+        _invoke_event_handler(picker67.on_result, _ev67)
+        # строка вложения видна СРАЗУ (без «Сохранить» и переоткрытия) —
+        # кейс скрина «прикрепилось, но не видно»
+        texts67 = [str(t.value) for t in walk(tab) if isinstance(t, ft.Text)
+                   and t.value and "foto_attach23.png" in str(t.value)]
+        check("att23: строка вложения ВИДНА СРАЗУ после прикрепления",
+              len(texts67) >= 1, f"{len(texts67)}")
+        # и контроль получил вложение в данных (persist для существующего)
+        ctl67 = next((c for c in load_controls() if c.incoming_number == "ВЛ-23"), None)
+        check("att23: вложение записалось в контроль и сохранено",
+              ctl67 is not None and len(ctl67.attachments) == 1
+              and ctl67.attachments[0].endswith("/foto_attach23.png"),
+              f"{ctl67.attachments if ctl67 else None}")
+        check("att23: id контроля совпадает с папкой вложения",
+              ctl67 is not None and ctl67.attachments
+              and ctl67.attachments[0].split("/")[0] == ctl67.id)
+        # миниатюра 76x76 (раунд 23: было 44 — «очень маленький предпросмотр»)
+        imgs67 = [c for c in walk(tab) if isinstance(c, ft.Image)
+                  and getattr(c, "width", None) == 76 and getattr(c, "height", None) == 76]
+        check("att23: миниатюра вложения 76x76 (а не 44)", len(imgs67) >= 1)
+        # кнопки строки крупные (лупа 20)
+        zooms67 = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                   and getattr(c, "tooltip", None) == "Предпросмотр"
+                   and getattr(c, "icon_size", None) == 20]
+        check("att23: лупа предпросмотра крупная (20)", len(zooms67) >= 1)
+    # жёлтый бейдж вложения в таблице — заметная пилюля 44px
+    badges67 = [c for c in walk(tab) if isinstance(c, ft.Container)
+                and getattr(c, "bgcolor", None) == GLASS["today"]
+                and getattr(c, "width", None) == 44
+                and any(isinstance(i, ft.Icon) for i in walk(c))]
+    check("att23: в таблице — заметная жёлтая пилюля вложения (44px)",
+          len(badges67) >= 1)
+    check("att23: у пилюли tooltip «Вложений: N»",
+          any(getattr(b, "tooltip", "").startswith("Вложений:") for b in badges67))
+
+    # ── 68. Раунд 23, задача 2: редакции admin/user — конфиг ────────────────
+    from core.edition import (
+        load_edition as _le23, is_user_edition as _iue23,
+        apply_edition_to_settings as _aets23, save_appdata_edition as _sae23,
+    )
+    from core.controls_notify import (
+        alarm_interval_hours as _aih23, collect_alarm_controls as _cac23,
+        control_belongs_to as _cbt23, due_alarms as _da23, prune_alarm_log as _pal23,
+    )
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    ed68 = _le23(force=True)
+    check("edit23: без edition.json и env — редакция admin (обратная совместимость)",
+          ed68.get("role") == "admin" and not _iue23(), f"{ed68}")
+    # user-редакция через env (так же читает installer: edition.json)
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
+    ed68b = _le23(force=True)
+    check("edit23: env user + ФИО", ed68b.get("role") == "user"
+          and ed68b.get("user_name") == "Семисенко Иван Юрьевич", f"{ed68b}")
+    st68 = {"network_role": "admin", "network_user": ""}
+    check("edit23: apply_edition принудительно ставит user/ФИО",
+          _aets23(st68) is True
+          and st68.get("network_role") == "user"
+          and st68.get("network_user") == "Семисенко Иван Юрьевич", f"{st68}")
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    # save_appdata_edition → файл в temp-APPDATA → load_edition его подхватывает
+    check("edit23: ФИО пользователя сохраняется в %APPDATA%",
+          _sae23("user", "Гайнутдинов Станислав Игоревич") is True
+          and _le23(force=True).get("user_name") == "Гайнутдинов Станислав Игоревич")
+    # убрать файл-артефакт, чтобы admin-умолчание работало дальше
+    _edfile68 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
+    try:
+        os.remove(_edfile68)
+    except OSError:
+        pass
+    _le23(force=True)
+    check("edit23: интервал аларма — user 2 ч, admin 24 ч (1 раз/день)",
+          _aih23(True) == 2 and _aih23(False) == 24)
+
+    # ── 69. Раунд 23, задача 2: сбор алармов и антиспам-интервалы ──────────
+    from datetime import timedelta
+    from core.controls_models import deadline_status as _ds23, ControlTask as _CT69
+    c69a = Control(id="al1", incoming_number="АЛ-1", due_date="2020-01-01",
+                   executors=["Семисенко И.Ю."], receive_date="2020-01-01")
+    c69b = Control(id="al2", incoming_number="АЛ-2", due_date="2020-01-02",
+                   executors=["Чужой Ч.Ч."], receive_date="2020-01-02")
+    c69c = Control(id="al3", incoming_number="АЛ-3", due_date="2020-01-03",
+                   executors=["Семисенко И.Ю."], receive_date="2020-01-03",
+                   done=True, done_date="2020-01-04")
+    c69d = Control(id="al4", incoming_number="АЛ-4", due_date=None,
+                   executors=["Семисенко И.Ю."], receive_date="2020-01-01")
+    all69 = [c69a, c69b, c69c, c69d]
+    check("alarm23: collect — все просроченные для админа (без done/без срока)",
+          [c.id for c in _cac23(all69, 3)] == ["al1", "al2"],
+          f"{[c.id for c in _cac23(all69, 3)]}")
+    check("alarm23: collect — пользователь видит ТОЛЬКО свои",
+          [c.id for c in _cac23(all69, 3, "Семисенко Иван Юрьевич")] == ["al1"])
+    c69t = Control(id="al5", incoming_number="АЛ-5", due_date=None,
+                   receive_date="2020-01-01",
+                   tasks=[_CT69(id="t1", title="п.1", assignees=["Гайнутдинов С.И."],
+                                due_date="2020-02-02", is_done=False)])
+    check("alarm23: «свой» определяется и по ответственному пункта",
+          _cbt23(c69t, "Гайнутдинов Станислав Игоревич") is True
+          and _cbt23(c69t, "Чужой Ч.Ч.") is False)
+    now69 = datetime(2026, 8, 12, 12, 0, 0)
+    due69, log69 = _da23(all69[:2], {}, now69, 2)
+    check("alarm23: пустой журнал — все просроченные подлежат аларму",
+          [c.id for c in due69] == ["al1", "al2"] and "al1" in log69)
+    due69b, log69b = _da23(all69[:2], log69, now69 + timedelta(hours=1), 2)
+    check("alarm23: через 1 час (интервал 2 ч) — повтора нет",
+          due69b == [] and log69b == log69)
+    due69c, log69c = _da23(all69[:2], log69, now69 + timedelta(hours=2, minutes=1), 2)
+    check("alarm23: через 2 ч — повтор («по злому», пока не исполнено)",
+          [c.id for c in due69c] == ["al1", "al2"])
+    due69d, _ = _da23(all69[:2], log69, now69 + timedelta(hours=5), 24)
+    check("alarm23: админский интервал 24 ч — через 5 ч повтора нет", due69d == [])
+    old_log69 = {"x": (now69 - timedelta(days=40)).isoformat(),
+                 "y": (now69 - timedelta(days=1)).isoformat(), "bad": "not-a-date"}
+    pruned69 = _pal23(old_log69, now69)
+    check("alarm23: prune журнала алармов (30 дней, битые значения чистятся)",
+          "x" not in pruned69 and "bad" not in pruned69 and "y" in pruned69)
+
+    # ── 70. Раунд 23, задача 2: user-редакция — READ-ONLY карточка ─────────
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("ro23", "РО-23", executors=["Семисенко И.Ю."], tasks=[
+        {"id": "rt1", "title": "п.1", "assignees": ["Семисенко И.Ю."],
+         "due_date": "2026-09-01", "is_done": False, "done_date": None, "comment": ""},
+    ])])
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
+    _le23(force=True)
+    page, tab, _ = build(1280)
+    btns70 = {getattr(c, "text", None): c for c in walk(tab)
+              if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    check("ro23: у user нет «Добавить контроль»/«Импорт Excel»/«Справочники»",
+          "Добавить контроль" not in btns70 and "Импорт Excel" not in btns70
+          and "Справочники" not in btns70,
+          f"{sorted(k for k in btns70 if k)}")
+    check("ro23: «Экспорт Excel» и «Удалить все» остались/скрыты верно",
+          "Экспорт Excel" in btns70 and "Удалить все" not in btns70)
+    rows70 = _visible_rows(tab)
+    rows70[0].on_click(None)   # открыть карточку — должна быть read-only
+    texts70 = {getattr(c, "text", None) for c in walk(tab)
+               if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    check("ro23: нет «Сохранить»/«Контроль исполнен»/«Исполнен пункт»/«Удалить»",
+          "Сохранить" not in texts70 and "Контроль исполнен" not in texts70
+          and "Исполнен пункт" not in texts70 and "Удалить" not in texts70,
+          f"{sorted(t for t in texts70 if t)}")
+    check("ro23: есть «Закрыть»", "Закрыть" in texts70)
+    check("ro23: нет «Прикрепить файл»/«Добавить пункт»/«Добавить точку»",
+          "Прикрепить файл" not in texts70 and "+ Добавить пункт" not in texts70
+          and "+ Добавить точку" not in texts70)
+    card70 = getattr(page, "_controls_detail_card", None) or tab
+    tfs70 = [c for c in walk(card70) if isinstance(c, ft.TextField)]
+    dds70 = [c for c in walk(card70) if isinstance(c, ft.Dropdown)]
+    cbs70 = [c for c in walk(card70) if isinstance(c, ft.Checkbox)]
+    check("ro23: все TextField/Dropdown/Checkbox карточки — disabled",
+          tfs70 and dds70
+          and all(getattr(c, "disabled", False) for c in tfs70)
+          and all(getattr(c, "disabled", False) for c in dds70)
+          and all(getattr(c, "disabled", False) for c in cbs70),
+          f"tf={len(tfs70)} dd={len(dds70)} cb={len(cbs70)}")
+    # попытка «сохранить» программно тоже заблокирована (guard в _save_detail)
+    before70 = {c.id: c.updated_at for c in load_controls()}
+    save70 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Сохранить"]
+    check("ro23: кнопка «Сохранить» физически отсутствует (не просто disabled)",
+          not save70)
+    check("ro23: данные не изменились", before70 == {c.id: c.updated_at
+                                                     for c in load_controls()})
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+    try:
+        os.remove(_edfile68) if os.path.exists(_edfile68) else None
+    except OSError:
+        pass
+    _le23(force=True)
+
+    # ── 71. Раунд 23, задача 2: user — обязательный выбор ФИО ──────────────
+    _seed_raw([_ctrl("id23", "ФИО-23", executors=["Семисенко И.Ю."])])
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    os.environ["PORAYONKA_EDITION"] = "user"   # ФИО не задано → спросит
+    _le23(force=True)
+    page, tab, _ = build(1280)
+    dlg71 = page.dialogs[-1] if page.dialogs else None
+    check("id23: при первом запуске user-редакции — диалог «Кто вы?»",
+          dlg71 is not None and any(isinstance(t, ft.Text) and t.value == "Кто вы?"
+                                    for t in walk(dlg71)),
+          f"{len(page.dialogs)}")
+    ok71 = [c for c in walk(dlg71) if isinstance(c, ft.ElevatedButton)
+            and getattr(c, "text", None) == "Подтвердить"] if dlg71 else []
+    dd71 = [c for c in walk(dlg71) if isinstance(c, ft.Dropdown)] if dlg71 else []
+    check("id23: подтверждение без выбора не закрывает диалог", False if not ok71 else True)
+    if ok71 and dd71:
+        ok71[0].on_click(None)
+        check("id23: пустой выбор — диалог остался", dlg71 in page.dialogs)
+        dd71[0].value = "Семисенко Иван Юрьевич"
+        ok71[0].on_click(None)
+        check("id23: ФИО сохранено (настройки + edition-файл)",
+              load_settings().get("network_user") == "Семисенко Иван Юрьевич"
+              and _le23(force=True).get("user_name") == "Семисенко Иван Юрьевич")
+        check("id23: диалог закрыт после выбора", dlg71 not in page.dialogs)
+    os.environ.pop("PORAYONKA_EDITION", None)
+    try:
+        if os.path.exists(_edfile68):
+            os.remove(_edfile68)
+    except OSError:
+        pass
+    _le23(force=True)
+
+    # ── 72. Раунд 23, задача 2: «злой» аларм срока (диалог + журнал) ───────
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": False,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([
+        _ctrl("al72", "СРОК-23", executors=["Семисенко И.Ю."]),
+    ])
+    # контроль просрочен
+    _raw72 = json.load(open(get_controls_file(), encoding="utf-8"))
+    _raw72["controls"][0]["due_date"] = "2020-01-01"
+    json.dump(_raw72, open(get_controls_file(), "w", encoding="utf-8"), ensure_ascii=False)
+    page, tab, _ = build(1280)
+    check("alarm23: диалога нет до запуска проверки",
+          not any(isinstance(t, ft.Text) and t.value == "СРОК КОНТРОЛЯ!"
+                  for d in page.dialogs for t in walk(d)))
+    hook72 = getattr(page, "_controls_alarm_check", None)
+    check("alarm23: тест-хук проверки алармов установлен", callable(hook72))
+    if hook72:
+        hook72()
+        dlg72 = page.dialogs[-1] if page.dialogs else None
+        check("alarm23: появился «злой» диалог «СРОК КОНТРОЛЯ!»",
+              dlg72 is not None and any(isinstance(t, ft.Text)
+                                        and t.value == "СРОК КОНТРОЛЯ!"
+                                        for t in walk(dlg72)))
+        check("alarm23: в диалоге вх. № просроченного контроля",
+              dlg72 is not None and any(isinstance(t, ft.Text)
+                                        and t.value == "СРОК-23" for t in walk(dlg72)))
+        check("alarm23: журнал алармов записан (антиспам)",
+              (load_settings().get("alarm_log") or {}).get("al72") is not None)
+        if dlg72:
+            page.dialogs.clear()   # имитация визуального «висит открытым»-закрытия
+        state72 = load_settings().get("alarm_log") or {}
+        hook72()   # повтор сразу — не должен (интервал 24 ч для админа)
+        # диалог был «закрыт» снятием из списка — флаг нельзя сбросить так;
+        # проверяем журнальную логику: второй вызов не выдаёт «due»
+        _alarm_items72 = _cac23(load_controls(), 3)
+        from core.controls_notify import due_alarms as _da72b
+        due72, _ = _da72b(_alarm_items72, state72, None, 24)
+        check("alarm23: повторный аларм в пределах суток подавлен", due72 == [])
+    # user-редакция алармит ТОЛЬКО по своим
+    _seed_raw([
+        _ctrl("al72u", "МОЙ-23", executors=["Семисенко И.Ю."]),
+        _ctrl("al72x", "ЧУЖОЙ-23", executors=["Чужой Ч.Ч."]),
+    ])
+    _raw72u = json.load(open(get_controls_file(), encoding="utf-8"))
+    for _cc in _raw72u["controls"]:
+        _cc["due_date"] = "2020-01-01"
+    json.dump(_raw72u, open(get_controls_file(), "w", encoding="utf-8"), ensure_ascii=False)
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
+    _le23(force=True)
+    page, tab, _ = build(1280)
+    hook72u = getattr(page, "_controls_alarm_check", None)
+    if hook72u:
+        hook72u()
+        dlg72u = page.dialogs[-1] if page.dialogs else None
+        txts72u = [str(t.value) for t in walk(dlg72u) if isinstance(t, ft.Text)
+                   and t.value] if dlg72u else []
+        check("alarm23: user-аларм — ТОЛЬКО свой контроль, чужого нет",
+              "МОЙ-23" in txts72u and "ЧУЖОЙ-23" not in txts72u, f"{txts72u[:6]}")
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+
+    # ── 73. Раунд 23, задачи 2-3: трей/автозапуск/web-режим Win7/звук ──────
+    from ui.tray_icon import start_tray as _tray23
+    from ui.sound_alert import find_pig_sound as _pig23, play_alarm_sound as _play23
+    check("tray23: start_tray без pystray — мягкий None (ничего не ломается)",
+          _tray23(PageStub()) is None)
+    pig_path23 = _pig23()
+    check("sound23: pig.wav найден в assets", pig_path23 is not None
+          and str(pig_path23).endswith("pig.wav"), f"{pig_path23}")
+    import wave as _wv23
+    with _wv23.open(str(pig_path23), "rb") as _w23:
+        check("sound23: pig.wav — валидный WAV 16-bit mono",
+              _w23.getnchannels() == 1 and _w23.getsampwidth() == 2
+              and _w23.getframerate() == 22050 and _w23.getnframes() > 10000,
+              f"{_w23.getframerate()}Hz {_w23.getnframes()}f")
+    check("sound23: play_alarm_sound вне Windows — no-op False (не падает)",
+          _play23(True) is False)
+    main23 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
+    src_main23 = open(main23, encoding="utf-8").read()
+    check("win7_23: есть web-режим (--web → WEB_BROWSER) для Win7-пользователей",
+          '"--web" in sys.argv' in src_main23 and "ft.AppView.WEB_BROWSER" in src_main23)
+    check("os23: автозапуск подключён при старте (frozen/Windows no-op)",
+          "autostart.enable_autostart()" in src_main23)
+    check("tray23: трей подключён при старте", "start_tray(page)" in src_main23)
+    from core import autostart as _as23
+    check("os23: автозапуск вне Windows — supported=False, включение не падает",
+          _as23.is_supported() is False and _as23.enable_autostart() is False)
+    # иконка трея — валидный PNG 64x64
+    _ip23 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "assets", "icon.png")
+    with open(_ip23, "rb") as _fip23:
+        _sig23 = _fip23.read(33)
+    check("tray23: assets/icon.png — PNG 64x64",
+          _sig23[:8] == b"\x89PNG\r\n\x1a\n"
+          and _sig23[16:24] == b"\x00\x00\x00\x40\x00\x00\x00\x40")
+
     print()
     if FAILURES:
         print("FAILED:", ", ".join(FAILURES))

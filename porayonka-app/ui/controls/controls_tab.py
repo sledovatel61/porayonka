@@ -37,7 +37,29 @@ from core.controls_data import (
 )
 
 FILTER_OTHER = "__other__"  # пункт «Прочие» в фильтрах исполнителей/контролёров
+
+
+def _iter_tree_parents(root):
+    """Раунд 23: обход дерева контролов (content/controls/title/actions) с
+    информацией о родителе — yield (control, parent, attr_name). Нужен для
+    read-only режима карточки: физическое удаление кнопок из дерева."""
+    stack = [(root, None, None)]
+    while stack:
+        c, parent, attr = stack.pop()
+        if c is None:
+            continue
+        yield c, parent, attr
+        for a in ("content", "controls", "title", "actions"):
+            v = getattr(c, a, None)
+            if isinstance(v, (list, tuple)):
+                stack.extend((ch, c, a) for ch in v)
+            elif v is not None:
+                stack.append((v, c, a))
 from core.controls_exporter import ControlsExcelExporter, import_from_excel, TABLE_HEADERS, control_type_text
+from core.controls_notify import (
+    collect_alarm_controls, due_alarms, prune_alarm_log, alarm_interval_hours,
+)
+from ui.sound_alert import play_alarm_sound, stop_alarm_sound
 from .glass_theme import GLASS, with_alpha, glass_panel
 from .russian_calendar import create_russian_date_field, create_russian_calendar_expanded
 from ui.update_lock import install_update_serialization, ui_lock
@@ -337,6 +359,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     initiators = get_initiators(settings)
     network_user = settings.get("network_user", "") or ""
     network_role = settings.get("network_role", "admin")
+    # Раунд 23 (задача 2): редакция дистрибутива. user-редакция — только
+    # просмотр + «злые» уведомления: сетевые роль/ФИО ПРИНУДИТЕЛЬНО
+    # перекрываются из edition.json (обойти правкой настроек нельзя).
+    from core.edition import (
+        load_edition, is_user_edition, apply_edition_to_settings,
+        save_appdata_edition,
+    )
+    edition = load_edition()
+    edition_user = is_user_edition()
+    if edition_user and apply_edition_to_settings(settings):
+        try:
+            save_settings(settings)
+        except Exception:
+            traceback.print_exc()
+        network_user = settings.get("network_user", "") or ""
+        network_role = settings.get("network_role", "admin")
 
     state = {
         "controls": [],
@@ -970,11 +1008,16 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # исполнителями и сроками, каждый с новой строки — max_lines = числу
         # строк (раньше жёсткие 2 строки обрезали п.2/п.3 с многоточием; высота
         # строки растёт под контент — так и задумано, см. промпт раунда 21).
-        content_controls = [_cell(content_text, _W["content"] - (22 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=max(2, len(content_lines)), color=GLASS["text"], size=13)]
+        content_controls = [_cell(content_text, _W["content"] - (46 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=max(2, len(content_lines)), color=GLASS["text"], size=13)]
         if ctl.attachments:
+            # Раунд 23 (задача 1): значок вложения — ЗАМЕТНАЯ жёлтая пилюля
+            # (скрепка 14 + счётчик bold), вместо мелкой тусклой скрепки 12px
+            # («неприметный значок», скрин 12.08.2026).
             content_controls.append(ft.Container(
-                content=ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=12, color=GLASS["accent"]), ft.Text(str(len(ctl.attachments)), size=10, color=GLASS["accent"], no_wrap=True)], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                width=22,
+                content=ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=14, color=GLASS["green_dark_text"]), ft.Text(str(len(ctl.attachments)), size=11, weight=ft.FontWeight.BOLD, color=GLASS["green_dark_text"], no_wrap=True)], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                width=44, bgcolor=GLASS["today"], border_radius=8,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                tooltip=f"Вложений: {len(ctl.attachments)}",
             ))
 
         is_archive = state["mode"] == "archive"
@@ -1796,6 +1839,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             traceback.print_exc()
 
     def _open_global_cal(setter, current_iso=None):
+        if edition_user:
+            # Раунд 23 (задача 2): read-only — календари не открываем вообще
+            return
         global_cal_state["setter"] = setter
         sel = None
         if current_iso:
@@ -1907,6 +1953,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         padding=ft.padding.all(16),
         content=ft.Column(controls=[ft.Text("Загрузка…")], scroll=ft.ScrollMode.AUTO, expand=True),
     )
+    try:
+        # Раунд 23: тест-хук — корень карточки (обход read-only полей в smoke).
+        page._controls_detail_card = detail_card
+    except Exception:
+        pass
 
     # Раунд 9 (задача 4): resize карточки — уголок в правом нижнем углу.
     # Раунд 15 (задача 3): хэндл больше НЕ позиционируется пиксельно (left/top):
@@ -2584,7 +2635,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 traceback.print_exc()
 
         def _thumb_for(rel: str):
-            """Миниатюра 44x44: изображение — ft.Image, PDF — иконка."""
+            """Миниатюра 76x76 (раунд 23: было 44 — «очень маленький предпросмотр»):
+            изображение — ft.Image, PDF — иконка."""
             abs_path = _resolve_abs(rel)
             fn = rel.split("/")[-1]
             low = fn.lower()
@@ -2592,22 +2644,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if abs_path:
                     try:
                         return ft.Container(
-                            content=ft.Image(src=abs_path, width=44, height=44,
-                                             fit=ft.ImageFit.COVER, border_radius=6),
-                            width=44, height=44, border_radius=6,
+                            content=ft.Image(src=abs_path, width=76, height=76,
+                                             fit=ft.ImageFit.COVER, border_radius=8),
+                            width=76, height=76, border_radius=8,
                             border=ft.border.all(1, GLASS["border"]),
                         )
                     except Exception:
                         traceback.print_exc()
             if low.endswith(".pdf"):
                 return ft.Container(
-                    content=ft.Icon(ft.icons.PICTURE_AS_PDF, size=26, color=GLASS["overdue"]),
-                    width=44, height=44, border_radius=6, bgcolor=with_alpha(GLASS["overdue"], "18"),
+                    content=ft.Icon(ft.icons.PICTURE_AS_PDF, size=40, color=GLASS["overdue"]),
+                    width=76, height=76, border_radius=8, bgcolor=with_alpha(GLASS["overdue"], "18"),
                     alignment=ft.alignment.center,
                 )
             return ft.Container(
-                content=ft.Icon(ft.icons.DESCRIPTION_OUTLINED, size=22, color=GLASS["text_muted"]),
-                width=44, height=44, border_radius=6, bgcolor=GLASS["surface_alt"],
+                content=ft.Icon(ft.icons.DESCRIPTION_OUTLINED, size=34, color=GLASS["text_muted"]),
+                width=76, height=76, border_radius=8, bgcolor=GLASS["surface_alt"],
                 alignment=ft.alignment.center,
             )
 
@@ -2619,13 +2671,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     glass_panel(
                         content=ft.Row(controls=[
                             _thumb_for(rel),
-                            ft.Text(fn, size=11, color=GLASS["text"], expand=True, no_wrap=True,
+                            ft.Text(fn, size=12, color=GLASS["text"], expand=True, no_wrap=True,
                                     overflow=ft.TextOverflow.ELLIPSIS, tooltip=fn),
-                            ft.IconButton(icon=ft.icons.ZOOM_IN, icon_size=16, icon_color=GLASS["accent"],
+                            ft.IconButton(icon=ft.icons.ZOOM_IN, icon_size=20, icon_color=GLASS["accent"],
                                           tooltip="Предпросмотр", on_click=lambda e, r=rel: _open_preview(r)),
-                            ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=14, icon_color=GLASS["text_secondary"],
+                            ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=18, icon_color=GLASS["text_secondary"],
                                           tooltip="Открыть", on_click=lambda e, r=rel: _open_attach(r)),
-                            ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=14, icon_color=GLASS["overdue"],
+                            ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=18, icon_color=GLASS["overdue"],
                                           tooltip="Удалить", on_click=lambda e, r=rel: _confirm_remove_attach(r)),
                         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         radius=8, padding=ft.padding.all(8), bgcolor=GLASS["surface_alt"],
@@ -2745,6 +2797,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             if added:
                 # файлы видны сразу: перестроить список вложений
                 _rebuild_attach()
+                try:
+                    # Раунд 23 (задача 1): на Windows-клиенте 0.23.2 точечный
+                    # update attach_col свежедобавленную строку НЕ показывал
+                    # (ложился только после сохранения и переоткрытия карточки).
+                    # Обновляем всю панель секции — прикреплённое фото
+                    # отображается мгновенно.
+                    _safe_update(scan_panel)
+                except Exception:
+                    traceback.print_exc()
                 if not detail_state["is_new"]:
                     for x in state["controls"]:
                         if x.id == cid:
@@ -2752,6 +2813,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             break
                     try:
                         _persist(state["controls"])
+                    except Exception:
+                        traceback.print_exc()
+                    try:
+                        # Раунд 23 (задача 1): жёлтый бейдж вложения в строке
+                        # таблицы — сразу, а не после следующего rebuild.
+                        _rebuild_table()
                     except Exception:
                         traceback.print_exc()
                 try:
@@ -2768,6 +2835,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _ensure_file_picker(page, "_controls_attach_picker", _on_attach_picked)
 
         def _pick_attach(e=None):
+            if edition_user:  # Раунд 23 (задача 2): read-only — без прикрепления
+                return
             try:
                 page._controls_attach_picker.pick_files(dialog_title="Выбрать сканы задания", allowed_extensions=["pdf","png","jpg","jpeg"], allow_multiple=True)
             except Exception as ex:
@@ -2776,6 +2845,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _rebuild_attach()
 
         def _save_detail(e=None):
+            if edition_user:  # Раунд 23 (задача 2): пользователю — только просмотр
+                return
             inc = (incoming_field.value or "").strip()
             if not inc:
                 try:
@@ -2878,6 +2949,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             show_toast(page, "Сохранено", icon=ft.icons.SAVE)
 
         def _delete_detail(e=None):
+            if edition_user:  # Раунд 23: read-only
+                return
             if is_new:
                 _hide_detail()
                 return
@@ -2914,6 +2987,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             sync_due_after_tasks: «следующая дата»/срок разового контроля
             сдвигаются с исполненных пунктов на оставшиеся (и в черновике
             карточки — чтобы «Сохранить» не откатило сдвиг)."""
+            if edition_user:  # Раунд 23 (задача 2): отмечать исполнение — только админу
+                return
             if not ctl or not ctl.tasks:
                 return
             done_ref = {"iso": date.today().isoformat()}
@@ -3115,7 +3190,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("Прикрепить файл", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), icon=ft.icons.ATTACH_FILE, on_click=_pick_attach)], spacing=6, tight=True),
             attach_col,
         ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-        left_col.controls.append(glass_panel(content=scan_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
+        # Раунд 23 (задача 1): ссылка на панель секции нужна _on_attach_picked —
+        # точечный update attach_col на Win-клиенте 0.23.2 НЕ перерисовывал
+        # свежедобавленную строку («прикреплено, но не видно до переоткрытия»).
+        scan_panel = glass_panel(content=scan_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"])
+        left_col.controls.append(scan_panel)
 
         # Decide layout based on page width
         try:
@@ -3192,7 +3271,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # (раньше действия были в колонке «Действия» таблицы): «Восстановить»
         # и «Удалить навсегда».
         left_footer = []
-        if not is_new and ctl is not None:
+        if not is_new and ctl is not None and not edition_user:
             if ctl.archived:
                 def _restore_card(e=None):
                     _restore(ctl)
@@ -3231,12 +3310,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                                          shape=ft.RoundedRectangleBorder(radius=10)),
                     on_click=_delete_detail))
 
+        # Раунд 23 (задача 2): read-only карточка пользователя — без
+        # «Сохранить» и быстрых действий, только «Закрыть».
+        _footer_btns = ([ft.TextButton("Закрыть" if edition_user else "Отмена",
+                                       on_click=_hide_detail,
+                                       style=ft.ButtonStyle(color=GLASS["text_secondary"]))]
+                        if edition_user else [
+            ft.TextButton("Отмена", on_click=_hide_detail, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+            ft.ElevatedButton("Сохранить", icon=ft.icons.SAVE, bgcolor=GLASS["accent"], color="#ffffff", style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)), on_click=_save_detail, height=40),
+        ])
         footer = ft.Container(
             content=ft.Row(controls=left_footer + [
                 ft.Container(expand=True),
-                ft.TextButton("Отмена", on_click=_hide_detail, style=ft.ButtonStyle(color=GLASS["text_secondary"])),
-                ft.ElevatedButton("Сохранить", icon=ft.icons.SAVE, bgcolor=GLASS["accent"], color="#ffffff", style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)), on_click=_save_detail, height=40),
-            ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ] + _footer_btns, spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=ft.padding.only(top=12),
             border=ft.border.only(top=ft.BorderSide(1, GLASS["border_divider"])),
         )
@@ -3246,6 +3332,46 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         detail_content = ft.Column(controls=[header, middle_scroll, footer], spacing=0, tight=True, expand=True)
 
         detail_card.content = detail_content
+
+        if edition_user:
+            # Раунд 23 (задача 2): read-only — всё редактируемое выключено.
+            # Обход строго ПОСЛЕ присвоения detail_card.content (иначе он шёл
+            # бы по СТАРОМУ содержимому карточки). Поля — disabled; кнопки
+            # УДАЛЯЮТСЯ из дерева физически (не visible=False — исключить
+            # программный вызов), КРОМЕ белого списка «только просмотр»:
+            # «Закрыть», X закрытия карточки и лупы/открытия вложений
+            # (тултипы «Предпросмотр»/«Открыть»); у кликабельных контейнеров
+            # дат (календари receive/due/end/пунктов) снимается on_click.
+            _RO_KEEP_TOOLTIPS = {"Предпросмотр", "Открыть"}
+            _ro_doomed = []
+            for _rc, _par, _at in _iter_tree_parents(detail_card):
+                try:
+                    if isinstance(_rc, (ft.TextField, ft.Dropdown, ft.Checkbox)):
+                        _rc.disabled = True
+                    elif isinstance(_rc, (ft.ElevatedButton, ft.TextButton)):
+                        if getattr(_rc, "text", None) != "Закрыть":
+                            _ro_doomed.append((_rc, _par, _at))
+                    elif isinstance(_rc, ft.IconButton):
+                        if getattr(_rc, "icon", None) != ft.icons.CLOSE \
+                                and getattr(_rc, "tooltip", None) not in _RO_KEEP_TOOLTIPS:
+                            _ro_doomed.append((_rc, _par, _at))
+                    elif isinstance(_rc, ft.Container) and getattr(_rc, "on_click", None) is not None \
+                            and _rc is not detail_card:
+                        _rc.on_click = None
+                except Exception:
+                    continue
+            for _rc, _par, _at in _ro_doomed:
+                try:
+                    if _par is None or _at is None:
+                        continue
+                    _v = getattr(_par, _at, None)
+                    if isinstance(_v, list):
+                        if _rc in _v:
+                            _v.remove(_rc)
+                    elif _v is _rc:
+                        setattr(_par, _at, None)
+                except Exception:
+                    pass
         try:
             win_w = page.width or 1280
         except Exception:
@@ -3299,6 +3425,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _open_done_dialog(ctl: Control):
         """Раунд 19 (задача 3.1): AlertDialog «Подтверждение исполнения
         контроля» с выбором даты (русский календарь) -> _do_complete."""
+        if edition_user:  # Раунд 23 (задача 2): закрытие контроля — только админ
+            return
         done_ref = {"iso": date.today().isoformat()}
         chosen_txt = ft.Text(f"Дата исполнения: {_display_date(done_ref['iso'])}",
                              size=13, color=GLASS["text"], weight=ft.FontWeight.W_600)
@@ -3366,6 +3494,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             traceback.print_exc()
 
     def _delete_forever(ctl: Control):
+        if edition_user:  # Раунд 23: read-only
+            return
         def _confirm(e=None):
             try:
                 delete_all_attachments(ctl.id, settings)
@@ -3425,6 +3555,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             print(f"[CONTROLS_TAB] export trigger error: {ex}")
 
     def _import(e=None):
+        if edition_user:
+            # Раунд 23 (задача 2): у пользователя импорт недоступен
+            return
         try:
             page._controls_import_picker.pick_files(dialog_title="Выбрать Excel для импорта", allowed_extensions=["xlsx"], allow_multiple=False)
         except Exception as ex:
@@ -3475,6 +3608,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # Settings
     def _open_references(e=None):
         """Раунд 9 (задача 3): редактор справочников — исполнители, контролёры, инициаторы."""
+        if edition_user:
+            # Раунд 23 (задача 2): справочники редактирует только админ
+            return
         from core.controls_data import (
             add_extra_person,
             rename_person, remove_person,
@@ -3893,6 +4029,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             soon_days = int(new_settings.get("soon_days", 3) or 3)
             network_role = new_settings.get("network_role", "admin") or "admin"
             network_user = new_settings.get("network_user", "") or ""
+            # Раунд 23 (задача 2): для user-редакции роль/ФИО жёстко из edition.json
+            if edition_user:
+                apply_edition_to_settings(settings)
+                network_role = settings.get("network_role", "admin")
+                network_user = settings.get("network_user", "") or ""
             # Раунд 8: справочник людей мог измениться — пересобираем каноны фильтров
             # Раунд 18 (задача 4): каноны РАЗДЕЛЕНЫ по ролям person_roles
             executor_canonical = get_executor_names(settings)
@@ -3921,7 +4062,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _delete_all(e=None):
         """Раунд 7 (задача 3): удалить ВСЕ контроли (локально + shared). Только админ."""
-        if network_role != "admin":
+        if network_role != "admin" or edition_user:
             return
         confirm_field = _glass_textfield(hint="Введите слово УДАЛИТЬ", width=220)
         err_text = ft.Text("", size=11, color=GLASS["overdue"])
@@ -3995,9 +4136,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             print("[CONTROLS_TAB] delete all dialog error")
 
     def _add_control(e=None):
+        if edition_user:  # Раунд 23: read-only
+            return
         _open_detail(None)
 
     # Title row
+    # Раунд 23 (задача 2): user-редакция — только просмотр: «Добавить
+    # контроль», «Импорт» и «Справочники» в тулбар НЕ ДОБАВЛЯЮТСЯ (см.
+    # _title_btns ниже), «Удалить все» — тоже + оно admin-only по network_role,
+    # а edition принудительно ставит её в «user».
     add_btn = ft.ElevatedButton(text="Добавить контроль", icon=ft.icons.ADD_CIRCLE_OUTLINE, bgcolor=GLASS["accent"], color="#ffffff", height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=16)), on_click=_add_control)
     import_btn = ft.ElevatedButton(text="Импорт Excel", icon=ft.icons.UPLOAD_FILE, bgcolor=GLASS["surface"], color=GLASS["text"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["border"]), padding=ft.padding.symmetric(horizontal=12)), on_click=_import)
     export_btn = ft.ElevatedButton(text="Экспорт Excel", icon=ft.icons.FILE_DOWNLOAD_OUTLINED, bgcolor=GLASS["in_progress"], color=GLASS["surface_solid"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(horizontal=14)), on_click=_export)
@@ -4005,14 +4152,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     settings_btn = ft.IconButton(icon=ft.icons.SETTINGS_OUTLINED, icon_size=20, icon_color=GLASS["text_secondary"], tooltip="Настройки", style=ft.ButtonStyle(bgcolor=GLASS["surface"], shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["border"])), on_click=_open_settings)
     refs_btn = ft.ElevatedButton(text="Справочники", icon=ft.icons.BOOK_OUTLINED, bgcolor=GLASS["surface"], color=GLASS["text"], height=40, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(1, GLASS["border"]), padding=ft.padding.symmetric(horizontal=12)), on_click=_open_references)
 
+    # Раунд 23 (задача 2): в user-редакции кнопки редактирования ФИЗИЧЕСКИ
+    # отсутствуют в тулбаре (не visible=False — их нельзя «найти» и дёрнуть
+    # программно): «Добавить контроль», «Импорт Excel», «Удалить все»,
+    # «Справочники». Экспорт и настройки просмотра остаются.
+    _title_btns = []
+    if not edition_user:
+        _title_btns += [add_btn, import_btn]
+    _title_btns += [export_mode_dd, export_btn]
+    if not edition_user:
+        _title_btns += [delete_all_btn, refs_btn]
+    _title_btns += [settings_btn]
     title_content = ft.Row(controls=[
         ft.Icon(ft.icons.RULE_FOLDER, size=20, color=GLASS["text"]),
         ft.Text("Контроли", size=20, weight=ft.FontWeight.BOLD, color=GLASS["text"]),
         ft.Container(width=10),
         sync_dot, ft.Container(width=4), sync_label,
         ft.Container(expand=True),
-        add_btn, import_btn, export_mode_dd, export_btn, delete_all_btn, refs_btn, settings_btn,
-    ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+    ] + _title_btns, spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
     title_row = glass_panel(content=title_content, height=60, radius=12, padding=ft.padding.symmetric(horizontal=16, vertical=8))
 
@@ -4093,6 +4250,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 break
             _post_to_ui(_poll_notifications)
             _post_to_ui(_check_my_notifications)
+            _post_to_ui(_check_deadline_alarms)  # Раунд 23: «злой» аларм срока
 
     def _notify_user(message: str):
         """Персональное уведомление: звук + toast (вызовы из фонового потока — в try/except)."""
@@ -4304,6 +4462,109 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 traceback.print_exc()
 
+    def _show_deadline_alarm(alarms):
+        """Раунд 23 (задача 2): «злой» модальный аларм наступившего срока.
+        Один экземпляр на приложение; пока висит — интервальный повтор звука
+        делает своё (см. _check_deadline_alarms). Закрывается вручную.
+        Исчезает сам, когда админ отметил контроль исполненным (список пуст
+        после sync — новый диалог просто не откроется)."""
+        if state.get("alarm_dialog_open") or not alarms:
+            return
+        state["alarm_dialog_open"] = True
+
+        def _close(e=None):
+            state["alarm_dialog_open"] = False
+            try:
+                stop_alarm_sound()
+            except Exception:
+                pass
+            try:
+                page.close(dlg)
+            except Exception:
+                traceback.print_exc()
+
+        rows = []
+        for c in alarms[:10]:
+            st = deadline_status(c, soon_days)
+            dd = effective_due_date(c)
+            rows.append(ft.Row(controls=[
+                ft.Icon(ft.icons.WARNING_AMBER, size=16,
+                        color=GLASS["today"] if st == TODAY else GLASS["overdue"]),
+                ft.Text(c.incoming_number or "—", size=12, weight=ft.FontWeight.BOLD,
+                        color=GLASS["text"], width=170, no_wrap=True,
+                        tooltip=c.incoming_number),
+                ft.Text(_display_date(dd.isoformat()) if dd else "—", size=12,
+                        color=GLASS["text_secondary"], width=90),
+                ft.Text(", ".join(short_name(e) for e in list(c.executors or [])[:2]),
+                        size=11, color=GLASS["text_secondary"], expand=True, no_wrap=True),
+            ], spacing=8, tight=True))
+        more = len(alarms) - 10
+        if more > 0:
+            rows.append(ft.Text(f"…и ещё {more}", size=11, color=GLASS["text_muted"]))
+        interval_h = alarm_interval_hours(edition_user or network_role == "user")
+        interval_txt = f"{interval_h} ч" if interval_h < 24 else "сутки"
+        dlg = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Row(controls=[
+                ft.Icon(ft.icons.NOTIFICATIONS_ACTIVE, size=20, color=GLASS["overdue"]),
+                ft.Text("СРОК КОНТРОЛЯ!", size=16, weight=ft.FontWeight.BOLD,
+                        color=GLASS["overdue"]),
+            ], spacing=8, tight=True),
+            content=ft.Container(
+                width=520,
+                content=ft.Column(controls=[
+                    ft.Text(f"Требуют исполнения ({len(alarms)}):", size=12,
+                            color=GLASS["text_secondary"]),
+                    ft.Column(controls=rows, spacing=4, scroll=ft.ScrollMode.ALWAYS,
+                              height=min(240, 30 * len(rows) + (18 if more > 0 else 0))),
+                    ft.Text(f"Напоминание повторится каждые {interval_txt}, пока "
+                            "контроль не будет отмечен исполненным.",
+                            size=11, color=GLASS["text_muted"], italic=True),
+                ], spacing=8, tight=True),
+            ),
+            actions=[ft.ElevatedButton("Понял, работаю", bgcolor=GLASS["overdue"],
+                                       color="#ffffff", on_click=_close,
+                                       style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)))],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        try:
+            page.open(dlg)
+        except Exception:
+            traceback.print_exc()
+            state["alarm_dialog_open"] = False
+
+    def _check_deadline_alarms():
+        """Раунд 23 (задача 2): периодический «злой» аларм срока.
+        user (редакция/сетевая роль) — каждые 2 ч и только свои контроли;
+        админ — раз в сутки, все контроли. Отменяется только исполнением."""
+        if not settings.get("alarm_enabled", True):
+            return
+        try:
+            is_user = edition_user or network_role == "user"
+            interval_h = alarm_interval_hours(is_user)
+            uname = network_user if is_user else ""
+            alarms = collect_alarm_controls(state["controls"], soon_days, uname)
+            if not alarms:
+                return
+            due, new_log = due_alarms(alarms, settings.get("alarm_log") or {},
+                                      None, interval_h)
+            if not due:
+                return
+            settings["alarm_log"] = prune_alarm_log(new_log)
+            try:
+                save_settings(settings)
+            except Exception:
+                traceback.print_exc()
+            try:
+                play_alarm_sound(settings.get("notify_sound", True))
+            except Exception:
+                traceback.print_exc()
+            _show_deadline_alarm(due)
+        except Exception:
+            traceback.print_exc()
+
     def _on_page_resize(e=None):
         # Раунд 15 (задача 2): при resize окна НЕ пересоздаём раскладку с нуля
         # (_layout_widths затирал ручные ширины колонок), а ВЫРАВНИВАЕМ текущие
@@ -4334,12 +4595,84 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     except Exception:
             traceback.print_exc()
 
+    def _maybe_ask_identity():
+        """Раунд 23 (задача 2): пользовательская редакция при первом запуске
+        ОБЯЗАНА выбрать ФИО — к нему привязываются уведомления и «свои»
+        контроли («при установке пишем ФИО пользователя»). Отмены нет:
+        без ФИО алармы и read-only привязка бессмысленны."""
+        if not edition_user:
+            return
+        if (settings.get("network_user") or "").strip():
+            return
+        names = get_all_people_names(settings)
+        ident_dd = ft.Dropdown(label="Ваша фамилия", width=340,
+                               options=[ft.dropdown.Option(n) for n in names])
+        err_txt = ft.Text("", size=11, color=GLASS["overdue"])
+
+        def _ok(e=None):
+            nonlocal network_user
+            nm = (ident_dd.value or "").strip()
+            if not nm:
+                err_txt.value = "Выберите ФИО из списка"
+                try:
+                    _safe_update(err_txt)
+                except Exception:
+                    traceback.print_exc()
+                return
+            settings["network_user"] = nm
+            network_user = nm
+            try:
+                save_settings(settings)
+            except Exception:
+                traceback.print_exc()
+            try:
+                save_appdata_edition("user", nm)
+            except Exception:
+                traceback.print_exc()
+            try:
+                page.close(ident_dlg)
+            except Exception:
+                traceback.print_exc()
+
+        ident_dlg = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Row(controls=[ft.Icon(ft.icons.PERSON, size=18, color=GLASS["accent"]),
+                                   ft.Text("Кто вы?", size=15, weight=ft.FontWeight.BOLD,
+                                           color=GLASS["text"])], spacing=8, tight=True),
+            content=ft.Container(
+                width=380,
+                content=ft.Column(controls=[
+                    ft.Text("Это пользовательская редакция. Выберите своё ФИО "
+                            "из справочника — к нему привязываются контроли "
+                            "и напоминания о сроках.", size=12,
+                            color=GLASS["text_secondary"]),
+                    ident_dd,
+                    err_txt,
+                ], spacing=8, tight=True),
+            ),
+            actions=[ft.ElevatedButton("Подтвердить", bgcolor=GLASS["accent"],
+                                       color="#ffffff", on_click=_ok,
+                                       style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)))],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        try:
+            page.open(ident_dlg)
+        except Exception:
+            traceback.print_exc()
+
     _load_initial()
     # Раунд 15 (задача 2): начальная геометрия — явная ширина панели/заголовка/
     # строк до правого края + выравнивание колонок под бюджет окна (внутри
     # _apply_table_geometry вызываются _rebuild_header/_rebuild_table).
     _apply_table_geometry()
     _refresh_counters()
+    _maybe_ask_identity()  # Раунд 23: ФИО пользователя при первом запуске user-редакции
+
+    # Раунд 23: тест-хук ручного запуска проверки алармов (фоновый цикл
+    # опрашивает раз в минуту — в headless-тестах вызываем напрямую).
+    page._controls_alarm_check = _check_deadline_alarms
 
     try:
         t = threading.Thread(target=_background_loop, daemon=True)
