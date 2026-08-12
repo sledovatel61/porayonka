@@ -4409,3 +4409,105 @@ None-потоки на `open(os.devnull, "w")`; вызывается и в `_ent
   hdr26 (видимость кнопки + переключатель), about26 (новый текст),
   tray26 (web-режим, notify, singleton), id26 (диалог до таблицы,
   «свои» после выбора). Старые секции не сломаны (id23 и пр. зелёные).
+
+
+---
+
+## 67. Вкладка «Контроли» — раунд 27 (hotfix: web-Win7, сброс ФИО, финальные дистрибутивы)
+
+**Дата:** 2026-08-12. **Ветка:** `main` (оркестратор).  
+Промпт не требовался: критичные баги выявлены при живой проверке portable exe, исправлены оркестратором напрямую.
+
+### 67.1 Web-версия для Win7 не открывала страницу
+
+**Симптом:** запуск `Порайонка_Пользователь_Web.exe` открывал браузер по
+`http://127.0.0.1:8555`, но страница была недоступна (браузер показывал
+свою заглушку «Страница не найдена»); сервер отвечал HTTP 500
+`Internal Server Error`.
+
+**Причина:** в `Porayonka_User_Web.spec` не были включены статические
+web-assets Flet (`flet/web`, `flet/fastapi`). Uvicorn стартовал, но
+`flet_fastapi/flet_static_files.py` падал с
+`Exception: Web root path not found: ...\flet\web`.
+
+**Решение:**
+- `Porayonka_User_Web.spec`: определяем путь к `flet/web` и `flet/fastapi`,
+  добавляем в `datas`;
+- добавлены `hiddenimports`: `flet.web`, `flet.fastapi`, `uvicorn`,
+  `fastapi`, `starlette`.
+- После исправления сервер отдаёт страницу Flet (HTTP 200, HTML клиента).
+
+### 67.2 User-редакция показывала чужие контроли вместо диалога «Кто вы?»
+
+**Симптом:** при первом запуске пользовательской portable-версии список
+сразу фильтровался по ФИО «Потёмкин С.А.» вместо того, чтобы спросить
+ФИО пользователя.
+
+**Причина:** в `%APPDATA%/porayonka/controls_settings.json` оставался
+старый `network_user` (от предыдущих тестов admin). `apply_edition_to_settings`
+не сбрасывал его, если `edition.json` не содержал явного `user_name`.
+
+**Решение:** в `core/edition.py` для explicit `user`-редакции без
+`user_name` принудительно сбрасываем `network_user` → `''`, чтобы
+сработал диалог «Кто вы?». В `ui/controls/controls_tab.py`
+`apply_edition_to_settings` теперь вызывается всегда, а не только для
+`edition_user`, чтобы явная admin-редакция тоже сбрасывала старый
+`network_user`.
+
+### 67.3 Admin-версия наследовала user-фильтр
+
+**Симптом:** после запуска user-версии на той же машине admin-версия
+показывала только «свои» контроли выбранного user.
+
+**Причина:** сброс `network_user` в `apply_edition_to_settings` для явной
+admin-редакции работал, но вызывался только внутри ветки `edition_user`.
+
+**Решение:** см. п. 67.2 — вызов `apply_edition_to_settings` всегда,
+сохранение настроек при изменении.
+
+### 67.4 Финальные portable exe и установщики
+
+**Portable exe** (peresobrany s fixami):
+- `dist_all/Порайонка_Админ/Порайонка_Админ.exe` + `edition.json`
+  (`{"role": "admin"}`)
+- `dist_all/Порайонка_Пользователь/Порайонка_Пользователь.exe` +
+  `edition.json` (`{"role": "user"}`)
+- `dist_all/Порайонка_Пользователь_Web/Порайонка_Пользователь_Web.exe` +
+  `edition.json` (`{"role": "user"}`) + `start_web_win7.bat`
+
+**Установщики Inno Setup 6:**
+- `installer/Admin.iss` → `output/Порайонка_Админ_Setup.exe`
+- `installer/User.iss` → `output/Порайонка_Пользователь_Setup.exe`
+- `installer/UserWeb.iss` → `output/Порайонка_Пользователь_Web_Setup.exe`
+
+Скрипт `installer/build_installers.bat` ищет `iscc.exe` сначала в
+локальной папке `C:\porayonka_inno6`, затем в стандартных путях.
+
+### 67.5 Изменённые файлы
+
+- `Porayonka_User_Web.spec` — добавлены flet web/fastapi assets и
+  hiddenimports.
+- `core/edition.py` — сброс `network_user` для user-редакции без
+  встроенного ФИО.
+- `ui/controls/controls_tab.py` — `apply_edition_to_settings` вызывается
+  всегда.
+- `installer/build_installers.bat` — приоритет локальной папки
+  `C:\porayonka_inno6`.
+- `AGENTS.md` — данный раздел.
+
+### 67.6 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py \
+  ui/controls/controls_tab.py ui/header.py ui/tray_icon.py core/edition.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py   # ALL OK
+```
+
+Живая проверка portable exe:
+- `Порайонка_Пользователь_Web.exe --port 8556` → `curl http://127.0.0.1:8556`
+  возвращает HTML Flet (HTTP 200).
+- user-версия без сохранённого ФИО → диалог «Кто вы?».
+- admin-версия после user-версии → полный список контролей.
+

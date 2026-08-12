@@ -4,9 +4,11 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
-:: Поиск Inno Setup Compiler
+:: Поиск Inno Setup Compiler (сначала локальная папка сборки, потом системная установка)
 set "ISCC="
-if exist "C:\Program Files (x86)\Inno Setup 6\iscc.exe" (
+if exist "C:\porayonka_inno6\iscc.exe" (
+    set "ISCC=C:\porayonka_inno6\iscc.exe"
+) else if exist "C:\Program Files (x86)\Inno Setup 6\iscc.exe" (
     set "ISCC=C:\Program Files (x86)\Inno Setup 6\iscc.exe"
 ) else if exist "C:\Program Files\Inno Setup 6\iscc.exe" (
     set "ISCC=C:\Program Files\Inno Setup 6\iscc.exe"

@@ -12,7 +12,10 @@ venv/
 
 # PyInstaller build artifacts
 build/
+build_*/
 dist/
+dist_*/
+dist_web/
 *.manifest
 *.pkg
 
@@ -56,3 +59,11 @@ porayonka-app/**/*.json
 LLM/
 Бэкапы/
 backups/
+
+# Custom build outputs (distributives assembled by the orchestrator)
+dist_all/
+installer/output/
+installer/InnoSetup6/
+installer/innosetup-*.exe
+installer/*.log
+*.iss.bak
