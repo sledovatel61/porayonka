@@ -4245,3 +4245,38 @@ winsound/pystray — guarded, sys.platform-проверки.
     программой (с cleanup).
 - `ls Porayonka_Admin.spec Porayonka_User.spec Porayonka_User_Web.spec
   build_admin.bat build_user.bat build_user_web_win7.bat` — все на месте.
+
+## 64. Вкладка «Контроли» — раунд 25 (задачи: починка smoke-тестов под Windows)
+
+**Дата:** 2026-08-12. **Статус:** промпт готов, передан агенту.
+
+### 64.1 Проблема
+
+Раунд 24 (коммит `5086e8b`) реализовал дистрибутивы admin/user + web Win7 +
+реальный звук `pig.mp3`, но smoke-тесты падают на Windows:
+
+- `sound23: play_alarm_sound вне Windows — no-op False` — тест ожидает
+  Linux-платформу, на Windows возвращает `True`.
+- `os23: автозапуск вне Windows — supported=False` — на Windows
+  `is_supported()` = `True`.
+- В `tests/test_controls_smoke.py` снова появились Unicode-символы
+  (`—`, `→`, `×`) в печатаемых `check()`/`print()` — падает на cp1251.
+
+### 64.2 Задачи
+
+1. Сделать проверки платформенно-независимыми: мокать `sys.platform` /
+   `sys.frozen` для кейсов «вне Windows».
+2. Убрать Unicode из печатаемых строк тестов (`—` → `-`, `→` → `->`,
+   `×` → `x`).
+3. Не ломать функционал раундов 20–24.
+
+### 64.3 Материалы
+
+- Промпт: `PROMPT_контроли_доработка25.md`.
+- База: `arena/019fec02-porayonka` (`5086e8b`) + `main` (`bb23bb8`).
+
+### 64.4 Процесс
+
+Агент работает в ветке `arena/019fec02-porayonka`. После приёмки оркестратор
+внедряет файлы в `main`, обновляет `AGENTS.md` §65 и запускает smoke-тесты
+из §37.2 на Windows.
