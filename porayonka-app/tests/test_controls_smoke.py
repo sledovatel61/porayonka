@@ -689,7 +689,7 @@ def main():
     if ex:
         opts = [o.key for o in (ex.options or [])]
         # канонические криминалисты есть, «кривые» написания из данных — НЕ попадают
-        check("исполнители — канонический список (без мусора из данных)",
+        check("исполнители - канонический список (без мусора из данных)",
               "Семисенко Иван Юрьевич" in opts
               and "Чашин Эдуард Александрович" in opts
               and "Чашин Эдуард Анатольевич" not in opts
@@ -699,10 +699,10 @@ def main():
         # в фильтр исполнителей; раунд 22 (задача 4) отменил деление фильтров
         # по ролям — опции = ПОЛНЫЙ справочник (роли — только для пикеров
         # карточки). «Чашин Э.А.» слит с криминалистом-тёзкой одной записью.
-        check("исполнители — полный справочник: дефолтные контролёры тоже есть",
+        check("исполнители - полный справочник: дефолтные контролёры тоже есть",
               "Потемкин С.А." in opts and "Чашин Э.А." not in opts)
-        check("исполнители — без дублей", len(opts) == len(set(opts)))
-        check("исполнители — «Прочие» в конце", opts[-1] == FILTER_OTHER)
+        check("исполнители - без дублей", len(opts) == len(set(opts)))
+        check("исполнители - «Прочие» в конце", opts[-1] == FILTER_OTHER)
     ct = hints.get("Все контролеры")
     check("dropdown «Все контролеры» найден", ct is not None)
     if ct:
@@ -711,14 +711,14 @@ def main():
         # (задача 4) — опции = тот же ПОЛНЫЙ справочник людей (иначе контролёр
         # со снятым чипом терялся из фильтра, а контроли падали в «Прочие»).
         # Слияние тёзок сохраняется: «Чашин Э.А.» отдельной записью не выводится.
-        check("контролёры — полный справочник (Потемкин + Чашин одной записью)",
+        check("контролёры - полный справочник (Потемкин + Чашин одной записью)",
               "Потемкин С.А." in opts
               and "Чашин Эдуард Александрович" in opts
               and "Чашин Э.А." not in opts
               and "Семисенко Иван Юрьевич" in opts,
               f"{len(opts)-1} опций")
-        check("контролёры — без дублей", len(opts) == len(set(opts)))
-        check("контролёры — «Прочие» в конце", opts[-1] == FILTER_OTHER)
+        check("контролёры - без дублей", len(opts) == len(set(opts)))
+        check("контролёры - «Прочие» в конце", opts[-1] == FILTER_OTHER)
 
     # ── 10. merge_controls: union по id, конфликт, порядок (задача 1) ──
     def _mk(id_, updated, **kw):
@@ -731,7 +731,7 @@ def main():
     check("merge: union по id (a,b,c,d)", {c.id for c in merged} == {"a", "b", "c", "d"},
           f"{[c.id for c in merged]}")
     b = next((c for c in merged if c.id == "b"), None)
-    check("merge: конфликт — побеждает новый updated_at",
+    check("merge: конфликт - побеждает новый updated_at",
           b is not None and b.updated_at == "2026-08-02T10:00:00")
     check("merge: порядок local + новые из shared в конец",
           [c.id for c in merged] == ["a", "b", "c", "d"])
@@ -764,14 +764,14 @@ def main():
 
     # ── 12. журнал уведомлений: антиспам (задача 2) ──
     nlog = {}
-    check("notify: new — первый раз уведомляет", _should_notify(nlog, "c1", "new", "2026-08-05") is True)
+    check("notify: new - первый раз уведомляет", _should_notify(nlog, "c1", "new", "2026-08-05") is True)
     nlog["c1:new"] = "2026-08-05"
-    check("notify: new — повтор не уведомляет", _should_notify(nlog, "c1", "new", "2026-08-05") is False)
-    check("notify: new — на следующий день тоже нет", _should_notify(nlog, "c1", "new", "2026-08-06") is False)
-    check("notify: overdue — первый раз уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is True)
+    check("notify: new - повтор не уведомляет", _should_notify(nlog, "c1", "new", "2026-08-05") is False)
+    check("notify: new - на следующий день тоже нет", _should_notify(nlog, "c1", "new", "2026-08-06") is False)
+    check("notify: overdue - первый раз уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is True)
     nlog["c1:overdue"] = "2026-08-05"
-    check("notify: overdue — в тот же день нет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is False)
-    check("notify: overdue — на следующий день уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-06") is True)
+    check("notify: overdue - в тот же день нет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is False)
+    check("notify: overdue - на следующий день уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-06") is True)
     # round-trip журнала через настройки
     save_settings({"notify_log": {"c1:new": "2026-08-05"}, "notify_sound": False})
     loaded = load_settings()
@@ -808,7 +808,7 @@ def main():
                    "network_shared_path": net_path, "notify_log": {}, "notify_sound": True})
     page2, tab2, _ = build()
     texts2 = " ".join(str(t.value) for t in walk(tab2) if isinstance(t, ft.Text) and t.value)
-    check("tab: network_enabled — контроль из shared в таблице", "ВХСОП-NET" in texts2)
+    check("tab: network_enabled - контроль из shared в таблице", "ВХСОП-NET" in texts2)
     check("tab: индикатор «Сеть: админ»", "Сеть: админ" in texts2)
 
     # ── 14. подрезка журнала старше 30 дней (задача 2) ──
@@ -840,25 +840,25 @@ def main():
           name_matches("Семисенко Иван Юрьевич", "Семисенко Иван Юриевич") is True)
     check("name_matches: регистр не важен",
           name_matches("Семисенко Иван Юрьевич", "семисенко и.ю.") is True)
-    check("name_matches: чужая фамилия — False",
+    check("name_matches: чужая фамилия - False",
           name_matches("Семисенко Иван Юрьевич", "Гайнутдинов С.И.") is False)
-    check("name_matches: пустая строка — False",
+    check("name_matches: пустая строка - False",
           name_matches("Семисенко Иван Юрьевич", "") is False)
-    check("name_matches: None — False",
+    check("name_matches: None - False",
           name_matches("Семисенко Иван Юрьевич", None) is False)
-    check("name_matches: пустой canonical — False",
+    check("name_matches: пустой canonical - False",
           name_matches("", "Семисенко И.Ю.") is False)
-    check("name_matches: фамилия <3 символов — False",
+    check("name_matches: фамилия <3 символов - False",
           name_matches("Ян И.В.", "Ян Петрович") is False)
     check("name_matches: короткая форма vs полное ФИО (контролёр)",
           name_matches("Потемкин С.А.", "Потемкин Сергей Анатольевич") is True)
-    check("name_matches: опечатка в фамилии — лишняя буква",
+    check("name_matches: опечатка в фамилии - лишняя буква",
           name_matches("Семисенко Иван Юрьевич", "Семисеннко И.Ю.") is True)
-    check("name_matches: опечатка в фамилии — вставка",
+    check("name_matches: опечатка в фамилии - вставка",
           name_matches("Гайнутдинов Станислав Игоревич", "Гайнутдитнов С.И.") is True)
-    check("name_matches: опечатка в фамилии — пропуск буквы",
+    check("name_matches: опечатка в фамилии - пропуск буквы",
           name_matches("Макаренко Роман Андреевич", "Макарено Р.А.") is True)
-    check("name_matches: похожая фамилия ниже порога — False",
+    check("name_matches: похожая фамилия ниже порога - False",
           name_matches("Семисенко Иван Юрьевич", "Семенов И.Ю.") is False)
 
     # 15б. опции фильтров — ПОЛНЫЙ справочник (раунды 18→22) + «Прочие»
@@ -901,7 +901,7 @@ def main():
               opts == expected, f"{len(opts)} опций")
         # Раунд 18→22: дефолтный контролёр «Чашин Э.А.» слит с криминалистом-
         # тёзкой в одну запись — в списке ровно один Чашин.
-        check("фильтр-опции контролёров: Чашин — одна запись (слит с криминалистом)",
+        check("фильтр-опции контролёров: Чашин - одна запись (слит с криминалистом)",
               "Чашин Э.А." not in opts
               and opts.count("Чашин Эдуард Александрович") == 1)
 
@@ -1011,7 +1011,7 @@ def main():
     # попадает. Роли person_roles на это больше не влияют.
     check("«Прочие»: контроли людей справочника НЕ попадают в «Прочие»",
           "П-1" not in vis and "П-2" not in vis, f"видно: {sorted(vis)}")
-    check("«Прочие»: посторонний — в «Прочие»", "П-3" in vis)
+    check("«Прочие»: посторонний - в «Прочие»", "П-3" in vis)
     # даже ЯВНЫЙ сброс обеих ролей человека не убирает его из фильтров
     st16 = load_settings()
     set_person_roles(st16, "Потемкин С.А.", [])
@@ -1027,7 +1027,7 @@ def main():
     check("«Прочие»: фильтр по Потемкину находит его контроль",
           _set_filter(tab, "Все исполнители", "Потемкин С.А."))
     vis = _visible_texts(tab)
-    check("«Прочие»: фильтр по Потемкину — только его контроль",
+    check("«Прочие»: фильтр по Потемкину - только его контроль",
           "П-1" in vis and "П-2" not in vis and "П-3" not in vis, f"видно: {sorted(vis)}")
     check("«Прочие»: и без ролей П-1 не попадает в «Прочие»",
           _set_filter(tab, "Все исполнители", FILTER_OTHER))
@@ -1100,14 +1100,14 @@ def main():
     check("excel: шапка во 2-й строке (вх. № ВХСОП-____-__)",
           str(wsx["B2"].value).startswith("вх. № ВХСОП"))
     # Раунд 21 (задача 6): заголовок без личных фамилий — просто «За кем контроль»
-    check("excel: G2 — «За кем контроль» (без фамилий в скобках)",
+    check("excel: G2 - «За кем контроль» (без фамилий в скобках)",
           str(wsx["G2"].value) == "За кем контроль")
-    check("excel: H2 — «Разовый / постоянный»", "Разовый / постоянный" in str(wsx["H2"].value))
+    check("excel: H2 - «Разовый / постоянный»", "Разовый / постоянный" in str(wsx["H2"].value))
     check("excel: автофильтр A2:J4 (от шапки до последней строки данных)",
           wsx.auto_filter.ref == "A2:J4", wsx.auto_filter.ref)
     check("excel: ширина B = 34.3 как в эталоне",
           abs((wsx.column_dimensions["B"].width or 0) - 34.3) < 0.2)
-    check("excel: C3 дата поступления — дата Excel (DD.MM.YYYY)",
+    check("excel: C3 дата поступления - дата Excel (DD.MM.YYYY)",
           isinstance(wsx["C3"].value, datetime) and wsx["C3"].number_format == "DD.MM.YYYY")
     check("excel: I3 жёлтая заливка (просрочен)", 
           wsx["I3"].fill.patternType == "solid" and wsx["I3"].fill.fgColor.rgb == "FFFFFF00")
@@ -1217,7 +1217,7 @@ def main():
     check("people: «Прочие» не содержит Макаренко",
           _set_filter(tab, "Все исполнители", FILTER_OTHER))
     vis = _visible_texts(tab)
-    check("people: «Прочие» — только посторонний", "М-2" in vis and "М-1" not in vis)
+    check("people: «Прочие» - только посторонний", "М-2" in vis and "М-1" not in vis)
     check("people: remove_extra_person удаляет",
           remove_extra_person(load_settings(), "Макаренко Роман Андреевич") is True)
 
@@ -1227,7 +1227,7 @@ def main():
     check("initiator: «ГСУ ГУК» разбивается на «гсу,гук»",
           canonical_initiator_group("ГСУ ГУК") == "гсу,гук")
     opts8 = initiator_filter_options(["ГУК СК ГУК ЮФО", "ГСУ ГУК", "СУ", "ОКРИМ"])
-    check("initiator: опции без склеек — отдельные каноны",
+    check("initiator: опции без склеек - отдельные каноны",
           "ГУК" in opts8 and "ГУК ЮФО" in opts8 and "ГСУ" in opts8 and "СУ" in opts8,
           f"{opts8}")
     check("initiator: «ГУК СК, ГУК ЮФО» (с запятой) тоже разбивается",
@@ -1293,7 +1293,7 @@ def main():
     if ref_btns:
         ref_btns[0].on_click(None)
         # Раунд 14: overlay-Container, НЕ AlertDialog
-        check("refs14: справочники — не AlertDialog", len(page.dialogs) == 0)
+        check("refs14: справочники - не AlertDialog", len(page.dialogs) == 0)
         dlg = _refs_overlay_of(tab)
         check("refs: overlay открыт", dlg is not None)
         fields = [c for c in walk(dlg) if isinstance(c, ft.TextField)]
@@ -1733,7 +1733,7 @@ def main():
                   base_name in (st13.get("hidden_people") or []))
             from core.controls_data import get_controller_names as _gcn
             cn13 = _gcn(st13)
-            check("ref13: канон — новое есть, старого нет",
+            check("ref13: канон - новое есть, старого нет",
                   (base_name + "!!!") in cn13 and base_name not in cn13)
             texts13 = {t.value for t in walk(dlg13) if isinstance(t, ft.Text)}
             check("ref13: список перестроен с новым именем",
@@ -1854,7 +1854,7 @@ def main():
     except Exception:
         ok14 = False
         traceback.print_exc()
-    check("attach13: при сети — без исключений", ok14)
+    check("attach13: при сети - без исключений", ok14)
     shared_att13 = os.path.join(shared_dir13, "controls_attachments")
     in_shared = False
     if os.path.isdir(shared_att13):
@@ -1876,7 +1876,7 @@ def main():
     except Exception:
         ok_bad = False
         traceback.print_exc()
-    check("attach13: shared недоступен — copy_to_shared вернул None без TypeError",
+    check("attach13: shared недоступен - copy_to_shared вернул None без TypeError",
           ok_bad and rel_bad is None)
     rel_loc = copy_attachment_to_local("cid13", src13)
     check("attach13: локальный фолбэк скопировал файл", rel_loc is not None)
@@ -1929,7 +1929,7 @@ def main():
             body_children = getattr(rbody, "controls", []) or []
             apply_in_last = [b for b in walk(body_children[-1]) if isinstance(b, ft.ElevatedButton)
                              and getattr(b, "text", None) == "Применить"] if body_children else []
-            check("refs15: футер с «Применить» — последний блок (вне скролла)",
+            check("refs15: футер с «Применить» - последний блок (вне скролла)",
                   len(apply_in_last) >= 1)
             sections15 = [c for c in body_children if isinstance(c, ft.Container)
                           and (getattr(c, "expand", 0) or 0) > 0]
@@ -1945,7 +1945,7 @@ def main():
               len(lists14) >= 2
               and all(c._get_attr("onScroll") is None for c in lists14),
               f"{len(lists14)} списков")
-        check("refs17: scroll=ALWAYS — бегунок виден всегда (thumbVisibility=true)",
+        check("refs17: scroll=ALWAYS - бегунок виден всегда (thumbVisibility=true)",
               len(lists14) >= 2)
         check("refs15: списки expand=True (заполняют секцию при растягивании)",
               len(lists14) >= 2 and all((c.expand or 0) > 0 for c in lists14))
@@ -1986,7 +1986,7 @@ def main():
             ovl14b = _refs_overlay_of(tab)
             stacks14b = [c for c in walk(ovl14b) if isinstance(c, ft.Stack)] if ovl14b else []
             rcard_b = stacks14b[0].controls[0] if stacks14b else None
-            check("refs16: переоткрытое окно — размеры восстановлены из settings",
+            check("refs16: переоткрытое окно - размеры восстановлены из settings",
                   rcard_b is not None and rcard_b.width == 740 and rcard_b.height == 600,
                   f"w={getattr(rcard_b, 'width', None)} h={getattr(rcard_b, 'height', None)}")
 
@@ -2019,7 +2019,7 @@ def main():
     check("bar16: строки есть", len(rows16) >= 1)
     if rows16:
         stc16 = rows16[0].content
-        check("bar16: контент строки — Stack (полоса отдельным слоем)",
+        check("bar16: контент строки - Stack (полоса отдельным слоем)",
               isinstance(stc16, ft.Stack))
         if isinstance(stc16, ft.Stack) and len(stc16.controls) >= 2:
             bar16 = stc16.controls[1]
@@ -2029,7 +2029,7 @@ def main():
                   getattr(bar16, "left", None) == 0)
             check("bar16: полоса на полную высоту (top=0/bottom=0)",
                   getattr(bar16, "top", None) == 0 and getattr(bar16, "bottom", None) == 0)
-            check("bar16: полоса цветная по статусу (для Б-16 — in_progress)",
+            check("bar16: полоса цветная по статусу (для Б-16 - in_progress)",
                   getattr(bar16, "bgcolor", None) == GLASS["in_progress"],
                   f"bg={getattr(bar16, 'bgcolor', None)}")
             inner16 = stc16.controls[0]
@@ -2095,7 +2095,7 @@ def main():
                       and (getattr(t, "size", 0) or 0) == 20
                       and getattr(t, "weight", None) == ft.FontWeight.BOLD
                       for t in walk(outer18[0])))
-            check("frow18: даты «С:»/«По:» — в прибитой правой зоне",
+            check("frow18: даты «С:»/«По:» - в прибитой правой зоне",
                   "С: —" in otexts18 and "По: —" in otexts18)
             reset18 = [c for c in outer18[0].controls if isinstance(c, ft.ElevatedButton)
                        and getattr(c, "text", None) == "Сбросить фильтры"]
@@ -2193,13 +2193,13 @@ def main():
     wb18.save(xlsx_in18)
     parsed18, stats18 = import_from_excel(xlsx_in18, [])
     by18 = {c.incoming_number: c for c in parsed18}
-    check("xl18: импорт эталонного файла — все 3 строки", stats18["imported"] == 3,
+    check("xl18: импорт эталонного файла - все 3 строки", stats18["imported"] == 3,
           f"imported={stats18['imported']} errors={stats18['errors']}")
     ic1 = by18.get("ИМП-1")
     check("xl18: H=дата -> разовый, end_date=конечная дата (01.09.2026 не потерялась)",
           ic1 is not None and ic1.control_type == "once" and ic1.end_date == "2026-09-01",
           f"type={getattr(ic1, 'control_type', None)} end={getattr(ic1, 'end_date', None)}")
-    check("xl18: разовый — due из колонки I (10.08.2026, напоминание)",
+    check("xl18: разовый - due из колонки I (10.08.2026, напоминание)",
           ic1 is not None and ic1.due_date == "2026-08-10",
           f"due={getattr(ic1, 'due_date', None)}")
     ic2 = by18.get("ИМП-2")
@@ -2208,7 +2208,7 @@ def main():
           and ic2.period_days == 90 and ic2.end_date == "2026-05-10",
           f"type={getattr(ic2, 'control_type', None)} days={getattr(ic2, 'period_days', None)}"
           f" end={getattr(ic2, 'end_date', None)}")
-    check("xl18: периодический — due из колонки I",
+    check("xl18: периодический - due из колонки I",
           ic2 is not None and ic2.due_date == "2026-08-10")
     ic3 = by18.get("ИМП-3")
     check("xl18: «ежемесячно» -> период 30 дней, end_date пустая",
@@ -2226,33 +2226,33 @@ def main():
                    executors=["Ливенский В.О."], controller="Чашин Э.А.",
                    control_type="periodic", period_days=90,
                    due_date="2026-08-10", end_date="2026-05-10")
-    check("xl18: текст H разового в таблице/экспорте — конечная дата",
+    check("xl18: текст H разового в таблице/экспорте - конечная дата",
           _ctt18(c18a) == "01.09.2026", f"{_ctt18(c18a)}")
-    check("xl18: текст H периодического — «<дата> далее каждые 3 месяца»",
+    check("xl18: текст H периодического - «<дата> далее каждые 3 месяца»",
           _ctt18(c18b) == "10.05.2026 далее каждые 3 месяца", f"{_ctt18(c18b)}")
     xlsx_out18 = os.path.join(tempfile.mkdtemp(prefix="porayonka_exp18_"), "out.xlsx")
     ControlsExcelExporter().export([c18a, c18b], xlsx_out18, soon_days=3, full=True)
     w18o = _LWB18(xlsx_out18)
     wso18 = w18o["Контроли"]
-    check("xl18: экспорт разового — H = «01.09.2026» (не слово «разовый»)",
+    check("xl18: экспорт разового - H = «01.09.2026» (не слово «разовый»)",
           wso18["H3"].value == "01.09.2026", f"H3={wso18['H3'].value!r}")
-    check("xl18: экспорт периодического — H = «10.05.2026 далее каждые 3 месяца»",
+    check("xl18: экспорт периодического - H = «10.05.2026 далее каждые 3 месяца»",
           wso18["H4"].value == "10.05.2026 далее каждые 3 месяца",
           f"H4={wso18['H4'].value!r}")
     # round-trip через скрытый лист и через чистый текст H — обе даты целы
     pr18, st18x = import_from_excel(xlsx_out18, [])
     bout18 = {c.incoming_number: c for c in pr18}
-    check("xl18: round-trip (полный лист) — разовый end_date сохранён",
+    check("xl18: round-trip (полный лист) - разовый end_date сохранён",
           st18x["full_format"]
           and bout18.get("ЭКС-1") is not None
           and bout18["ЭКС-1"].end_date == "2026-09-01"
           and bout18["ЭКС-1"].control_type == "once")
-    check("xl18: round-trip (полный лист) — период 90 + end_date сохранены",
+    check("xl18: round-trip (полный лист) - период 90 + end_date сохранены",
           bout18.get("ЭКС-2") is not None and bout18["ЭКС-2"].period_days == 90
           and bout18["ЭКС-2"].end_date == "2026-05-10")
     # импорт файла БЕЗ скрытого листа — текст H разбирается эвристикой
     pr18b, _ = import_from_excel(xlsx_in18, [])
-    check("xl18: импорт без полного листа — данные из H/I восстановлены",
+    check("xl18: импорт без полного листа - данные из H/I восстановлены",
           len(pr18b) == 3)
 
     # ── 43. Раунд 18, задача 3: заголовки колонок — точно как в исходной Excel ──
@@ -2287,17 +2287,17 @@ def main():
     st44 = load_settings()
     ex44 = get_executor_names(st44)
     ct44 = get_controller_names(st44)
-    check("roles18: умолчание — криминалист только исполнитель",
+    check("roles18: умолчание - криминалист только исполнитель",
           "Семисенко Иван Юрьевич" in ex44 and "Семисенко Иван Юрьевич" not in ct44)
-    check("roles18: умолчание — Потемкин только контролёр",
+    check("roles18: умолчание - Потемкин только контролёр",
           "Потемкин С.А." in ct44 and "Потемкин С.А." not in ex44)
-    check("roles18: Чашин слит с криминалистом — обе роли одной записью",
+    check("roles18: Чашин слит с криминалистом - обе роли одной записью",
           "Чашин Эдуард Александрович" in ex44
           and "Чашин Эдуард Александрович" in ct44
           and "Чашин Э.А." not in ex44 and "Чашин Э.А." not in ct44)
     # явное снятие дефолтной роли переживает рестарт (пишется даже пустой список)
     set_person_roles(st44, "Чашин Эдуард Александрович", ["executor"])
-    check("roles18: снятие роли контролёра — Чашин ушёл из контролёров",
+    check("roles18: снятие роли контролёра - Чашин ушёл из контролёров",
           "Чашин Эдуард Александрович" not in get_controller_names(load_settings()))
     set_person_roles(st44, "Чашин Эдуард Александрович", [])
     check("roles18: пустой список ролей сохраняется (ни один фильтр)",
@@ -2575,7 +2575,7 @@ def main():
               and getattr(c, "text", None) == "Восстановить"]
     delf46 = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
               and getattr(c, "text", None) == "Удалить навсегда"]
-    check("arch19: в карточке архивного — «Восстановить» и «Удалить навсегда»",
+    check("arch19: в карточке архивного - «Восстановить» и «Удалить навсегда»",
           len(rest46) == 1 and len(delf46) == 1)
     done_badge46 = [t for t in walk(tab) if isinstance(t, ft.Text)
                     and t.value and str(t.value).startswith("Исполнен:")]
@@ -2642,7 +2642,7 @@ def main():
     _invoke_event_handler(gds47[1].on_horizontal_drag_start, E47())
     _invoke_event_handler(gds47[1].on_horizontal_drag_update, type("E", (), {"delta_x": 40})())
     w_after = [st.width for st in stacks47]
-    check("drag19: вправо +40 — колонка «Вх. №» выросла 160->200",
+    check("drag19: вправо +40 - колонка «Вх. №» выросла 160->200",
           w_after[1] == 200, f"{w_after[1]}")
     check("drag19: «Содержание» компенсировало -40 (сумма неизменна)",
           w_after[4] == w_before[4] - 40 and sum(w_after) == sum_before,
@@ -2650,7 +2650,7 @@ def main():
     # тянем ТУ ЖЕ границу ВЛЕВО -70 — от стартовой точки жеста, не от текущей
     _invoke_event_handler(gds47[1].on_horizontal_drag_update, type("E", (), {"delta_x": -70})())
     w_after2 = [st.width for st in stacks47]
-    check("drag19: влево — суммарная дельта -30 от старта (160->170? нет, 160+40-70=130)",
+    check("drag19: влево - суммарная дельта -30 от старта (160->170? нет, 160+40-70=130)",
           w_after2[1] == 130, f"{w_after2[1]}")
     _invoke_event_handler(gds47[1].on_horizontal_drag_end, E47())
     # после rebuild хэндлы пересозданы — гибкая пара: «Содержание» (gds[4])
@@ -2660,11 +2660,11 @@ def main():
     stacks47b = [st for st in hdr47b.controls if isinstance(st, ft.Stack)]
     c_before, e_before = stacks47b[4].width, stacks47b[5].width
     _invoke_event_handler(gds47b[4].on_horizontal_drag_update, type("E", (), {"delta_x": 30})())
-    check("drag19: «Содержание» +30 — «Исполнители» -30 (работает и для гибкой пары)",
+    check("drag19: «Содержание» +30 - «Исполнители» -30 (работает и для гибкой пары)",
           stacks47b[4].width == c_before + 30 and stacks47b[5].width == e_before - 30,
           f"{stacks47b[4].width}/{stacks47b[5].width}")
     _invoke_event_handler(gds47b[4].on_horizontal_drag_update, type("E", (), {"delta_x": -30})())
-    check("drag19: «Содержание» -30 обратно — «Исполнители» восстановились",
+    check("drag19: «Содержание» -30 обратно - «Исполнители» восстановились",
           stacks47b[4].width == c_before and stacks47b[5].width == e_before)
     _invoke_event_handler(gds47b[4].on_horizontal_drag_end, E47())
     # минимальный кламп: «№» влево до упора — 28 (не 40 и не 60)
@@ -2728,7 +2728,7 @@ def main():
     check("done19: диалог «Исполнен пункт» открыт (AlertDialog через page.open)",
           dlg48 is not None)
     cbs48 = [c for c in walk(dlg48) if isinstance(c, ft.Checkbox)] if dlg48 else []
-    check("done22: в диалоге мульти-выбор — чекбоксы по числу пунктов", len(cbs48) == 2)
+    check("done22: в диалоге мульти-выбор - чекбоксы по числу пунктов", len(cbs48) == 2)
     conf48 = [c for c in walk(dlg48) if isinstance(c, ft.ElevatedButton)
               and getattr(c, "text", None) == "Отметить исполненными"] if dlg48 else []
     check("done22: кнопка «Отметить исполненными» есть", len(conf48) == 1)
@@ -2769,7 +2769,7 @@ def main():
               t2_48b is not None and t2_48b.is_done and t2_48b.done_date == today_iso48)
         # в таблице содержание показывает «(исполнен <дата>)»
         vis48 = " ".join(_visible_texts(tab))
-        check("done19: в строке таблицы — «исполнен» с датой в содержании",
+        check("done19: в строке таблицы - «исполнен» с датой в содержании",
               "исполнен" in vis48)
     # 3.1. «Контроль исполнен» на БК-2 (без пунктов — жёлтой кнопки нет)
     check("done19: БК-2 виден для второго сценария",
@@ -2799,7 +2799,7 @@ def main():
         if conf_done48:
             conf_done48[0].on_click(None)
             ctl48c = next((c for c in load_controls() if c.incoming_number == "БК-2"), None)
-            check("done19: контроль исполнен — done, done_date, архив reason=done",
+            check("done19: контроль исполнен - done, done_date, архив reason=done",
                   ctl48c is not None and ctl48c.done
                   and ctl48c.done_date == datetime.now().date().isoformat()
                   and ctl48c.archived and ctl48c.archive_reason == "done",
@@ -2861,7 +2861,7 @@ def main():
               and getattr(sbt49, "interactive", None) is True)
         # список исполнителей — по роли executor (Семисенко есть, Потемкина нет)
         ex49 = multis49[0]._available
-        check("scroll19: мультивыбор исполнителей — только роль «И»",
+        check("scroll19: мультивыбор исполнителей - только роль «И»",
               "Семисенко Иван Юрьевич" in ex49 and "Потемкин С.А." not in ex49,
               f"{len(ex49)} опций")
         # но текущее значение контроля (Семисенко И.Ю. — не канон) не потеряно
@@ -2871,7 +2871,7 @@ def main():
     check("scroll19: dropdown «За кем контроль» найден", cdd49 is not None)
     if cdd49 is not None:
         opts49 = [o.key for o in (cdd49.options or [])]
-        check("scroll19: «За кем контроль» — только роль «К» (контролёры)",
+        check("scroll19: «За кем контроль» - только роль «К» (контролёры)",
               "Потемкин С.А." in opts49 and "Семисенко Иван Юрьевич" not in opts49,
               f"{opts49}")
         check("scroll19: текущий контролёр выбран и не потерян",
@@ -2888,7 +2888,7 @@ def main():
         rows49b[0].on_click(None)
         cdd49b = _find_dd(tab, "За кем контроль")
         opts49b = [o.key for o in (cdd49b.options or [])] if cdd49b else []
-        check("scroll19: fallback — без отмеченных контролёров список из DEFAULT_CONTROLLERS",
+        check("scroll19: fallback - без отмеченных контролёров список из DEFAULT_CONTROLLERS",
               "Потемкин С.А." in opts49b)
 
     # ── 50. Раунд 20, задача 4: сериализация UI (ui/update_lock.py) ──────────
@@ -2942,7 +2942,7 @@ def main():
     src51 = ("Распоряжение 2/216-р от 15.01.2026 Чашин Э.А. п.3 к 05.05.2026, "
              "п. 5 к 05.09.2026, п. 7 к 05.10.2026, Миронович Д.В. п. 9.3 к 20.05.2026")
     clean51, tasks51 = _pct20(src51)
-    check("import20: строка 41 эталона — 4 пункта", len(tasks51) == 4, f"{len(tasks51)}")
+    check("import20: строка 41 эталона - 4 пункта", len(tasks51) == 4, f"{len(tasks51)}")
     got51 = [(t.title, (t.assignees or [""])[0], t.due_date) for t in tasks51]
     check("import20: владельцы и сроки пунктов разобраны верно",
           got51 == [("п. 3", "Чашин Э.А.", "2026-05-05"),
@@ -2979,7 +2979,7 @@ def main():
             check("import20: содержание импортированной карточки очищено",
                   ctl51.content == "Распоряжение 2/216-р от 15.01.2026", ctl51.content)
             ex51 = {e.casefold() for e in ctl51.executors}
-            check("import20: ответственные пунктов — в исполнителях контроля",
+            check("import20: ответственные пунктов - в исполнителях контроля",
                   {"чашин э.а.", "миронович д.в."} <= ex51, f"{ctl51.executors}")
     except Exception:
         traceback.print_exc()
@@ -2992,7 +2992,7 @@ def main():
                    "extra_people": [], "hidden_people": ["Гайнутдинов Станислав Игоревич"]})
     st52 = load_settings()
     ok52 = _aep20(st52, "Гайнутдинов Станислав Игоревич")
-    check("refs20: добавление ранее скрытого человека — True", ok52)
+    check("refs20: добавление ранее скрытого человека - True", ok52)
     st52b = load_settings()
     check("refs20: hidden_people вычищен от этого ФИО",
           not any("гайнутдинов" in (h or "").casefold() for h in (st52b.get("hidden_people") or [])))
@@ -3021,7 +3021,7 @@ def main():
         lc53, rc53, _ = cols53
         lt53 = [t.value for t in walk(lc53) if isinstance(t, ft.Text) and t.value]
         rt53 = [t.value for t in walk(rc53) if isinstance(t, ft.Text) and t.value]
-        check("layout20: «Сроки» — в левой колонке", "Сроки" in lt53)
+        check("layout20: «Сроки» - в левой колонке", "Сроки" in lt53)
         check("layout20: «Сроки» расположены под комментарием",
               "Комментарий" in lt53 and "Сроки" in lt53
               and lt53.index("Комментарий") < lt53.index("Сроки"),
@@ -3036,7 +3036,7 @@ def main():
                  and getattr(c, "expand", None)]
         check("layout20: список пунктов скроллится сам, на всю высоту панели",
               len(scr53) >= 1, f"{len(scr53)}")
-        check("layout20: левая колонка — собственный постоянный скролл",
+        check("layout20: левая колонка - собственный постоянный скролл",
               getattr(getattr(lc53, "content", None), "scroll", None) == ft.ScrollMode.ALWAYS)
         check("layout20: у панели пунктов видимый бегунок (ScrollbarTheme)",
               getattr(getattr(rc53, "theme", None) or getattr(getattr(rc53, "content", None), "theme", None),
@@ -3111,7 +3111,7 @@ def main():
         hit54 = [c for c in stored54 if c.incoming_number == "ТЕСТ-20"]
         ok54 = (hit54 and "Грубников Георгий Григорьевич" in (hit54[0].executors or [])
                 and len(hit54[0].tasks) == 1)
-        check("del20+sync20: сохранение — исполнители объединены, пункт удалён",
+        check("del20+sync20: сохранение - исполнители объединены, пункт удалён",
               bool(ok54), f"{hit54[0].executors if hit54 else 'не найден'}")
     # нейтральные настройки/данные после раунда 20
     save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
@@ -3127,9 +3127,9 @@ def main():
     st55 = {"extra_people": ["Гайнутдинов Станислав Игоревич"],
             "hidden_people": ["Гайнутдинов Станислав Игоревич"]}
     names55 = get_all_people_names(st55)
-    check("refs21: пара extra+hidden — человек невидим до восстановления (ловушка)",
+    check("refs21: пара extra+hidden - человек невидим до восстановления (ловушка)",
           all("гайнутдинов" not in (n or "").casefold() for n in names55))
-    check("refs21: повторное добавление снимает скрытие (раньше — мёртвый False)",
+    check("refs21: повторное добавление снимает скрытие (раньше - мёртвый False)",
           _aep21b(st55, "Гайнутдинов Станислав Игоревич") is True)
     check("refs21: hidden_people вычищен", st55.get("hidden_people") == [],
           f"{st55.get('hidden_people')}")
@@ -3154,15 +3154,15 @@ def main():
              "п. 7 Гайнутдинов - 01.04.2026, п. 8 - 30.07.2026")
     clean56, tasks56 = _pct21(src56)
     got56 = [(t.title, ",".join(t.assignees), t.due_date) for t in tasks56]
-    check("import21: inline-формат — 6 пунктов", len(tasks56) == 6, f"{len(tasks56)}")
-    check("import21: inline — номера/исполнители/сроки разобраны",
+    check("import21: inline-формат - 6 пунктов", len(tasks56) == 6, f"{len(tasks56)}")
+    check("import21: inline - номера/исполнители/сроки разобраны",
           got56 == [("п. 2", "Миронович", "2026-05-01"),
                     ("п. 3", "Авахян", "2026-05-01"),
                     ("п. 5б", "Семисенко", "2026-09-01"),
                     ("п. 6", "Семисенко,Чащин", "2026-02-16"),
                     ("п. 7", "Гайнутдинов", "2026-04-01"),
                     ("п. 8", "", "2026-07-30")], f"{got56}")
-    check("import21: inline — содержание очищено до реквизитов",
+    check("import21: inline - содержание очищено до реквизитов",
           clean56 == "Распоряжение 8/216-р/17дсп", clean56)
     clean56b, tasks56b = _pct21("Распоряжение 2/216-р от 15.01.2026 Чашин Э.А. п.3 к 05.05.2026, п. 5 к 05.09.2026")
     check("import21: цепочный формат (раунд 20) не сломан",
@@ -3201,7 +3201,7 @@ def main():
               f"tasks={len(parsed57[0].tasks) if parsed57 else 'нет'}")
         if ok57:
             ctl57 = parsed57[0]
-            check("import21: импорт — содержание без перечня пунктов",
+            check("import21: импорт - содержание без перечня пунктов",
                   ctl57.content == "Распоряжение 8/216-р/17дсп", ctl57.content)
             surnames57 = [(e or "").split()[0].casefold() for e in ctl57.executors if e]
             check("import21: исполнители без дублей фамилий",
@@ -3272,7 +3272,7 @@ def main():
                 ok58 = (hit58 and len(hit58[0].tasks) == 3
                         and hit58[0].tasks[0].assignees == ["Семисенко Иван Юрьевич"]
                         and hit58[0].tasks[0].comment == "черновой коммент п.1")
-                check("draft21: сохранение — 3 пункта, ответственный и коммент п.1 на месте",
+                check("draft21: сохранение - 3 пункта, ответственный и коммент п.1 на месте",
                       bool(ok58),
                       f"{[(t.title, t.assignees, t.comment) for t in hit58[0].tasks] if hit58 else 'не найден'}")
 
@@ -3292,7 +3292,7 @@ def main():
     check("content21: ячейка содержания со всеми пунктами найдена", len(texts59) >= 1,
           f"{len(texts59)}")
     if texts59:
-        check("content21: текст ячейки — заголовок + все 3 пункта (исполнители и сроки)",
+        check("content21: текст ячейки - заголовок + все 3 пункта (исполнители и сроки)",
               "п. 1 — Гайнутдинов С.И. — 31.08.2026" in texts59[0].value
               and "п. 2 — Бережной К.Н. — 31.08.2026" in texts59[0].value
               and "п. 3 — Грубников Г.Г. — 28.08.2026" in texts59[0].value,
@@ -3304,39 +3304,39 @@ def main():
     from ui.controls.controls_tab import _attach_event_is_duplicate, _filter_new_attach_files
     st60 = {}
     sig60 = ("/tmp/a.png",)
-    check("attach21: первое событие выбора — не дубль",
+    check("attach21: первое событие выбора - не дубль",
           _attach_event_is_duplicate(st60, sig60, now=100.0) is False)
-    check("attach21: тот же набор сразу — дубль (кейс ×13)",
+    check("attach21: тот же набор сразу - дубль (кейс x13)",
           _attach_event_is_duplicate(st60, sig60, now=100.5) is True)
-    check("attach21: тот же набор после окна 3 с — не дубль",
+    check("attach21: тот же набор после окна 3 с - не дубль",
           _attach_event_is_duplicate(st60, sig60, now=104.5) is False)
-    check("attach21: другой набор — не дубль",
+    check("attach21: другой набор - не дубль",
           _attach_event_is_duplicate(st60, ("/tmp/b.png",), now=104.6) is False)
     _f60a = _types50.SimpleNamespace(path="C:\\scans\\фото.png")
     _f60b = _types50.SimpleNamespace(path="/x/уже есть.png")
     _f60c = _types50.SimpleNamespace(path="D:\\другое\\фото.png")
     fresh60, skipped60 = _filter_new_attach_files([_f60a, _f60b, _f60c], {"уже есть.png"})
-    check("attach21: фильтр имён — остаётся один новый файл",
+    check("attach21: фильтр имён - остаётся один новый файл",
           len(fresh60) == 1 and fresh60[0] is _f60a and skipped60 == 2,
           f"{len(fresh60)}/{skipped60}")
 
     # ── 61. Раунд 21, задачи 6-9: заголовок, полугодие, вкладки, лог ────────
-    check("hdr21: TABLE_HEADERS[6] — «За кем контроль» (без фамилий в скобках)",
+    check("hdr21: TABLE_HEADERS[6] - «За кем контроль» (без фамилий в скобках)",
           TABLE_HEADERS[6] == "За кем контроль", TABLE_HEADERS[6])
     from ui.controls.controls_tab import _PERIOD_LABELS as _PL21, _period_key as _PK21
     from core.controls_exporter import parse_periodicity as _pp21, _period_label as _plbl21
     check("period21: «Каждое полугодие» в опциях периодичности (182 дня)",
           ("semiannual", "Каждое полугодие", 182) in _PL21)
     check("period21: _period_key(182) = semiannual", _PK21(182) == "semiannual")
-    check("period21: импорт «каждое полугодие» → periodic/182",
+    check("period21: импорт «каждое полугодие» -> periodic/182",
           _pp21("каждое полугодие") == ("periodic", 182), f"{_pp21('каждое полугодие')}")
-    check("period21: подпись 182 дней — «каждые полгода»",
+    check("period21: подпись 182 дней - «каждые полгода»",
           _plbl21(182) == "каждые полгода", _plbl21(182))
     main21 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
     src_main21 = open(main21, encoding="utf-8").read()
-    check("tabs21: вкладка индекса 0 — «Контроли»",
+    check("tabs21: вкладка индекса 0 - «Контроли»",
           '_mk_tab_btn(0, "Контроли"' in src_main21)
-    check("tabs21: «Следственные отделы» — третья вкладка",
+    check("tabs21: «Следственные отделы» - третья вкладка",
           '_mk_tab_btn(2, "Следственные отделы"' in src_main21)
     check("tabs21: контроли видимы по умолчанию (остальные скрыты)",
           "tab3_container.visible = (index == 0)" in src_main21
@@ -3349,7 +3349,7 @@ def main():
         _zd21.load_criminalists()
         _zd21.load_criminalists()
     out61 = buf61.getvalue()
-    check("log21: «Zagruzheno kriminalistov» — одна строка за процесс, не спам",
+    check("log21: «Zagruzheno kriminalistov» - одна строка за процесс, не спам",
           out61.count("kriminalistov") <= 1, f"{len(out61.splitlines())} строк(и)")
 
     # ══════════════════════════════════════════════════════════════════
@@ -3380,7 +3380,7 @@ def main():
           by_inc62["Иссоп-216-194-26/дсп"].id == "aabbccdd",
           by_inc62["Иссоп-216-194-26/дсп"].id)
     _healed62 = by_inc62["Иссоп-216-195-26/дсп"].id
-    check("id22: контроль с пустым id и без вложений — новый uuid (не пустой)",
+    check("id22: контроль с пустым id и без вложений - новый uuid (не пустой)",
           isinstance(_healed62, str) and len(_healed62) >= 8, f"{_healed62!r}")
     check("id22: нормальный id не тронут", by_inc62["Иссоп-216-196-26/дсп"].id == "keep-1")
     ctl62b = load_controls()
@@ -3394,7 +3394,7 @@ def main():
         {"incoming_number": "Б-ПРЕФ", "attachments": ["aabbccdd/x.png"]},  # префикс занят
         {"incoming_number": "Б-РАЗНЫЕ", "attachments": ["p1/a.png", "p2/b.png"]},  # разные
     ]
-    check("id22: _heal_missing_ids — занятый префикс не переиспользуется",
+    check("id22: _heal_missing_ids - занятый префикс не переиспользуется",
           _heal_missing_ids(raw62c) is True
           and raw62c[0]["id"] == "aabbccdd"
           and raw62c[1]["id"] != "aabbccdd"
@@ -3408,20 +3408,20 @@ def main():
     check("id22: ensure_control_id не трогает контроль с id",
           ensure_control_id(Control(id="have-1")) is False)
     _c62b = Control(id=None, incoming_number="Е-2")
-    check("id22: ensure_control_id без вложений — новый uuid",
+    check("id22: ensure_control_id без вложений - новый uuid",
           ensure_control_id(_c62b) is True and bool(_c62b.id))
     # 62г. гарды вложений против TypeError Path/None (кейс из ЛОГ.txt)
-    check("att22: get_attachment_source_path(None, ...) → None (без TypeError)",
+    check("att22: get_attachment_source_path(None, ...) -> None (без TypeError)",
           get_attachment_source_path(None, "x/y.png") is None
           and get_attachment_source_path("", "x/y.png") is None)
-    check("att22: resolve_attachment(None, ...) → None",
+    check("att22: resolve_attachment(None, ...) -> None",
           _res_att22(None, "x/y.png", {}) is None)
     try:
         _del_att22(None, "x/y.png", {})
         _del_all22(None, {})
-        check("att22: delete_attachment/delete_all_attachments(None) — без исключений", True)
+        check("att22: delete_attachment/delete_all_attachments(None) - без исключений", True)
     except Exception as _e22:
-        check("att22: delete_attachment/delete_all_attachments(None) — без исключений",
+        check("att22: delete_attachment/delete_all_attachments(None) - без исключений",
               False, str(_e22))
     # 62д. фолбэк предпросмотра по rel-пути (файл лежит в папке uuid из rel)
     _dir22 = get_attachments_path() / "aabbccdd"
@@ -3430,7 +3430,7 @@ def main():
     _f22.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
     check("att22: attachment_abs находит файл по rel-пути (превью-фолбэк)",
           attachment_abs("aabbccdd/foto.png").exists())
-    check("att22: resolve чужим id НЕ находит — фолбэк покрывает именно этот разрыв",
+    check("att22: resolve чужим id НЕ находит - фолбэк покрывает именно этот разрыв",
           _res_att22("another-id", "aabbccdd/foto.png", {}) is None)
     try:
         _f22.unlink()
@@ -3479,7 +3479,7 @@ def main():
     _s22f = _mk22(due="2026-08-28", end="2026-08-28",
                   tasks=[("п. 1", "2026-08-28", True)])
     _sync22(_s22f)
-    check("sync22: все пункты исполнены — due/end остаются (контроль ждёт закрытия)",
+    check("sync22: все пункты исполнены - due/end остаются (контроль ждёт закрытия)",
           _s22f.due_date == "2026-08-28" and _s22f.end_date == "2026-08-28")
     # периодический: сдвигается только due, конечная дата не трогается
     _s22g = _mk22(due="2026-08-28", end="2026-02-16", ctype="periodic",
@@ -3524,7 +3524,7 @@ def main():
         ylw64[0].on_click(None)
         dlg64 = page.dialogs[-1] if page.dialogs else None
         cbs64 = [c for c in walk(dlg64) if isinstance(c, ft.Checkbox)] if dlg64 else []
-        check("ui22: в диалоге — 3 чекбокса (по числу пунктов)", len(cbs64) == 3,
+        check("ui22: в диалоге - 3 чекбокса (по числу пунктов)", len(cbs64) == 3,
               f"{len(cbs64)}")
         # отметить СРАЗУ ДВА пункта (п.10 и п.3) — сценарий «несколько сразу»
         for _b64 in cbs64:
@@ -3556,7 +3556,7 @@ def main():
                 save64[0].on_click(None)
                 after64 = load_controls()
                 same64 = [c for c in after64 if c.incoming_number == "Ю-22"]
-                check("ui22: «Сохранить» отработал — контроль не задвоился",
+                check("ui22: «Сохранить» отработал - контроль не задвоился",
                       len(same64) == 1, f"{len(same64)}")
                 _today64 = datetime.now().date().isoformat()
                 check("ui22: пустая «Дата поступления» проставлена автоматически (сегодня)",
@@ -3655,7 +3655,7 @@ def main():
     check("ppl22: фильтр «Прочие» применился",
           _set_filter(tab, "Все исполнители", FILTER_OTHER))
     vis66 = _visible_texts(tab)
-    check("ppl22: в «Прочие» — только человек ВНЕ справочника",
+    check("ppl22: в «Прочие» - только человек ВНЕ справочника",
           "ПР-1" not in vis66 and "ПР-2" not in vis66 and "ПР-3" in vis66,
           f"видно: {sorted(vis66)}")
 
@@ -3712,7 +3712,7 @@ def main():
                 and getattr(c, "bgcolor", None) == GLASS["today"]
                 and getattr(c, "width", None) == 44
                 and any(isinstance(i, ft.Icon) for i in walk(c))]
-    check("att23: в таблице — заметная жёлтая пилюля вложения (44px)",
+    check("att23: в таблице - заметная жёлтая пилюля вложения (44px)",
           len(badges67) >= 1)
     check("att23: у пилюли tooltip «Вложений: N»",
           any(getattr(b, "tooltip", "").startswith("Вложений:") for b in badges67))
@@ -3729,7 +3729,7 @@ def main():
     os.environ.pop("PORAYONKA_EDITION", None)
     os.environ.pop("PORAYONKA_USER", None)
     ed68 = _le23(force=True)
-    check("edit23: без edition.json и env — редакция admin (обратная совместимость)",
+    check("edit23: без edition.json и env - редакция admin (обратная совместимость)",
           ed68.get("role") == "admin" and not _iue23(), f"{ed68}")
     # user-редакция через env (так же читает installer: edition.json)
     os.environ["PORAYONKA_EDITION"] = "user"
@@ -3755,7 +3755,7 @@ def main():
     except OSError:
         pass
     _le23(force=True)
-    check("edit23: интервал аларма — user 2 ч, admin 24 ч (1 раз/день)",
+    check("edit23: интервал аларма - user 2 ч, admin 24 ч (1 раз/день)",
           _aih23(True) == 2 and _aih23(False) == 24)
 
     # ── 69. Раунд 23, задача 2: сбор алармов и антиспам-интервалы ──────────
@@ -3771,10 +3771,10 @@ def main():
     c69d = Control(id="al4", incoming_number="АЛ-4", due_date=None,
                    executors=["Семисенко И.Ю."], receive_date="2020-01-01")
     all69 = [c69a, c69b, c69c, c69d]
-    check("alarm23: collect — все просроченные для админа (без done/без срока)",
+    check("alarm23: collect - все просроченные для админа (без done/без срока)",
           [c.id for c in _cac23(all69, 3)] == ["al1", "al2"],
           f"{[c.id for c in _cac23(all69, 3)]}")
-    check("alarm23: collect — пользователь видит ТОЛЬКО свои",
+    check("alarm23: collect - пользователь видит ТОЛЬКО свои",
           [c.id for c in _cac23(all69, 3, "Семисенко Иван Юрьевич")] == ["al1"])
     c69t = Control(id="al5", incoming_number="АЛ-5", due_date=None,
                    receive_date="2020-01-01",
@@ -3785,16 +3785,16 @@ def main():
           and _cbt23(c69t, "Чужой Ч.Ч.") is False)
     now69 = datetime(2026, 8, 12, 12, 0, 0)
     due69, log69 = _da23(all69[:2], {}, now69, 2)
-    check("alarm23: пустой журнал — все просроченные подлежат аларму",
+    check("alarm23: пустой журнал - все просроченные подлежат аларму",
           [c.id for c in due69] == ["al1", "al2"] and "al1" in log69)
     due69b, log69b = _da23(all69[:2], log69, now69 + timedelta(hours=1), 2)
-    check("alarm23: через 1 час (интервал 2 ч) — повтора нет",
+    check("alarm23: через 1 час (интервал 2 ч) - повтора нет",
           due69b == [] and log69b == log69)
     due69c, log69c = _da23(all69[:2], log69, now69 + timedelta(hours=2, minutes=1), 2)
-    check("alarm23: через 2 ч — повтор («по злому», пока не исполнено)",
+    check("alarm23: через 2 ч - повтор («по злому», пока не исполнено)",
           [c.id for c in due69c] == ["al1", "al2"])
     due69d, _ = _da23(all69[:2], log69, now69 + timedelta(hours=5), 24)
-    check("alarm23: админский интервал 24 ч — через 5 ч повтора нет", due69d == [])
+    check("alarm23: админский интервал 24 ч - через 5 ч повтора нет", due69d == [])
     old_log69 = {"x": (now69 - timedelta(days=40)).isoformat(),
                  "y": (now69 - timedelta(days=1)).isoformat(), "bad": "not-a-date"}
     pruned69 = _pal23(old_log69, now69)
@@ -3837,7 +3837,7 @@ def main():
     tfs70 = [c for c in walk(card70) if isinstance(c, ft.TextField)]
     dds70 = [c for c in walk(card70) if isinstance(c, ft.Dropdown)]
     cbs70 = [c for c in walk(card70) if isinstance(c, ft.Checkbox)]
-    check("ro23: все TextField/Dropdown/Checkbox карточки — disabled",
+    check("ro23: все TextField/Dropdown/Checkbox карточки - disabled",
           tfs70 and dds70
           and all(getattr(c, "disabled", False) for c in tfs70)
           and all(getattr(c, "disabled", False) for c in dds70)
@@ -3869,7 +3869,7 @@ def main():
     _le23(force=True)
     page, tab, _ = build(1280)
     dlg71 = page.dialogs[-1] if page.dialogs else None
-    check("id23: при первом запуске user-редакции — диалог «Кто вы?»",
+    check("id23: при первом запуске user-редакции - диалог «Кто вы?»",
           dlg71 is not None and any(isinstance(t, ft.Text) and t.value == "Кто вы?"
                                     for t in walk(dlg71)),
           f"{len(page.dialogs)}")
@@ -3879,7 +3879,7 @@ def main():
     check("id23: подтверждение без выбора не закрывает диалог", False if not ok71 else True)
     if ok71 and dd71:
         ok71[0].on_click(None)
-        check("id23: пустой выбор — диалог остался", dlg71 in page.dialogs)
+        check("id23: пустой выбор - диалог остался", dlg71 in page.dialogs)
         dd71[0].value = "Семисенко Иван Юрьевич"
         ok71[0].on_click(None)
         check("id23: ФИО сохранено (настройки + edition-файл)",
@@ -3952,7 +3952,7 @@ def main():
         dlg72u = page.dialogs[-1] if page.dialogs else None
         txts72u = [str(t.value) for t in walk(dlg72u) if isinstance(t, ft.Text)
                    and t.value] if dlg72u else []
-        check("alarm23: user-аларм — ТОЛЬКО свой контроль, чужого нет",
+        check("alarm23: user-аларм - ТОЛЬКО свой контроль, чужого нет",
               "МОЙ-23" in txts72u and "ЧУЖОЙ-23" not in txts72u, f"{txts72u[:6]}")
     os.environ.pop("PORAYONKA_EDITION", None)
     os.environ.pop("PORAYONKA_USER", None)
@@ -3963,28 +3963,72 @@ def main():
     from ui.sound_alert import (find_pig_sound as _pig23,
                                 play_alarm_sound as _play23,
                                 pig_sound_candidates as _pc24)
-    check("tray23: start_tray без pystray — мягкий None (ничего не ломается)",
-          _tray23(PageStub()) is None)
+    from core import autostart as _as23
+
+    class _mock_platform:  # Раунд 25 (задача 1): платформенно-независимые проверки
+        """Временно подменяет sys.platform (и sys.frozen) с гарантированным
+        откатом; blocked=(...) кладёт sys.modules[name]=None, чтобы
+        `import name` падал ImportError (имитация «модуля нет»). Модули
+        autostart/sound_alert/tray_icon читают sys.platform/frozen в момент
+        ВЫЗОВА функции (не при импорте), поэтому подмена здесь работает и на
+        Windows-хосте: тесты больше не зависят от реальной платформы."""
+        def __init__(self, platform=None, frozen="__keep__", blocked=()):
+            self.platform, self.frozen, self.blocked = platform, frozen, blocked
+
+        def __enter__(self):
+            import sys as _s
+            self._old_platform = _s.platform
+            self._had_frozen = hasattr(_s, "frozen")
+            self._old_frozen = getattr(_s, "frozen", None)
+            self._old_mods = {}
+            if self.platform is not None:
+                _s.platform = self.platform
+            if self.frozen != "__keep__":
+                _s.frozen = self.frozen
+            for m in self.blocked:
+                self._old_mods[m] = _s.modules.get(m, "__absent__")
+                _s.modules[m] = None
+            return self
+
+        def __exit__(self, *exc):
+            import sys as _s
+            _s.platform = self._old_platform
+            if self._had_frozen:
+                _s.frozen = self._old_frozen
+            elif hasattr(_s, "frozen"):
+                del _s.frozen
+            for m, v in self._old_mods.items():
+                if v == "__absent__":
+                    _s.modules.pop(m, None)
+                else:
+                    _s.modules[m] = v
+            return False
+
+    _real_sys_platform25 = sys.platform
+    _real_had_frozen25 = hasattr(sys, "frozen")
+    with _mock_platform("linux"):
+        check("tray23: start_tray вне Windows - мягкий None (ничего не ломается)",
+              _tray23(PageStub()) is None)
     # Раунд 24 (задача 3): реальный MP3 приоритетнее синтезированного WAV
     pig_path23 = _pig23()
-    check("sound24: find_pig_sound — реальный pig.mp3 приоритетнее синтеза WAV",
+    check("sound24: find_pig_sound - реальный pig.mp3 приоритетнее синтеза WAV",
           pig_path23 is not None and str(pig_path23).endswith("pig.mp3"),
           f"{pig_path23}")
     _n24 = [c.name for c in _pc24()]
-    check("sound24: порядок кандидатов — appdata WAV > appdata MP3 > бандл MP3 > WAV",
+    check("sound24: порядок кандидатов - appdata WAV > appdata MP3 > бандл MP3 > WAV",
           len(_n24) >= 4 and _n24[0] == "pig.wav" and _n24[1] == "pig.mp3"
           and _n24[-1] == "pig.wav" and "pig.mp3" in _n24[1:-1],
           f"{_n24}")
     _assets24 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
     with open(os.path.join(_assets24, "pig.mp3"), "rb") as _fmp24:
         _mp3h24 = _fmp24.read(3)
-    check("sound24: assets/pig.mp3 — валидный MP3 (ID3v2 или MPEG-sync)",
+    check("sound24: assets/pig.mp3 - валидный MP3 (ID3v2 или MPEG-sync)",
           _mp3h24[:3] == b"ID3"
           or (_mp3h24[0] == 0xFF and len(_mp3h24) > 1 and (_mp3h24[1] & 0xE0) == 0xE0),
           f"{_mp3h24!r}")
     import wave as _wv23
     with _wv23.open(os.path.join(_assets24, "pig.wav"), "rb") as _w23:
-        check("sound23: assets/pig.wav — fallback на месте (валидный WAV 16-bit mono)",
+        check("sound23: assets/pig.wav - fallback на месте (валидный WAV 16-bit mono)",
               _w23.getnchannels() == 1 and _w23.getsampwidth() == 2
               and _w23.getframerate() == 22050 and _w23.getnframes() > 10000,
               f"{_w23.getframerate()}Hz {_w23.getnframes()}f")
@@ -3994,35 +4038,53 @@ def main():
     check("sound24: MP3 играет через Windows MCI (winmm mciSendStringW, stdlib)",
           "mciSendStringW" in _sndsrc24 and "ctypes" in _sndsrc24
           and "mpegvideo" in _sndsrc24)
-    check("sound23: play_alarm_sound вне Windows — no-op False (не падает)",
-          _play23(True) is False)
+    with _mock_platform("linux"):  # Раунд 25: независимо от реальной ОС
+        check("sound23: play_alarm_sound вне Windows - no-op False (не падает)",
+              _play23(True) is False)
     main23 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
     src_main23 = open(main23, encoding="utf-8").read()
-    check("win7_23: есть web-режим (--web → WEB_BROWSER) для Win7-пользователей",
+    check("win7_23: есть web-режим (--web -> WEB_BROWSER) для Win7-пользователей",
           '"--web" in sys.argv' in src_main23 and "ft.AppView.WEB_BROWSER" in src_main23)
     check("os23: автозапуск подключён при старте (frozen/Windows no-op)",
           "autostart.enable_autostart()" in src_main23)
     check("tray23: трей подключён при старте", "start_tray(page)" in src_main23)
-    from core import autostart as _as23
-    check("os23: автозапуск вне Windows — supported=False, включение не падает",
-          _as23.is_supported() is False and _as23.enable_autostart() is False)
+    with _mock_platform("linux"):  # Раунд 25: независимо от реальной ОС
+        check("os23: автозапуск вне Windows - supported=False, включение не падает",
+              _as23.is_supported() is False and _as23.enable_autostart() is False)
+    # Раунд 25: те же ветки на «мок-Windows» - детерминированно на любой ОС
+    with _mock_platform("win32"):
+        check("os25: мок-Windows dev-run (без frozen) - supported=True, в реестр не пишет",
+              _as23.is_supported() is True and _as23.enable_autostart() is False)
+        check("tray25: мок-Windows dev-run (без frozen) - трей None",
+              _tray23(PageStub()) is None)
+        _rs25 = _play23(True)  # на Windows-хосте реально играет MP3 через MCI
+        check("sound25: мок-Windows - звук играет (Win) или graceful False (не падает)",
+              _rs25 in (True, False))
+    with _mock_platform("win32", frozen=True, blocked=("pystray", "PIL", "winreg")):
+        check("tray25: мок-frozen Windows без pystray/PIL - мягкий None",
+              _tray23(PageStub()) is None)
+        check("os25: мок-frozen Windows без winreg - включение не падает (False)",
+              _as23.enable_autostart() is False)
+    check("env25: после мок-патчей sys.platform/frozen восстановлены",
+          sys.platform == _real_sys_platform25
+          and hasattr(sys, "frozen") == _real_had_frozen25)
     # иконка трея — валидный PNG 64x64
     _ip23 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "assets", "icon.png")
     with open(_ip23, "rb") as _fip23:
         _sig23 = _fip23.read(33)
-    check("tray23: assets/icon.png — PNG 64x64",
+    check("tray23: assets/icon.png - PNG 64x64",
           _sig23[:8] == b"\x89PNG\r\n\x1a\n"
           and _sig23[16:24] == b"\x00\x00\x00\x40\x00\x00\x00\x40")
     # Раунд 24 (задача 4): трей/автозапуск — строго frozen Windows, web — без трея
     _appdir24 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src_tray24 = open(os.path.join(_appdir24, "ui", "tray_icon.py"), encoding="utf-8").read()
-    check("tray24: трей — только frozen Windows + пропуск в web-режиме",
+    check("tray24: трей - только frozen Windows + пропуск в web-режиме",
           'sys.platform != "win32"' in src_tray24
           and 'getattr(sys, "frozen", False)' in src_tray24
           and "PORAYONKA_WEB" in src_tray24)
     src_as24 = open(os.path.join(_appdir24, "core", "autostart.py"), encoding="utf-8").read()
-    check("os24: автозапуск — только frozen Windows (гарды win32+frozen)",
+    check("os24: автозапуск - только frozen Windows (гарды win32+frozen)",
           'sys.platform == "win32"' in src_as24
           and 'getattr(sys, "frozen", False)' in src_as24)
     check("web24: main.py помечает web-режим (PORAYONKA_WEB=1)",
@@ -4037,40 +4099,40 @@ def main():
     check("build24: все сборочные файлы на месте", not missing74,
           f"missing={missing74}")
     adm24 = open(os.path.join(_appdir24, "Porayonka_Admin.spec"), encoding="utf-8").read()
-    check("build24: admin spec — exe «Порайонка_Админ», вход main.py, assets в бандле",
+    check("build24: admin spec - exe «Порайонка_Админ», вход main.py, assets в бандле",
           'name="Порайонка_Админ"' in adm24 and '"main.py"' in adm24
           and '("assets", "assets")' in adm24)
     usr24 = open(os.path.join(_appdir24, "Porayonka_User.spec"), encoding="utf-8").read()
-    check("build24: user spec — exe «Порайонка_Пользователь», вход main.py",
+    check("build24: user spec - exe «Порайонка_Пользователь», вход main.py",
           'name="Порайонка_Пользователь"' in usr24 and '"main.py"' in usr24)
     web24 = open(os.path.join(_appdir24, "Porayonka_User_Web.spec"), encoding="utf-8").read()
-    check("build24: web spec — exe «Порайонка_Пользователь_Web», вход main_web.py",
+    check("build24: web spec - exe «Порайонка_Пользователь_Web», вход main_web.py",
           'name="Порайонка_Пользователь_Web"' in web24
           and '"main_web.py"' in web24)
-    check("build24: spec-файлы используют hooks flet (__pyinstaller) — как flet pack",
+    check("build24: spec-файлы используют hooks flet (__pyinstaller) - как flet pack",
           '"__pyinstaller"' in adm24 and '"__pyinstaller"' in usr24
           and '"__pyinstaller"' in web24)
     bat_adm24 = open(os.path.join(_appdir24, "build_admin.bat"), encoding="utf-8").read()
-    check("build24: build_admin.bat — edition role=admin + pystray/pillow/pyinstaller",
+    check("build24: build_admin.bat - edition role=admin + pystray/pillow/pyinstaller",
           '"role": "admin"' in bat_adm24 and "pystray" in bat_adm24
           and "pillow" in bat_adm24 and "pyinstaller" in bat_adm24.lower())
     bat_usr24 = open(os.path.join(_appdir24, "build_user.bat"), encoding="utf-8").read()
-    check("build24: build_user.bat — edition role=user + спрашивает ФИО (set /p)",
+    check("build24: build_user.bat - edition role=user + спрашивает ФИО (set /p)",
           '"role": "user"' in bat_usr24 and "set /p" in bat_usr24
           and "pystray" in bat_usr24)
     bat_web24 = open(os.path.join(_appdir24, "build_user_web_win7.bat"), encoding="utf-8").read()
-    check("build24: build_user_web_win7.bat — web-spec + edition role=user + launcher",
+    check("build24: build_user_web_win7.bat - web-spec + edition role=user + launcher",
           "Porayonka_User_Web.spec" in bat_web24 and '"role": "user"' in bat_web24
           and "start_web_win7.bat" in bat_web24)
     start24 = open(os.path.join(_appdir24, "start_web_win7.bat"), encoding="utf-8").read()
-    check("build24: start_web_win7.bat — поднимает exe и открывает браузер 127.0.0.1:8555",
+    check("build24: start_web_win7.bat - поднимает exe и открывает браузер 127.0.0.1:8555",
           "Порайонка_Пользователь_Web.exe" in start24 and "8555" in start24)
     mweb24 = open(os.path.join(_appdir24, "main_web.py"), encoding="utf-8").read()
-    check("build24: main_web.py — фиксирует web + user-редакцию, вход через _entry()",
+    check("build24: main_web.py - фиксирует web + user-редакцию, вход через _entry()",
           '"PORAYONKA_WEB"' in mweb24 and 'PORAYONKA_EDITION' in mweb24
           and '"user"' in mweb24 and "_entry()" in mweb24)
     req24 = open(os.path.join(_appdir24, "requirements.txt"), encoding="utf-8").read()
-    check("build24: requirements.txt — pystray/pillow упомянуты как опциональные",
+    check("build24: requirements.txt - pystray/pillow упомянуты как опциональные",
           "pystray" in req24 and "pillow" in req24 and "flet==0.23.2" in req24)
     # headless-проверка: edition.json РЯДОМ с программой подхватывается загрузчиком
     ed_path74 = os.path.join(_appdir24, "edition.json")
