@@ -1,5 +1,6 @@
-"""Generate the Porayonka installer icon family.
+"""Generate the Porayonka installer artwork.
 
+Creates the edition icon family plus the standard Inno Setup wizard images.
 The script intentionally lives outside the application code.  It only needs
 Pillow, which the Windows distributive build scripts already install.
 
@@ -241,6 +242,75 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.I
     return ImageFont.load_default()
 
 
+def _centered_text(
+    draw: ImageDraw.ImageDraw,
+    canvas_width: int,
+    y: int,
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    fill: tuple[int, int, int, int],
+) -> None:
+    box = draw.textbbox((0, 0), text, font=font)
+    draw.text(((canvas_width - (box[2] - box[0])) // 2, y), text, font=font, fill=fill)
+
+
+def _make_wizard_image(icon: Image.Image) -> Image.Image:
+    """Build the classic 164×314 Inno Setup side panel at 4× quality."""
+    scale = 4
+    width, height = 164 * scale, 314 * scale
+    panel = _linear_gradient((width, height), NAVY_800, NAVY_950)
+    panel.alpha_composite(_radial_glow(panel.size, (126 * scale, 68 * scale),
+                                       145 * scale, BLUE, 105))
+    panel.alpha_composite(_radial_glow(panel.size, (26 * scale, 268 * scale),
+                                       115 * scale, VIOLET, 65))
+    draw = ImageDraw.Draw(panel, "RGBA")
+
+    # Quiet map/grid texture connects the artwork to the district-search UI.
+    for x in range(-88, 230, 31):
+        draw.line((x * scale, 0, (x + 122) * scale, height),
+                  fill=(124, 181, 255, 18), width=scale)
+    for y in range(14, 314, 32):
+        draw.line((0, y * scale, width, (y + 28) * scale),
+                  fill=(124, 181, 255, 15), width=scale)
+    draw.line((14 * scale, 24 * scale, 14 * scale, 290 * scale),
+              fill=(*CYAN, 72), width=scale)
+
+    # Use the same master mark as the executable icons, not a separate logo.
+    mark_side = 112 * scale
+    mark = icon.resize((mark_side, mark_side), RESAMPLE)
+    panel.alpha_composite(mark, ((width - mark_side) // 2, 25 * scale))
+
+    _centered_text(draw, width, 151 * scale, "Порайонка",
+                   _font(15 * scale, True), WHITE + (255,))
+    _centered_text(draw, width, 174 * scale, "2.0  •  DARK FINAL",
+                   _font(7 * scale, True), (148, 201, 255, 245))
+
+    # A small route with glowing district nodes balances the lower panel.
+    route = [(31, 250), (68, 222), (103, 247), (136, 215)]
+    route_scaled = [(x * scale, y * scale) for x, y in route]
+    glow = Image.new("RGBA", panel.size, (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow, "RGBA")
+    gd.line(route_scaled, fill=(*BLUE, 110), width=5 * scale, joint="curve")
+    glow = glow.filter(ImageFilter.GaussianBlur(6 * scale))
+    panel.alpha_composite(glow)
+    draw.line(route_scaled, fill=(102, 166, 255, 185), width=2 * scale, joint="curve")
+    for index, (x, y) in enumerate(route):
+        radius = 5 if index in (0, len(route) - 1) else 4
+        color = AMBER if index == len(route) - 1 else CYAN
+        draw.ellipse(((x - radius) * scale, (y - radius) * scale,
+                      (x + radius) * scale, (y + radius) * scale),
+                     fill=(*color, 255), outline=WHITE + (220,), width=scale)
+
+    _centered_text(draw, width, 286 * scale, "НАЙДИ СВОЙ РАЙОН",
+                   _font(6 * scale, True), (148, 163, 184, 235))
+    return panel.convert("RGB").resize((164, 314), RESAMPLE)
+
+
+def _make_wizard_small_image(icon: Image.Image) -> Image.Image:
+    """Build the 55×55 logo used in the Inno Setup title area."""
+    return icon.resize((55, 55), RESAMPLE)
+
+
 def _make_preview(icons: dict[str, Image.Image]) -> Image.Image:
     preview = Image.new("RGBA", (1800, 780), (*NAVY_950, 255))
     preview.alpha_composite(_radial_glow(preview.size, (900, 80), 780, BLUE, 70))
@@ -275,6 +345,58 @@ def _make_preview(icons: dict[str, Image.Image]) -> Image.Image:
     return preview
 
 
+def _make_installer_preview(
+    icon_preview: Image.Image,
+    wizard: Image.Image,
+    wizard_small: Image.Image,
+) -> Image.Image:
+    """Combine the icon sheet and wizard artwork into one review image."""
+    preview = Image.new("RGBA", (1800, 1400), (*NAVY_950, 255))
+    preview.alpha_composite(icon_preview)
+    preview.alpha_composite(_radial_glow(preview.size, (1450, 1160), 620, VIOLET, 42))
+    draw = ImageDraw.Draw(preview, "RGBA")
+    draw.text((88, 820), "Графика мастера установки", font=_font(34, True),
+              fill=WHITE + (255,))
+    draw.text((88, 868), "Фактические пропорции Inno Setup · 164×314 и 55×55",
+              font=_font(18), fill=(148, 163, 184, 255))
+
+    # Side artwork at 150% for convenient inspection.
+    side = wizard.resize((246, 471), RESAMPLE)
+    preview.paste(side, (88, 915))
+    draw.rounded_rectangle((77, 904, 345, 1397), radius=18,
+                           outline=(*BLUE, 105), width=3)
+
+    # A restrained mock wizard header proves the small logo at actual size.
+    window = (410, 915, 1712, 1304)
+    draw.rounded_rectangle(window, radius=25, fill=(15, 23, 42, 245),
+                           outline=(71, 85, 105, 255), width=3)
+    draw.rounded_rectangle((412, 917, 1710, 1022), radius=23,
+                           fill=(30, 41, 59, 255))
+    draw.rectangle((412, 990, 1710, 1022), fill=(30, 41, 59, 255))
+    draw.text((456, 944), "Установка Порайонка 2.0", font=_font(24, True),
+              fill=WHITE + (255,))
+    draw.text((456, 979), "DARK FINAL", font=_font(13, True),
+              fill=(*BLUE_LIGHT, 255))
+    preview.paste(wizard_small, (1620, 940), wizard_small)
+    draw.text((456, 1074), "Добро пожаловать в мастер установки",
+              font=_font(23, True), fill=WHITE + (255,))
+    draw.text((456, 1122), "Редакции различаются иконками и цветными бейджами.",
+              font=_font(17), fill=(148, 163, 184, 255))
+    draw.rounded_rectangle((1450, 1226, 1660, 1272), radius=12,
+                           fill=(*BLUE, 255))
+    draw.text((1503, 1238), "Далее", font=_font(16, True), fill=WHITE + (255,))
+
+    # Enlarged small mark, explicitly labelled so it is not mistaken for output size.
+    draw.rounded_rectangle((1015, 1070, 1345, 1275), radius=24,
+                           fill=(2, 6, 23, 150), outline=(*CYAN, 55), width=2)
+    enlarged = wizard_small.resize((150, 150), RESAMPLE)
+    preview.paste(enlarged, (1050, 1094), enlarged)
+    draw.text((1216, 1134), "55×55", font=_font(18, True), fill=WHITE + (255,))
+    draw.text((1216, 1164), "увеличено", font=_font(14),
+              fill=(100, 116, 139, 255))
+    return preview
+
+
 def main() -> None:
     HERE.mkdir(parents=True, exist_ok=True)
     variants = {
@@ -292,8 +414,20 @@ def main() -> None:
         "user": variants["icon_user"],
         "web": variants["icon_user_web"],
     }
-    _make_preview(preview_icons).save(HERE / "icons_preview.png", optimize=True)
-    print(f"Generated {len(variants)} PNG + {len(variants)} ICO files in {HERE}")
+    icon_preview = _make_preview(preview_icons)
+    icon_preview.save(HERE / "icons_preview.png", optimize=True)
+
+    wizard = _make_wizard_image(variants["icon"])
+    wizard_small = _make_wizard_small_image(variants["icon"])
+    wizard.save(HERE / "wizard_image.png", optimize=True)
+    wizard_small.save(HERE / "wizard_small_image.png", optimize=True)
+    _make_installer_preview(icon_preview, wizard, wizard_small).save(
+        HERE / "installer_artwork_preview.png", optimize=True
+    )
+    print(
+        f"Generated {len(variants)} icon PNG + {len(variants)} ICO, "
+        f"2 wizard PNG and 2 previews in {HERE}"
+    )
 
 
 if __name__ == "__main__":
