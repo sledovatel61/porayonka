@@ -115,10 +115,14 @@ def create_compact_header(
     page: ft.Page,
     last_save: Optional[datetime],
     tabs_control: ft.Control,
+    form_settings_visible: bool = False,
 ) -> ft.Container:
     """
     Компактная шапка приложения (высота ~48 px вместо ~130 px).
     Слева — переключатель вкладок, справа — кнопки + дата последнего сохранения.
+    Раунд 26 (задача 6): «Настройка формы» относится только к вкладке
+    «Зональные» — начальная видимость передаётся параметром, дальше ею
+    управляет _switch_tab через page._btn_form_settings.
     """
     save_text = ft.Text(
         value=(last_save.strftime("%d.%m.%Y, %H:%M:%S")
@@ -160,7 +164,7 @@ def create_compact_header(
                 width=500,
                 content=ft.Column(
                     controls=[
-                        ft.Text("Порайонка v. 3.0", size=20,
+                        ft.Text("Порайонка v2.0 DARK final", size=20,
                                 weight=ft.FontWeight.BOLD, color=COLORS["text"]),
                         ft.Container(height=8),
                         ft.Text(
@@ -176,25 +180,39 @@ def create_compact_header(
                         ft.Container(height=6),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
-                            ft.Text("Трекер статусов следственных отделов СК РФ "
-                                    "(получено / запрошено / не получено)",
+                            ft.Text("Три вкладки: «Следственные отделы», "
+                                    "«Зональные криминалисты», «Контроли»",
                                     size=12, color=COLORS["text_secondary"]),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
-                            ft.Text("Kanban-доска с визуальным отображением прогресса",
+                            ft.Text("Контроли: сроки, пункты, исполнители, "
+                                    "вложения, архив, импорт/экспорт Excel",
                                     size=12, color=COLORS["text_secondary"]),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
-                            ft.Text("Зональные криминалисты: сбор данных по форме "
-                                    "с привязкой к отделам",
+                            ft.Text("Две редакции: администраторская (полная, "
+                                    "с паролем) и пользовательская (просмотр)",
                                     size=12, color=COLORS["text_secondary"]),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
-                            ft.Text("Настраиваемый шаблон формы сбора (пункты, "
-                                    "типы, единицы измерения)",
+                            ft.Text("Сетевая синхронизация контролей через "
+                                    "общую папку",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Напоминания о сроках контроля: "
+                                    "у пользователей каждые 2 часа, "
+                                    "у администраторов — раз в день",
+                                    size=12, color=COLORS["text_secondary"]),
+                        ], spacing=6, tight=True),
+                        ft.Row(controls=[
+                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
+                            ft.Text("Системный трей и автозапуск; web-режим "
+                                    "для Windows 7 (работа в браузере)",
                                     size=12, color=COLORS["text_secondary"]),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
@@ -202,22 +220,12 @@ def create_compact_header(
                             ft.Text("Экспорт сводки в Excel для руководства",
                                     size=12, color=COLORS["text_secondary"]),
                         ], spacing=6, tight=True),
-                        ft.Row(controls=[
-                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
-                            ft.Text("Drag-and-drop сортировка криминалистов",
-                                    size=12, color=COLORS["text_secondary"]),
-                        ], spacing=6, tight=True),
-                        ft.Row(controls=[
-                            ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
-                            ft.Text("Автосохранение данных, KPI-дашборд, "
-                                    "фильтрация и поиск",
-                                    size=12, color=COLORS["text_secondary"]),
-                        ], spacing=6, tight=True),
                         ft.Container(height=12),
                         ft.Text(
                             "Приложение создано для автоматизации учёта "
                             "и контроля работы следственных отделов и зональных "
-                            "криминалистов СК РФ по Ростовской области.",
+                            "криминалистов Следственного комитета Российской "
+                            "Федерации по Ростовской области.",
                             size=12,
                             color=COLORS["text_muted"],
                             italic=True,
@@ -245,7 +253,10 @@ def create_compact_header(
 
     page._open_about = _open_about
 
-    # ── Кнопка «Настройка формы» (для вкладки Зональные) ──────────
+    # ── Кнопка «Настройка формы» (только вкладка Зональные) ───────
+    # Раунд 26 (задача 6): кнопка относится только к «Зональным» — видимость
+    # задаётся параметром и переключается из main._switch_tab через
+    # page._btn_form_settings.
     btn_settings = ft.Container(
         content=ft.Row(
             controls=[
@@ -265,10 +276,15 @@ def create_compact_header(
         border=ft.border.all(1, COLORS["border"]),
         alignment=ft.alignment.center,
         ink=True,
+        visible=form_settings_visible,
         on_click=lambda e: (page._open_template_settings()
                             if hasattr(page, "_open_template_settings") else None),
         tooltip="Настройка шаблона сбора данных (вкладка «Зональные»)",
     )
+    try:
+        page._btn_form_settings = btn_settings
+    except Exception:
+        pass
 
     # ── Кнопка «О программе» ──────────────────────────────────────
     btn_about = ft.Container(

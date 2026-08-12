@@ -54,7 +54,8 @@ def _read_edition_file(path: Path) -> Optional[dict]:
 
 
 def load_edition(force: bool = False) -> dict:
-    """Вернуть редакцию: {"role": "admin"|"user", "user_name": "Фамилия И.О."}.
+    """Вернуть редакцию: {"role": ..., "user_name": ..., "explicit": ...,
+    "password"/"password_hash": ... (если заданы)}.
 
     Источники в порядке приоритета:
       1) переменные окружения PORAYONKA_EDITION / PORAYONKA_USER (dev/test);
@@ -68,18 +69,33 @@ def load_edition(force: bool = False) -> dict:
     с exe edition.json только с ролью, а выбранное при первом запуске ФИО
     живёт в %APPDATA% — без такого слияния диалог «Кто вы?» спрашивал бы
     снова при каждом запуске.
+
+    "explicit" (раунд 26, задача 4): True, если роль задана ЯВНО (env /
+    файлом), и False для умолчательного admin без edition.json — по нему
+    сброс user-роли настроек делается только для настоящих admin-дистрибутивов,
+    а старые установки без edition.json (роль из настроек) не ломаются.
+
+    Раунд 26 (задача 5): поля "password" (plain, от установщика) и/или
+    "password_hash" (base64 sha256) прокидываются как есть — используются
+    парольным входом admin-редакции (ui/admin_gate.py).
     """
     global _cache
     if _cache is not None and not force:
         return _cache
     role: Optional[str] = None
     user_name = ""
+    explicit = False
+    password = ""
+    password_hash = ""
     env_role = (os.getenv("PORAYONKA_EDITION") or "").strip().lower()
     if env_role in (EDITION_ADMIN, EDITION_USER):
         role = env_role
+        explicit = True
         user_name = (os.getenv("PORAYONKA_USER") or "").strip()
+        password = (os.getenv("PORAYONKA_ADMIN_PASSWORD") or "").strip()
+        password_hash = (os.getenv("PORAYONKA_ADMIN_PASSWORD_HASH") or "").strip()
     for path in edition_file_candidates():
-        if role is not None and user_name:
+        if role is not None and user_name and password and password_hash:
             break
         data = _read_edition_file(path)
         if not data:
@@ -88,11 +104,17 @@ def load_edition(force: bool = False) -> dict:
             r = str(data.get("role") or "").strip().lower()
             if r in (EDITION_ADMIN, EDITION_USER):
                 role = r
+                explicit = True
         if not user_name:
             user_name = str(data.get("user_name") or "").strip()
+        if not password:
+            password = str(data.get("password") or "").strip()
+        if not password_hash:
+            password_hash = str(data.get("password_hash") or "").strip()
     if role is None:
         role = EDITION_ADMIN
-    _cache = {"role": role, "user_name": user_name}
+    _cache = {"role": role, "user_name": user_name, "explicit": explicit,
+              "password": password, "password_hash": password_hash}
     return _cache
 
 
@@ -121,7 +143,13 @@ def apply_edition_to_settings(settings: dict) -> bool:
     network_user). Возвращает True, если settings изменились.
 
     user-редакция ПРИНУДИТЕЛЬНО переводит сетевую роль в «user» — обойти
-    read-only правкой controls_settings.json нельзя."""
+    read-only правкой controls_settings.json нельзя.
+
+    Раунд 26 (задача 4): ЯВНАЯ admin-редакция (edition.json/env) симметрично
+    СБРАСЫВАЕТ user-роль/ФИО из настроек — иначе после user-сборки на той же
+    машине admin-версия фильтровала контроли по старому network_user. Сброс
+    только при explicit-редакции: старые установки без edition.json
+    (роль хранится в настройках, раунды 7-22) не трогаем."""
     changed = False
     ed = load_edition()
     if ed.get("role") == EDITION_USER:
@@ -132,4 +160,52 @@ def apply_edition_to_settings(settings: dict) -> bool:
         if nm and (settings.get("network_user") or "").strip() != nm:
             settings["network_user"] = nm
             changed = True
+    elif ed.get("role") == EDITION_ADMIN and ed.get("explicit"):
+        if settings.get("network_role") != "admin":
+            settings["network_role"] = "admin"
+            changed = True
+        if (settings.get("network_user") or "").strip():
+            settings["network_user"] = ""
+            changed = True
     return changed
+
+
+# ── Раунд 26 (задача 5): пароль входа admin-редакции ─────────────────────
+# Пароль НЕ храним в открытом виде при сборке: base64(sha256(соль|пароль)) —
+# достаточно «от случайного любопытства» (см. промпт). Установщик Inno Setup
+# может писать либо "password_hash" (команда генерации ниже), либо plain
+# "password" — принимаются оба поля, hash в приоритете.
+_PASSWORD_SALT = "porayonka-admin-v26"
+
+
+def admin_password_hash(password: str) -> str:
+    """base64(sha256(salt|password)). Сгенерировать для edition.json:
+
+        python -c "from core.edition import admin_password_hash as h; print(h('ПАРОЛЬ'))"
+    """
+    import base64
+    import hashlib
+    raw = hashlib.sha256(
+        (_PASSWORD_SALT + "|" + (password or "")).encode("utf-8")).digest()
+    return base64.b64encode(raw).decode("ascii")
+
+
+def admin_password_required(ed: Optional[dict] = None) -> bool:
+    """Пароль спрашивается только в admin-редакции и только если задан."""
+    if ed is None:
+        ed = load_edition()
+    if (ed or {}).get("role") != EDITION_ADMIN:
+        return False
+    return bool((ed.get("password_hash") or ed.get("password") or "").strip())
+
+
+def check_admin_password(ed: dict, password: str) -> bool:
+    """Сверить введённый пароль с edition.json (hash приоритетнее plain)."""
+    ph = ((ed or {}).get("password_hash") or "").strip()
+    if ph:
+        try:
+            return admin_password_hash(password or "") == ph
+        except Exception:
+            return False
+    plain = ((ed or {}).get("password") or "").strip()
+    return bool(plain) and (password or "").strip() == plain

@@ -38,6 +38,28 @@ from ui.toast import show_save_toast, show_reset_toast, show_error_toast
 # ────────────────────────────────────────────────────────────────
 
 def main(page: ft.Page) -> None:
+    """Точка входа Flet-приложения (обёртка-ворота).
+
+    Раунд 26 (задача 5): если в edition.json admin-редакции задан пароль
+    ("password_hash"/"password") — модальное окно ввода ДО построения
+    вкладок; верный пароль → обычная сборка UI (_main_impl), неверный —
+    приложение закрывается. Без пароля — сразу _main_impl.
+    """
+    try:
+        from ui.update_lock import install_update_serialization
+        install_update_serialization(page)   # идемпотентно (см. раунд 20)
+    except Exception:
+        pass
+    try:
+        from ui.admin_gate import show_admin_password_gate
+        show_admin_password_gate(page, on_ok=lambda: _main_impl(page))
+    except Exception as ex:
+        # Ворота сломались — не блокируем запуск навсегда (fail-open).
+        print(f"[MAIN] auth gate error: {ex}")
+        _main_impl(page)
+
+
+def _main_impl(page: ft.Page) -> None:
     """Точка входа Flet-приложения"""
 
     # Раунд 20 (задача 4): сериализация ВСЕХ тел обработчиков событий и
@@ -295,6 +317,14 @@ def main(page: ft.Page) -> None:
         tab2_container.visible = (index == 1)
         tab1_container.visible = (index == 2)
         _restyle_tabs()
+        # Раунд 26 (задача 6): «Настройка формы» видна только на «Зональных»
+        try:
+            _bfs = getattr(page, "_btn_form_settings", None)
+            if _bfs is not None:
+                _bfs.visible = (index == 1)
+                _bfs.update()
+        except Exception:
+            pass
         try:
             content_area.update()
         except Exception:
@@ -349,7 +379,10 @@ def main(page: ft.Page) -> None:
         border_radius=10,
     )
 
-    header = create_compact_header(page, get_last_save_date(), tab_bar)
+    # Раунд 26 (задача 6): «Настройка формы» видна, только если активная
+    # вкладка — «Зональные» (по умолчанию активны «Контроли» → скрыта).
+    header = create_compact_header(page, get_last_save_date(), tab_bar,
+                                   form_settings_visible=(active_tab["value"] == 1))
 
     # ── Сборка страницы ──────────────────────────────────────────
     page.add(
@@ -368,9 +401,18 @@ def main(page: ft.Page) -> None:
     # Раунд 23 (задача 2): значок в системном трее («Открыть»/«Выход») —
     # приложение живёт в трее и всегда на слуху (pystray — опциональная
     # зависимость сборки; без неё — просто работаем без трея).
+    # Раунд 26 (задача 2): в web-режиме трей стартует один раз в _entry()
+    # с URL сервера (main() вызывается на КАЖДУЮ браузерную сессию —
+    # второй значок не нужен); здесь сессии только получают ссылку на иконку
+    # для balloon-уведомлений по срокам.
     try:
-        from ui.tray_icon import start_tray
-        page._tray_icon = start_tray(page)
+        import os as _os26
+        if _os26.environ.get("PORAYONKA_WEB"):
+            from ui.tray_icon import get_active_icon
+            page._tray_icon = get_active_icon()
+        else:
+            from ui.tray_icon import start_tray
+            page._tray_icon = start_tray(page)
     except Exception:
         pass
 
@@ -409,6 +451,28 @@ def main(page: ft.Page) -> None:
 # ────────────────────────────────────────────────────────────────
 # ТОЧКА ВХОДА
 # ────────────────────────────────────────────────────────────────
+def _ensure_console_streams() -> bool:
+    """Раунд 26 (задача 1): PyInstaller onefile с console=False ставит
+    sys.stdout/sys.stderr = None — uvicorn (web-сервер Flet) при старте
+    вызывает sys.stdout.isatty() и падает:
+      AttributeError: 'NoneType' object has no attribute 'isatty' и
+      ValueError: Unable to configure formatter 'default'.
+    Подменяем потоки на devnull ДО запуска flet/uvicorn. Вызывается из
+    web-ветки _entry() и из main_web.py. Возвращает True, если была подмена."""
+    import os
+    import sys
+    fixed = False
+    for _nm in ("stdout", "stderr"):
+        if getattr(sys, _nm, None) is None:
+            try:
+                setattr(sys, _nm,
+                        open(os.devnull, "w", encoding="utf-8", errors="replace"))
+                fixed = True
+            except Exception:
+                pass
+    return fixed
+
+
 def _entry():
     """Раунд 24 (задача 2): вход вынесен в функцию, чтобы main_web.py
     (web-обёртка для Win7) мог безопасно переиспользовать его импортом —
@@ -421,14 +485,25 @@ def _entry():
     import os
     import sys
     if "--web" in sys.argv:
-        # Раунд 24 (задача 4): web-режим — без трея (ui/tray_icon.py читает
-        # PORAYONKA_WEB и мягко пропускается).
         os.environ["PORAYONKA_WEB"] = "1"
+        # Раунд 26 (задача 1): у frozen console=False нет stdout/stderr —
+        # чиним ДО старта uvicorn (внутри ft.app).
+        _ensure_console_streams()
         host, port = "127.0.0.1", 8555
         if "--host" in sys.argv:
             host = sys.argv[sys.argv.index("--host") + 1]
         if "--port" in sys.argv:
             port = int(sys.argv[sys.argv.index("--port") + 1])
+        # Раунд 26 (задача 2): трей ДО старта сервера ОДИН РАЗ НА ПРОЦЕСС,
+        # с URL для «Открыть»/клика по значку (браузер может быть закрыт;
+        # процесс живёт, пока жив трей и uvicorn).
+        try:
+            from ui.tray_icon import start_tray
+            _web_url = (f"http://127.0.0.1:{port}"
+                        if host in ("0.0.0.0", "") else f"http://{host}:{port}")
+            start_tray(None, web_url=_web_url)
+        except Exception:
+            pass
         print(f"[MAIN] Web-rezhim: http://{host}:{port}")
         ft.app(target=main, view=ft.AppView.WEB_BROWSER, host=host, port=port)
     else:

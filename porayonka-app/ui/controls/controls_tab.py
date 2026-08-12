@@ -4561,6 +4561,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 play_alarm_sound(settings.get("notify_sound", True))
             except Exception:
                 traceback.print_exc()
+            try:
+                # Раунд 26 (задача 2): web-режим Win7 — браузер может быть
+                # ЗАКРЫТ, страничный диалог не виден. Дублируем аларм
+                # balloon-уведомлением из системного трея (звук уже сыгран).
+                from ui import tray_icon as _ti26
+                _ti26.notify(
+                    f"Требуют исполнения: {len(due)}. "
+                    f"Откройте «Порайонку» через значок в трее.",
+                    title="СРОК КОНТРОЛЯ!",
+                )
+            except Exception:
+                pass
             _show_deadline_alarm(due)
         except Exception:
             traceback.print_exc()
@@ -4595,11 +4607,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     except Exception:
             traceback.print_exc()
 
-    def _maybe_ask_identity():
+    def _maybe_ask_identity(on_done=None):
         """Раунд 23 (задача 2): пользовательская редакция при первом запуске
         ОБЯЗАНА выбрать ФИО — к нему привязываются уведомления и «свои»
         контроли («при установке пишем ФИО пользователя»). Отмены нет:
-        без ФИО алармы и read-only привязка бессмысленны."""
+        без ФИО алармы и read-only привязка бессмысленны.
+        Раунд 26 (задача 3): on_done вызывается после успешного выбора ФИО
+        (инициализация таблицы откладывается до этого момента)."""
         if not edition_user:
             return
         if (settings.get("network_user") or "").strip():
@@ -4633,6 +4647,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 page.close(ident_dlg)
             except Exception:
                 traceback.print_exc()
+            # Раунд 26 (задача 3): ФИО выбрано — теперь строим таблицу
+            # (до этого пользователь видел только пустую область за модалкой).
+            if on_done is not None:
+                try:
+                    on_done()
+                except Exception:
+                    traceback.print_exc()
 
         ident_dlg = ft.AlertDialog(
             modal=True,
@@ -4662,13 +4683,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             traceback.print_exc()
 
-    _load_initial()
-    # Раунд 15 (задача 2): начальная геометрия — явная ширина панели/заголовка/
-    # строк до правого края + выравнивание колонок под бюджет окна (внутри
-    # _apply_table_geometry вызываются _rebuild_header/_rebuild_table).
-    _apply_table_geometry()
-    _refresh_counters()
-    _maybe_ask_identity()  # Раунд 23: ФИО пользователя при первом запуске user-редакции
+    def _first_table_init():
+        _load_initial()
+        # Раунд 15 (задача 2): начальная геометрия — явная ширина панели/
+        # заголовка/строк до правого края + выравнивание колонок под бюджет
+        # окна (внутри _apply_table_geometry вызываются
+        # _rebuild_header/_rebuild_table).
+        _apply_table_geometry()
+        _refresh_counters()
+
+    if edition_user and not (network_user or "").strip():
+        # Раунд 26 (задача 3): user-редакция без ФИО — диалог «Кто вы?»
+        # показывается ДО первой отрисовки таблицы: чужие контроли не должны
+        # «мелькать» под модалкой. Таблица инициализируется только после
+        # выбора ФИО (on_done), и сразу — уже с фильтром «свои».
+        _maybe_ask_identity(on_done=_first_table_init)
+    else:
+        _first_table_init()
+        _maybe_ask_identity()  # Раунд 23: ФИО при первом запуске user-редакции
 
     # Раунд 23: тест-хук ручного запуска проверки алармов (фоновый цикл
     # опрашивает раз в минуту — в headless-тестах вызываем напрямую).
