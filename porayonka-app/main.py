@@ -409,14 +409,21 @@ def main(page: ft.Page) -> None:
 # ────────────────────────────────────────────────────────────────
 # ТОЧКА ВХОДА
 # ────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
+def _entry():
+    """Раунд 24 (задача 2): вход вынесен в функцию, чтобы main_web.py
+    (web-обёртка для Win7) мог безопасно переиспользовать его импортом —
+    runpy.run_path в frozen-бандле не работает (main.py нет на диске)."""
     # Раунд 23 (задача 3): нативный клиент Flet 0.23.2 (движок Flutter) не
     # поддерживает Windows 7 — он требует Win10+. Для пользовательских
     # Win7-машин — web-режим (открывается в установленном браузере Win7):
     #   python main.py --web [--host 0.0.0.0] [--port 8555]
     # Админские Win10/11-машины — нативный режим по умолчанию.
+    import os
     import sys
     if "--web" in sys.argv:
+        # Раунд 24 (задача 4): web-режим — без трея (ui/tray_icon.py читает
+        # PORAYONKA_WEB и мягко пропускается).
+        os.environ["PORAYONKA_WEB"] = "1"
         host, port = "127.0.0.1", 8555
         if "--host" in sys.argv:
             host = sys.argv[sys.argv.index("--host") + 1]
@@ -426,3 +433,7 @@ if __name__ == "__main__":
         ft.app(target=main, view=ft.AppView.WEB_BROWSER, host=host, port=port)
     else:
         ft.app(target=main)
+
+
+if __name__ == "__main__":
+    _entry()

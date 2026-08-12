@@ -4168,3 +4168,80 @@ winsound/pystray — guarded, sys.platform-проверки.
 Агент работает в ветке `arena/XXXX-porayonka` от `main` (коммит `2781c7c`).
 После приёмки оркестратор внедряет файлы в `main`, обновляет `AGENTS.md` §63
 и запускает smoke-тесты из §37.2.
+
+## 63. Вкладка «Контроли» — раунд 24 завершён (дистрибутивы admin/user/web-Win7, реальный MP3-звук через MCI, гарды frozen)
+
+**Дата:** 2026-08-12. **Ветка:** `arena/019fec02-porayonka`.
+
+### 63.1 Два дистрибутива (задача 1)
+
+- `porayonka-app/Porayonka_Admin.spec` + `build_admin.bat` →
+  `dist\Порайонка_Админ.exe` + `dist\edition.json {"role": "admin"}`;
+- `porayonka-app/Porayonka_User.spec` + `build_user.bat` →
+  `dist\Порайонка_Пользователь.exe` + `dist\edition.json {"role": "user"}`;
+  build_user.bat дополнительно спрашивает ФИО (`set /p`) и пишет его в
+  `user_name` (Enter — спросит диалог «Кто вы?» при первом запуске).
+- Редакция определяется `edition.json` РЯДОМ с exe (core/edition.py,
+  `_app_dir()` для frozen = папка exe) — обойти правкой настроек нельзя.
+- Spec-файлы: вход `main.py`, datas `core/ ui/ assets/`, hookspath =
+  `flet/__pyinstaller` (то же, что делает `flet pack`), иконка
+  `assets/icon.ico`, если build-скрипт сгенерировал её из `icon.png`
+  (pillow; иначе сборка со стандартной иконкой — icon=None).
+- Bat-скрипты: проверка Python → `pip install -r requirements.txt` +
+  `pystray pillow pyinstaller` (pystray/pillow — только сборка/трей) →
+  очистка `build/` `dist/` → генерация icon.ico → `pyinstaller .spec
+  --noconfirm --clean` → запись `edition.json` → итог с путём к exe.
+
+### 63.2 Web-версия для Win7 (задача 2)
+
+- `main_web.py` — вход web-режима: ставит `PORAYONKA_WEB=1` и
+  `PORAYONKA_EDITION=user` (setdefault), дописывает `--web --host 0.0.0.0
+  --port 8555` и вызывает `main._entry()` ИМПОРТОМ (runpy по пути файла в
+  frozen-бандле не работает — физического main.py в onefile нет).
+- В main.py вход общий `_entry()` (рефакторинг `if __name__ == "__main__"`).
+- `Porayonka_User_Web.spec` + `build_user_web_win7.bat` →
+  `dist\Порайонка_Пользователь_Web.exe` + `edition.json {"role": "user"}` +
+  скопированный `start_web_win7.bat` (запуск exe + страховочное
+  `start http://127.0.0.1:8555`; браузер открывает и сам Flet WEB_BROWSER).
+- Win7: пользователь запускает один bat и работает в Chrome/Firefox;
+  нативные admin-машины (Win10/11) — обычные exe.
+
+### 63.3 Реальный звук свиньи MP3 (задача 3)
+
+- `ui/sound_alert.py` переписан: кандидаты в порядке
+  `%APPDATA%/pig.wav` (совместимость-подмена) → `%APPDATA%/pig.mp3` →
+  бандл/dev `assets/pig.mp3` (РЕАЛЬНЫЙ файл из main) → бандл/dev
+  `assets/pig.wav` (синтез раунда 23, крайний fallback).
+- MP3 играет через Windows MCI: `ctypes.windll.winmm.mciSendStringW`
+  (`open … type mpegvideo alias`, `play` без wait) — stdlib, работает на
+  Win7+, новых зависимостей нет; WAV — по-прежнему winsound. При ошибке —
+  следующий кандидат, в конце — MessageBeep. `stop_alarm_sound` закрывает
+  и MCI-alias.
+
+### 63.4 Автозапуск/трей (задача 4)
+
+- `start_tray()`: гарды `sys.platform == "win32"` + `sys.frozen` +
+  пропуск при `PORAYONKA_WEB` (web-режим); без pystray — мягкий None.
+- `enable_autostart()` уже имел гарды win32+frozen (раунд 23) —
+  зафиксировано тестами os24.
+- main.py: в ветке `--web` выставляется `PORAYONKA_WEB=1`.
+
+### 63.5 requirements.txt (задача 5)
+
+- pystray/pillow добавлены как закомментированные опциональные (с пометкой
+  «только сборка»; runtime не требует); build-скрипты ставят их явно.
+
+### 63.6 Проверка
+
+- `py_compile` всех модулей + 3 spec + main_web — OK; импорт вкладки — OK;
+  импорт main_web (dev) корректно собирает argv/env — OK.
+- `tests/test_controls_smoke.py` — **ALL OK (630 `check()`, +18)**:
+  - sound24: реальный mp3 приоритетнее wav, порядок кандидатов, валидность
+    ID3/MPEG, MCI-путь в коде, wav-fallback на месте;
+  - tray24/os24/web24: гарды frozen/win32/PORAYONKA_WEB (source-checks);
+  - build24: наличие 8 сборочных файлов, имена exe/входы в трёх spec,
+    hooks flet, role-строки и `set /p` ФИО в bat, launcher 127.0.0.1:8555,
+    pystray/pillow в requirements, headless-подхват `edition.json` рядом с
+    программой (с cleanup).
+- `ls Porayonka_Admin.spec Porayonka_User.spec Porayonka_User_Web.spec
+  build_admin.bat build_user.bat build_user_web_win7.bat` — все на месте.

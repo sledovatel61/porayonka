@@ -1,2 +1,10 @@
 flet==0.23.2
 openpyxl==3.1.5
+
+# ── Опционально (раунд 24): только для СБОРКИ дистрибутивов ─────────────
+# В runtime приложение их НЕ требует (guarded import — ui/tray_icon.py).
+# Устанавливаются build-скриптами (build_admin.bat / build_user.bat):
+#   pystray   — значок в системном трее (frozen Windows-сборка)
+#   pillow    — иконка трея + конвертация assets/icon.png → icon.ico для exe
+# pystray
+# pillow

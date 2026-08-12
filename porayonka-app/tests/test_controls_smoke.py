@@ -3958,20 +3958,42 @@ def main():
     os.environ.pop("PORAYONKA_USER", None)
     _le23(force=True)
 
-    # ── 73. Раунд 23, задачи 2-3: трей/автозапуск/web-режим Win7/звук ──────
+    # ── 73. Раунд 23/24, задачи 2-3: трей/автозапуск/web-режим Win7/звук ──
     from ui.tray_icon import start_tray as _tray23
-    from ui.sound_alert import find_pig_sound as _pig23, play_alarm_sound as _play23
+    from ui.sound_alert import (find_pig_sound as _pig23,
+                                play_alarm_sound as _play23,
+                                pig_sound_candidates as _pc24)
     check("tray23: start_tray без pystray — мягкий None (ничего не ломается)",
           _tray23(PageStub()) is None)
+    # Раунд 24 (задача 3): реальный MP3 приоритетнее синтезированного WAV
     pig_path23 = _pig23()
-    check("sound23: pig.wav найден в assets", pig_path23 is not None
-          and str(pig_path23).endswith("pig.wav"), f"{pig_path23}")
+    check("sound24: find_pig_sound — реальный pig.mp3 приоритетнее синтеза WAV",
+          pig_path23 is not None and str(pig_path23).endswith("pig.mp3"),
+          f"{pig_path23}")
+    _n24 = [c.name for c in _pc24()]
+    check("sound24: порядок кандидатов — appdata WAV > appdata MP3 > бандл MP3 > WAV",
+          len(_n24) >= 4 and _n24[0] == "pig.wav" and _n24[1] == "pig.mp3"
+          and _n24[-1] == "pig.wav" and "pig.mp3" in _n24[1:-1],
+          f"{_n24}")
+    _assets24 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+    with open(os.path.join(_assets24, "pig.mp3"), "rb") as _fmp24:
+        _mp3h24 = _fmp24.read(3)
+    check("sound24: assets/pig.mp3 — валидный MP3 (ID3v2 или MPEG-sync)",
+          _mp3h24[:3] == b"ID3"
+          or (_mp3h24[0] == 0xFF and len(_mp3h24) > 1 and (_mp3h24[1] & 0xE0) == 0xE0),
+          f"{_mp3h24!r}")
     import wave as _wv23
-    with _wv23.open(str(pig_path23), "rb") as _w23:
-        check("sound23: pig.wav — валидный WAV 16-bit mono",
+    with _wv23.open(os.path.join(_assets24, "pig.wav"), "rb") as _w23:
+        check("sound23: assets/pig.wav — fallback на месте (валидный WAV 16-bit mono)",
               _w23.getnchannels() == 1 and _w23.getsampwidth() == 2
               and _w23.getframerate() == 22050 and _w23.getnframes() > 10000,
               f"{_w23.getframerate()}Hz {_w23.getnframes()}f")
+    _sndsrc24 = open(os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "ui", "sound_alert.py"), encoding="utf-8").read()
+    check("sound24: MP3 играет через Windows MCI (winmm mciSendStringW, stdlib)",
+          "mciSendStringW" in _sndsrc24 and "ctypes" in _sndsrc24
+          and "mpegvideo" in _sndsrc24)
     check("sound23: play_alarm_sound вне Windows — no-op False (не падает)",
           _play23(True) is False)
     main23 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
@@ -3992,6 +4014,79 @@ def main():
     check("tray23: assets/icon.png — PNG 64x64",
           _sig23[:8] == b"\x89PNG\r\n\x1a\n"
           and _sig23[16:24] == b"\x00\x00\x00\x40\x00\x00\x00\x40")
+    # Раунд 24 (задача 4): трей/автозапуск — строго frozen Windows, web — без трея
+    _appdir24 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src_tray24 = open(os.path.join(_appdir24, "ui", "tray_icon.py"), encoding="utf-8").read()
+    check("tray24: трей — только frozen Windows + пропуск в web-режиме",
+          'sys.platform != "win32"' in src_tray24
+          and 'getattr(sys, "frozen", False)' in src_tray24
+          and "PORAYONKA_WEB" in src_tray24)
+    src_as24 = open(os.path.join(_appdir24, "core", "autostart.py"), encoding="utf-8").read()
+    check("os24: автозапуск — только frozen Windows (гарды win32+frozen)",
+          'sys.platform == "win32"' in src_as24
+          and 'getattr(sys, "frozen", False)' in src_as24)
+    check("web24: main.py помечает web-режим (PORAYONKA_WEB=1)",
+          '"PORAYONKA_WEB"' in src_main23)
+
+    # ── 74. Раунд 24: сборочные файлы дистрибутивов ──────────────────────
+    files74 = ["Porayonka_Admin.spec", "Porayonka_User.spec",
+               "Porayonka_User_Web.spec", "build_admin.bat", "build_user.bat",
+               "build_user_web_win7.bat", "start_web_win7.bat", "main_web.py"]
+    missing74 = [f for f in files74
+                 if not os.path.isfile(os.path.join(_appdir24, f))]
+    check("build24: все сборочные файлы на месте", not missing74,
+          f"missing={missing74}")
+    adm24 = open(os.path.join(_appdir24, "Porayonka_Admin.spec"), encoding="utf-8").read()
+    check("build24: admin spec — exe «Порайонка_Админ», вход main.py, assets в бандле",
+          'name="Порайонка_Админ"' in adm24 and '"main.py"' in adm24
+          and '("assets", "assets")' in adm24)
+    usr24 = open(os.path.join(_appdir24, "Porayonka_User.spec"), encoding="utf-8").read()
+    check("build24: user spec — exe «Порайонка_Пользователь», вход main.py",
+          'name="Порайонка_Пользователь"' in usr24 and '"main.py"' in usr24)
+    web24 = open(os.path.join(_appdir24, "Porayonka_User_Web.spec"), encoding="utf-8").read()
+    check("build24: web spec — exe «Порайонка_Пользователь_Web», вход main_web.py",
+          'name="Порайонка_Пользователь_Web"' in web24
+          and '"main_web.py"' in web24)
+    check("build24: spec-файлы используют hooks flet (__pyinstaller) — как flet pack",
+          '"__pyinstaller"' in adm24 and '"__pyinstaller"' in usr24
+          and '"__pyinstaller"' in web24)
+    bat_adm24 = open(os.path.join(_appdir24, "build_admin.bat"), encoding="utf-8").read()
+    check("build24: build_admin.bat — edition role=admin + pystray/pillow/pyinstaller",
+          '"role": "admin"' in bat_adm24 and "pystray" in bat_adm24
+          and "pillow" in bat_adm24 and "pyinstaller" in bat_adm24.lower())
+    bat_usr24 = open(os.path.join(_appdir24, "build_user.bat"), encoding="utf-8").read()
+    check("build24: build_user.bat — edition role=user + спрашивает ФИО (set /p)",
+          '"role": "user"' in bat_usr24 and "set /p" in bat_usr24
+          and "pystray" in bat_usr24)
+    bat_web24 = open(os.path.join(_appdir24, "build_user_web_win7.bat"), encoding="utf-8").read()
+    check("build24: build_user_web_win7.bat — web-spec + edition role=user + launcher",
+          "Porayonka_User_Web.spec" in bat_web24 and '"role": "user"' in bat_web24
+          and "start_web_win7.bat" in bat_web24)
+    start24 = open(os.path.join(_appdir24, "start_web_win7.bat"), encoding="utf-8").read()
+    check("build24: start_web_win7.bat — поднимает exe и открывает браузер 127.0.0.1:8555",
+          "Порайонка_Пользователь_Web.exe" in start24 and "8555" in start24)
+    mweb24 = open(os.path.join(_appdir24, "main_web.py"), encoding="utf-8").read()
+    check("build24: main_web.py — фиксирует web + user-редакцию, вход через _entry()",
+          '"PORAYONKA_WEB"' in mweb24 and 'PORAYONKA_EDITION' in mweb24
+          and '"user"' in mweb24 and "_entry()" in mweb24)
+    req24 = open(os.path.join(_appdir24, "requirements.txt"), encoding="utf-8").read()
+    check("build24: requirements.txt — pystray/pillow упомянуты как опциональные",
+          "pystray" in req24 and "pillow" in req24 and "flet==0.23.2" in req24)
+    # headless-проверка: edition.json РЯДОМ с программой подхватывается загрузчиком
+    ed_path74 = os.path.join(_appdir24, "edition.json")
+    assert not os.path.exists(ed_path74), "В репозитории не должно быть edition.json!"
+    try:
+        with open(ed_path74, "w", encoding="utf-8") as f74:
+            f74.write('{"role": "user", "user_name": "Сборкин С.С."}')
+        ed74 = _le23(force=True)
+        check("build24: edition.json рядом с программой подхватывается (роль+ФИО)",
+              ed74.get("role") == "user" and ed74.get("user_name") == "Сборкин С.С.")
+    finally:
+        try:
+            os.remove(ed_path74)
+        except OSError:
+            pass
+        _le23(force=True)
 
     print()
     if FAILURES:

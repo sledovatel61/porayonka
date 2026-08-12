@@ -1,11 +1,14 @@
 # ui/tray_icon.py
 # Раунд 23 (задача 2): значок в системном трее — «приложение находится в трее
 # и работает всегда» (пользователи не забывают запустить после включения ПК).
+# Раунд 24 (задача 4): трей запускается ТОЛЬКО в frozen-сборке на Windows;
+# в web-режиме (Win7) трей не нужен — пропускаем молча.
 #
 # pystray — ОПЦИОНАЛЬНАЯ зависимость (только для сборки дистрибутивов):
 #   pip install pystray pillow
 # Библиотека чисто ctypes-ная → работает и на Win7. Если её нет — приложение
 # спокойно работает без трея (один print в лог), ничего не ломается.
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +25,14 @@ def start_tray(page, title: str = "Пораёнка — Контроли") -> ob
     """Запустить иконку в трее (daemon-поток pystray). Возвращает Icon|None.
 
     Меню: «Открыть» (показать окно/в фокус) и «Выход»."""
+    # Раунд 24 (задача 4): ТОЛЬКО frozen Windows-сборка; dev-запуск и
+    # web-режим (--web, переменная PORAYONKA_WEB — для Win7) — без трея.
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        print("[TRAY] skip (tray tolko v frozen Windows-sborke)")
+        return None
+    if os.environ.get("PORAYONKA_WEB"):
+        print("[TRAY] skip (web-rezhim)")
+        return None
     try:
         import pystray
         from PIL import Image
