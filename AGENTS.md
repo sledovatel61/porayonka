@@ -4328,3 +4328,84 @@ winsound/pystray — guarded, sys.platform-проверки.
 - `tests/test_controls_smoke.py` — **ALL OK (636 `check()`, +6 новых 25-х)**.
 - Финал пайплайна: merge-коммит с `main` `8eac06e` (промпт 25 + §64;
   конфликты: код — ours, AGENTS.md — union §§60-64).
+
+## 66. Вкладка «Контроли» — раунд 26 завершён (uvicorn-фикс, web-трей, «Кто вы?» до таблицы, сброс user-наследия, пароль admin, «Настройка формы», «О программе»)
+
+**Дата:** 2026-08-12. **Ветка:** `arena/019fec02-porayonka`.
+Промпт: `PROMPT_контроли_доработка_web_и_мелкие.md`.
+
+### 66.1 Задача 1 — web-версия Win7 не запускалась из frozen exe
+
+Причина: `console=False` в spec ⇒ PyInstaller ставит `sys.stdout/stderr =
+None`, а uvicorn (web-сервер Flet) дёргает `sys.stdout.isatty()` →
+`AttributeError`/`ValueError: Unable to configure formatter 'default'`.
+Решение: `main.py::_ensure_console_streams()` — до старта `ft.app` подменяет
+None-потоки на `open(os.devnull, "w")`; вызывается и в `_entry()` (--web),
+и в `main_web.py`. spec НЕ меняли (console=False сохранён, чёрного окна нет).
+
+### 66.2 Задача 2 — трей/уведомления web-версии при закрытом браузере
+
+- `start_tray(page=None, web_url=None)`: гард `PORAYONKA_WEB` СНЯТ (остались
+  только frozen+win32). В web-режиме трей стартует ОДИН РАЗ НА ПРОЦЕСС в
+  `_entry()` (main() вызывается на каждую браузерную сессию — `_ACTIVE_ICON`
+  singleton, повторный вызов возвращает существующий; сессии получают его
+  через `get_active_icon()` в `page._tray_icon`).
+- Меню web-режима: «Открыть в браузере» → `webbrowser.open(url)`; «Выход» →
+  stop + `os._exit(0)` (окна нет, процесс = сервер). Клик по значку
+  (default-item) — тоже открывает.
+- `tray_icon.notify(message, title)` — balloon (Shell_NotifyIcon); аларм
+  сроков в `_check_deadline_alarms` теперь дублируется balloon + звук
+  (страничный диалог при закрытом браузере бесполезен). pystray не отдаёт
+  колбэк клика по balloon → текст подсказывает открыть через значок.
+- Процесс не умирает при закрытии вкладки: uvicorn продолжает serve,
+  фоновый `_background_loop` (опрос сети + алармы) живёт.
+
+### 66.3 Задача 3 — «Кто вы?» ДО таблицы
+
+`create_controls_tab`: при user-редакции без ФИО `_load_initial()`/
+`_apply_table_geometry()`/`_refresh_counters()` откладываются (обёрнуты в
+`_first_table_init()` — on_done диалога). До выбора ФИО таблица не
+строится (чужие контроли не «мелькают»); после выбора таблица сразу
+строится с фильтром «свои» (`_visible_base`, network_role=user).
+
+### 66.4 Задача 4 — admin не наследует user-фильтр
+
+`load_edition()` теперь возвращает `explicit: bool` (роль задана env/файлом,
+а не умолчание). `apply_edition_to_settings()`: ЯВНАЯ admin-редакция
+сбрасывает `network_role`→"admin" и `network_user`→""; умолчательная
+(без edition.json) — НЕ трогает (обратная совместимость с до-редакционными
+установками, где роль жила только в настройках).
+
+### 66.5 Задача 5 — пароль admin-редакции
+
+- `core/edition.py`: `admin_password_hash()` (base64+sha256+соль),
+  `admin_password_required()`, `check_admin_password()` (hash приоритетнее
+  plain "password" — оба поля принимаются, plain пишет Inno-установщик).
+- `ui/admin_gate.py::show_admin_password_gate(page, on_ok)`: модалка
+  «Вход: администраторская редакция» (пароль, Войти/Выход, Enter=Войти).
+  Верный → `on_ok()`; неверный → приложение закрывается (destroy/close;
+  `os._exit` только в frozen). Без пароля/не admin — ворот нет.
+- `main.py`: бывшая `main()` переименована в `_main_impl()`; новая `main()`
+  — ворота ДО построения вкладок (lock ставится до них, раунд 20).
+
+### 66.6 Задача 6 — «Настройка формы» только на «Зональных»
+
+`create_compact_header(..., form_settings_visible=False)`; кнопка
+сохраняется в `page._btn_form_settings`; `main._switch_tab` ставит
+`visible = (index == 1)` (0=Контроли, 1=Зональные, 2=Отделы).
+
+### 66.7 Задача 7 — «О программе»
+
+Новый текст: «Порайонка v2.0 DARK final», три вкладки, две редакции
+(admin/user), сетевой синк, напоминания о сроках (2 ч/1 день), трей/
+автозапуск, web-режим Win7, разработчик и контекст СК РФ Ростовская обл.
+
+### 66.8 Проверка
+
+- `py_compile` всех затронутых + import вкладки — OK; cp1251-симуляция — PASS.
+- `tests/test_controls_smoke.py` — **ALL OK (665 `check()`, +29)**:
+  web26 (фикс потоков + wiring), edit26 (сброс/explicit/совместимость),
+  auth26 (hash/plain/ворота/неверный/верный/без-пароля/wiring),
+  hdr26 (видимость кнопки + переключатель), about26 (новый текст),
+  tray26 (web-режим, notify, singleton), id26 (диалог до таблицы,
+  «свои» после выбора). Старые секции не сломаны (id23 и пр. зелёные).

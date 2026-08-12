@@ -4076,19 +4076,26 @@ def main():
     check("tray23: assets/icon.png - PNG 64x64",
           _sig23[:8] == b"\x89PNG\r\n\x1a\n"
           and _sig23[16:24] == b"\x00\x00\x00\x40\x00\x00\x00\x40")
-    # Раунд 24 (задача 4): трей/автозапуск — строго frozen Windows, web — без трея
+    # Раунд 24 (задача 4): трей/автозапуск — строго frozen Windows.
+    # Раунд 26 (задача 2): web-гард СНЯТ — трей работает и в web-режиме Win7
+    # (браузер может быть закрыт), «Открыть» ведёт на URL сервера.
     _appdir24 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src_tray24 = open(os.path.join(_appdir24, "ui", "tray_icon.py"), encoding="utf-8").read()
-    check("tray24: трей - только frozen Windows + пропуск в web-режиме",
+    check("tray24: трей - только frozen Windows (гарды win32+frozen на месте)",
           'sys.platform != "win32"' in src_tray24
-          and 'getattr(sys, "frozen", False)' in src_tray24
-          and "PORAYONKA_WEB" in src_tray24)
+          and 'getattr(sys, "frozen", False)' in src_tray24)
+    check("tray26: web-режим поддержан - web_url + открытие браузера (webbrowser)",
+          "web_url" in src_tray24 and "webbrowser" in src_tray24)
+    check("tray26: balloon-уведомления + один значок на процесс (notify/get_active_icon)",
+          "def notify(" in src_tray24 and "get_active_icon" in src_tray24)
     src_as24 = open(os.path.join(_appdir24, "core", "autostart.py"), encoding="utf-8").read()
     check("os24: автозапуск - только frozen Windows (гарды win32+frozen)",
           'sys.platform == "win32"' in src_as24
           and 'getattr(sys, "frozen", False)' in src_as24)
     check("web24: main.py помечает web-режим (PORAYONKA_WEB=1)",
           '"PORAYONKA_WEB"' in src_main23)
+    check("tray26: main.py - web-трей один раз в _entry с URL, сессии берут get_active_icon",
+          "start_tray(None, web_url=" in src_main23 and "get_active_icon" in src_main23)
 
     # ── 74. Раунд 24: сборочные файлы дистрибутивов ──────────────────────
     files74 = ["Porayonka_Admin.spec", "Porayonka_User.spec",
@@ -4149,6 +4156,170 @@ def main():
         except OSError:
             pass
         _le23(force=True)
+
+    # ── 75. Раунд 26, задачи 1/4/5: uvicorn-фикс, сброс user-наследия, пароль ──
+    # задача 1: console=False (frozen) -> stdout/stderr None -> uvicorn падает;
+    # _ensure_console_streams подменяет их на devnull ДО старта сервера
+    from main import _ensure_console_streams as _ecs26
+    _saved_out26, _saved_err26 = sys.stdout, sys.stderr
+    try:
+        sys.stdout = None
+        sys.stderr = None
+        _fixed26 = _ecs26()
+        _restored26 = (sys.stdout is not None and sys.stderr is not None
+                       and sys.stdout.writable() and sys.stderr.writable())
+    finally:
+        sys.stdout, sys.stderr = _saved_out26, _saved_err26
+    check("web26: console=False - stdout/stderr восстановлены (uvicorn не упадёт)",
+          _fixed26 is True and _restored26)
+    check("web26: повторный вызов - no-op (потоки уже есть)",
+          _ecs26() is False)
+    check("web26: фикс вызывается и в _entry (--web), и в main_web.py",
+          "_ensure_console_streams()" in src_main23
+          and "_ensure_console_streams" in open(
+              os.path.join(_appdir24, "main_web.py"), encoding="utf-8").read())
+
+    # задача 4: явная admin-редакция сбрасывает user-наследие настроек
+    os.environ["PORAYONKA_EDITION"] = "admin"
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+    st26 = {"network_role": "user", "network_user": "Потемкин Сергей Анатольевич"}
+    check("edit26: явная admin-редакция сбрасывает user-наследие настроек",
+          _aets23(st26) is True and st26.get("network_role") == "admin"
+          and st26.get("network_user") == "", f"{st26}")
+    check("edit26: явная редакция помечается explicit=True",
+          _le23(force=True).get("explicit") is True)
+    os.environ.pop("PORAYONKA_EDITION", None)
+    _le23(force=True)
+    st26b = {"network_role": "user", "network_user": "Потемкин Сергей Анатольевич"}
+    check("edit26: без edition.json (default admin) сброса НЕТ - обратная совместимость",
+          _aets23(st26b) is False and st26b.get("network_role") == "user", f"{st26b}")
+    check("edit26: умолчательная редакция - explicit=False",
+          _le23(force=True).get("explicit") is False)
+
+    # задача 5: пароль admin-редакции (helpers + ворота)
+    from core.edition import (admin_password_hash as _ph26,
+                              admin_password_required as _apr26,
+                              check_admin_password as _cap26)
+    from ui.admin_gate import show_admin_password_gate as _gate26
+    h26 = _ph26("Секрет-1")
+    check("auth26: hash стабилен и пароль-зависим",
+          _ph26("Секрет-1") == h26 and _ph26("другой") != h26)
+    check("auth26: required - только admin и только с паролем",
+          _apr26({"role": "admin", "password_hash": h26}) is True
+          and _apr26({"role": "admin"}) is False
+          and _apr26({"role": "user", "password": "x"}) is False)
+    check("auth26: check - hash и plain поля; hash в приоритете",
+          _cap26({"password_hash": h26}, "Секрет-1") is True
+          and _cap26({"password_hash": h26}, "неверно") is False
+          and _cap26({"password": "abc"}, "abc") is True)
+    pg26 = PageStub()
+    ok26 = {"v": 0}
+    shown26 = _gate26(pg26, on_ok=lambda: ok26.__setitem__("v", ok26["v"] + 1),
+                      ed={"role": "admin", "password_hash": h26})
+    check("auth26: ворота показаны, вкладки ещё не построены",
+          shown26 is True and ok26["v"] == 0 and bool(pg26.dialogs))
+    tf26 = [c for c in walk(pg26.dialogs[-1]) if isinstance(c, ft.TextField)]
+    btns26 = {getattr(c, "text", None): c for c in walk(pg26.dialogs[-1])
+              if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    check("auth26: в воротах поле-пароль + «Войти»/«Выход»",
+          len(tf26) == 1 and getattr(tf26[0], "password", False) is True
+          and "Войти" in btns26 and "Выход" in btns26)
+    tf26[0].value = "неверно"
+    btns26["Войти"].on_click(None)
+    check("auth26: неверный пароль - on_ok НЕ вызван, приложение закрывается",
+          ok26["v"] == 0)
+    pg26b = PageStub()
+    _gate26(pg26b, on_ok=lambda: ok26.__setitem__("v", ok26["v"] + 1),
+            ed={"role": "admin", "password_hash": h26})
+    tf26b = [c for c in walk(pg26b.dialogs[-1]) if isinstance(c, ft.TextField)]
+    btns26b = {getattr(c, "text", None): c for c in walk(pg26b.dialogs[-1])
+               if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    tf26b[0].value = "Секрет-1"
+    btns26b["Войти"].on_click(None)
+    check("auth26: верный пароль - on_ok вызван (запуск), ворота закрыты",
+          ok26["v"] == 1 and not pg26b.dialogs)
+    ok26c = {"v": 0}
+    n26 = _gate26(PageStub(), on_ok=lambda: ok26c.__setitem__("v", 1),
+                  ed={"role": "admin"})
+    check("auth26: без пароля ворот нет - on_ok синхронно (совместимость)",
+          n26 is False and ok26c["v"] == 1)
+    check("auth26: main.py - ворота вызываются ДО сборки UI (_main_impl)",
+          "show_admin_password_gate" in src_main23 and "_main_impl" in src_main23)
+
+    # задача 6: «Настройка формы» только на «Зональных»; задача 7: «О программе»
+    from ui.header import create_compact_header as _hdr26
+    pg26h = PageStub()
+    _hdr26(pg26h, None, ft.Text("tabs"))
+    bfs26 = getattr(pg26h, "_btn_form_settings", None)
+    check("hdr26: «Настройка формы» по умолчанию скрыта (активны «Контроли»)",
+          bfs26 is not None and getattr(bfs26, "visible", True) is False)
+    pg26h2 = PageStub()
+    _hdr26(pg26h2, None, ft.Text("tabs"), form_settings_visible=True)
+    check("hdr26: на «Зональных» кнопка видна (form_settings_visible=True)",
+          getattr(pg26h2._btn_form_settings, "visible", False) is True)
+    check("hdr26: main.py переключает видимость кнопки по вкладке (index == 1)",
+          "_btn_form_settings" in src_main23 and "(index == 1)" in src_main23)
+    pgA26 = PageStub()
+    _hdr26(pgA26, None, ft.Text("tabs"))
+    pgA26._open_about()
+    dlgA26 = pgA26.overlay[-1] if pgA26.overlay else None
+    txtA26 = {str(getattr(t, "value", "")) for t in walk(dlgA26)
+              if isinstance(t, ft.Text)} if dlgA26 is not None else set()
+    check("about26: новая версия «Порайонка v2.0 DARK final»",
+          any("Порайонка v2.0 DARK final" in t for t in txtA26))
+    check("about26: вкладки/редакции/напоминания/регион обновлены",
+          any("Контроли" in t for t in txtA26)
+          and any("администраторская" in t and "пользовательская" in t for t in txtA26)
+          and any("Напоминания о сроках" in t for t in txtA26)
+          and any("Ростовской области" in t for t in txtA26),
+          f"{sorted(txtA26)[:3]}")
+
+    # задача 2 (функционально): balloon без иконки - мягкий False
+    from ui.tray_icon import notify as _ntf26
+    check("tray26: notify без иконки - мягкий False (ничего не ломается)",
+          _ntf26("test") is False)
+
+    # ── 76. Раунд 26, задача 3: «Кто вы?» ДО отрисовки таблицы ────────────
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("s26a", "СВОЙ-26", executors=["Семисенко И.Ю."]),
+               _ctrl("s26b", "ЧУЖОЙ-26", executors=["Чужой Ч.Ч."])])
+    os.environ["PORAYONKA_EDITION"] = "user"   # ФИО нет — спросит
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+    page, tab, _ = build(1280)
+    dlg26i = page.dialogs[-1] if page.dialogs else None
+    check("id26: user без ФИО - диалог «Кто вы?» открыт",
+          dlg26i is not None and any(isinstance(t, ft.Text) and t.value == "Кто вы?"
+                                     for t in walk(dlg26i)))
+    check("id26: таблица НЕ построена до выбора ФИО (чужие не мелькают)",
+          len(_visible_rows(tab)) == 0, f"rows={len(_visible_rows(tab))}")
+    dd26i = [c for c in walk(dlg26i) if isinstance(c, ft.Dropdown)] if dlg26i else []
+    ok26i = [c for c in walk(dlg26i) if isinstance(c, ft.ElevatedButton)
+             and getattr(c, "text", None) == "Подтвердить"] if dlg26i else []
+    if dd26i and ok26i:
+        dd26i[0].value = "Семисенко Иван Юрьевич"
+        ok26i[0].on_click(None)
+        rtexts26 = []
+        for _r in _visible_rows(tab):
+            rtexts26 += [str(getattr(t, "value", "")) for t in walk(_r)
+                         if isinstance(t, ft.Text)]
+        joined26 = " | ".join(rtexts26)
+        check("id26: после ФИО - таблица построена, видны только «свои»",
+              "СВОЙ-26" in joined26 and "ЧУЖОЙ-26" not in joined26,
+              f"{rtexts26[:8]}")
+        check("id26: диалог закрыт после выбора", dlg26i not in page.dialogs)
+    else:
+        check("id26: элементы диалога найдены", False, f"dd={len(dd26i)} ok={len(ok26i)}")
+    os.environ.pop("PORAYONKA_EDITION", None)
+    try:
+        if os.path.exists(_edfile68):
+            os.remove(_edfile68)
+    except OSError:
+        pass
+    _le23(force=True)
 
     print()
     if FAILURES:

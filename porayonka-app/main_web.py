@@ -27,7 +27,11 @@ if "--host" not in sys.argv:
 if "--port" not in sys.argv:
     sys.argv += ["--port", "8555"]
 
-from main import _entry
+from main import _entry, _ensure_console_streams
+
+# Раунд 26 (задача 1): frozen onefile (console=False) → sys.stdout/stderr=None
+# → uvicorn.logging падает ('NoneType'.isatty). Чиним ДО старта сервера.
+_ensure_console_streams()
 
 if __name__ == "__main__":
     _entry()
