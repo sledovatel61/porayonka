@@ -124,13 +124,41 @@ def is_user_edition() -> bool:
 
 def save_appdata_edition(role: str, user_name: str = "") -> bool:
     """Записать редакцию в %APPDATA% (выбор ФИО пользователем при первом
-    запуске user-редакции — чтобы не спрашивать снова)."""
+    запуске user-редакции — чтобы не спрашивать снова).
+
+    Раунд 28 (задача 7): слияние с существующим файлом — password_hash,
+    записанный через настройки admin-редакции, не затирается."""
     path = _appdata_edition_file()
     try:
+        data = _read_edition_file(path) or {}
+        data["role"] = role
+        data["user_name"] = user_name
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"role": role, "user_name": user_name}, f,
-                      ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        load_edition(force=True)
+        return True
+    except OSError as e:
+        print(f"[EDITION] Oshibka zapisi {path}: {e}")
+        return False
+
+
+def save_appdata_password_hash(password_hash: str = "") -> bool:
+    """Раунд 28 (задача 7): записать/удалить password_hash администратора в
+    %APPDATA%/porayonka/edition.json (merge; пустой hash — ключ убирается).
+    Храним в appdata, а не рядом с exe: {app}\\edition.json затирается
+    переустановкой, appdata — переживает обновление (но пропадёт при полном
+    удалении профиля — ожидаемо)."""
+    path = _appdata_edition_file()
+    try:
+        data = _read_edition_file(path) or {}
+        if password_hash:
+            data["password_hash"] = password_hash
+        else:
+            data.pop("password_hash", None)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
         load_edition(force=True)
         return True
     except OSError as e:

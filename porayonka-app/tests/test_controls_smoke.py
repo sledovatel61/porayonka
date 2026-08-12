@@ -4321,6 +4321,248 @@ def main():
         pass
     _le23(force=True)
 
+    # ── 77. Раунд 28: установщики, edition-гард, web-ФИО, вложения, настройки ──
+    _inst28 = os.path.join(_appdir24, "installer")
+    adm_iss = open(os.path.join(_inst28, "Admin.iss"), encoding="utf-8").read()
+    usr_iss = open(os.path.join(_inst28, "User.iss"), encoding="utf-8").read()
+    web_iss = open(os.path.join(_inst28, "UserWeb.iss"), encoding="utf-8").read()
+    check("iss28: со страницы задач убраны автозапуск/запуск (нет дублей)",
+          all('Name: "startup"' not in s and 'Name: "runafterinstall"' not in s
+              and "Tasks: startup" not in s and "Tasks: runafterinstall" not in s
+              for s in (adm_iss, usr_iss, web_iss)))
+    check("iss28: автозапуск ВСЕГДА (Run-ключ HKCU без Tasks-гарда)",
+          all("CurrentVersion\\Run" in s for s in (adm_iss, usr_iss, web_iss)))
+    check("iss28: запуск только на финальной странице (postinstall без Tasks)",
+          all("postinstall skipifsilent" in s for s in (adm_iss, usr_iss, web_iss)))
+    check("iss28: Admin.iss без PasswordPage, edition {role: admin} без пароля",
+          "PasswordPage" not in adm_iss and 'Values[0]' not in adm_iss
+          and '{ "role": "admin" }' in adm_iss)
+    check("iss28: User/UserWeb - страница ФИО есть, пропуск РАЗРЕШЁН",
+          "FIOPage" in usr_iss and "FIOPage" in web_iss
+          and "Введите ФИО пользователя." not in usr_iss
+          and "Введите ФИО пользователя." not in web_iss
+          and '{ "role": "user" }' in usr_iss and '{ "role": "user" }' in web_iss)
+
+    # задача 2: user-редакция поверх устаревших admin-настроек
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "Потемкин Сергей Анатольевич",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("g28", "ГРД-28", executors=["Семисенко И.Ю."])])
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
+    _le23(force=True)
+    page, tab, _ = build(1280)
+    stg28 = load_settings()
+    btns28 = {getattr(c, "text", None) for c in walk(tab)
+              if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    check("edit28: user-редакция поверх admin-настроек - роль/ФИО из edition",
+          stg28.get("network_role") == "user"
+          and stg28.get("network_user") == "Семисенко Иван Юрьевич")
+    check("edit28: read-only - admin-кнопок нет физически",
+          "Добавить контроль" not in btns28 and "Импорт Excel" not in btns28
+          and "Справочники" not in btns28 and "Удалить все" not in btns28,
+          f"{sorted(b for b in btns28 if b)}")
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+
+    # задача 2: user-редакция БЕЗ ФИО - чужой network_user сбрасывается до диалога
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "Потемкин Сергей Анатольевич",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    os.environ["PORAYONKA_EDITION"] = "user"
+    _le23(force=True)
+    page, tab, _ = build(1280)
+    check("edit28: user без ФИО - чужой network_user сброшен + диалог «Кто вы?»",
+          (load_settings().get("network_user") or "") == ""
+          and bool(page.dialogs)
+          and any(getattr(t, "value", None) == "Кто вы?"
+                  for t in walk(page.dialogs[-1])))
+    # закрыть путь: выбрать ФИО, чтобы не оставлять состояние хвостам
+    dd28 = [c for c in walk(page.dialogs[-1]) if isinstance(c, ft.Dropdown)]
+    ok28 = [c for c in walk(page.dialogs[-1]) if isinstance(c, ft.ElevatedButton)
+            and getattr(c, "text", None) == "Подтвердить"]
+    if dd28 and ok28:
+        dd28[0].value = "Семисенко Иван Юрьевич"
+        ok28[0].on_click(None)
+    os.environ.pop("PORAYONKA_EDITION", None)
+    try:
+        if os.path.exists(_edfile68):
+            os.remove(_edfile68)
+    except OSError:
+        pass
+    _le23(force=True)
+
+    # задача 2: явная admin-редакция после user-настроек - полный функционал
+    save_settings({"network_enabled": False, "network_role": "user",
+                   "network_user": "Семисенко Иван Юрьевич",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    os.environ["PORAYONKA_EDITION"] = "admin"
+    _le23(force=True)
+    page, tab, _ = build(1280)
+    btns28a = {getattr(c, "text", None) for c in walk(tab)
+               if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    check("edit28: admin после user - роль admin, network_user сброшен, кнопки есть",
+          load_settings().get("network_role") == "admin"
+          and (load_settings().get("network_user") or "") == ""
+          and "Добавить контроль" in btns28a and "Импорт Excel" in btns28a)
+    os.environ.pop("PORAYONKA_EDITION", None)
+    _le23(force=True)
+
+    # задача 3: web-установщик уже записал ФИО в {app}/edition.json - не спрашивать
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("w28", "ВЕБ-28", executors=["Семисенко И.Ю."])])
+    edjson28 = os.path.join(_appdir24, "edition.json")
+    assert not os.path.exists(edjson28)
+    os.environ["PORAYONKA_WEB"] = "1"
+    try:
+        with open(edjson28, "w", encoding="utf-8") as f28:
+            f28.write('{ "role": "user", "user_name": "Семисенко Иван Юрьевич" }')
+        _le23(force=True)
+        page, tab, _ = build(1280)
+    finally:
+        try:
+            os.remove(edjson28)
+        except OSError:
+            pass
+        os.environ.pop("PORAYONKA_WEB", None)
+        _le23(force=True)
+    rows28 = []
+    for _r in _visible_rows(tab):
+        rows28 += [str(getattr(t, "value", "")) for t in walk(_r)
+                   if isinstance(t, ft.Text)]
+    check("web28: ФИО установщика подхвачено - диалога «Кто вы?» НЕТ",
+          not page.dialogs)
+    check("web28: таблица сразу построена с фильтром «свои»",
+          any("ВЕБ-28" in t for t in rows28), f"{rows28[:6]}")
+
+    # задача 4: вложение - content секции ПОЛНОСТЬЮ заменяется (forced rebuild)
+    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+                   "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+                   "extra_people": [], "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("a28", "АТТ-28", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build(1280)
+    _visible_rows(tab)[0].on_click(None)
+    scan_txt_old = next((t for t in walk(tab) if isinstance(t, ft.Text)
+                         and t.value == "Скан задания"), None)
+    picker28 = getattr(page, "_controls_attach_picker", None)
+    _src28 = os.path.join(_appdir24, "assets", "icon.png")
+    _tmp28 = os.path.join(tempfile.gettempdir(), "foto_a28.png")
+    with open(_src28, "rb") as f28, open(_tmp28, "wb") as g28:
+        g28.write(f28.read())
+    if picker28 is not None:
+        _invoke_event_handler(picker28.on_result, _types50.SimpleNamespace(
+            path=None, files=[_types50.SimpleNamespace(path=_tmp28, name="foto_a28.png")]))
+    all28 = walk(tab)
+    txts28 = [str(getattr(t, "value", "")) for t in all28 if isinstance(t, ft.Text)]
+    check("att28: content секции заменён целиком (старый заголовок выведен из дерева)",
+          scan_txt_old is not None and scan_txt_old not in all28)
+    check("att28: строка вложения видна сразу + заголовок «Скан задания» на месте",
+          any("foto_a28.png" in t for t in txts28)
+          and any(t == "Скан задания" for t in txts28))
+
+    # задача 5: «О программе» - ограниченная высота + внутренний скролл
+    from ui.header import create_compact_header as _hdr28m
+    pgh28 = PageStub()
+    _hdr28m(pgh28, None, ft.Text("tabs"))
+    pgh28._open_about()
+    dlgA28 = pgh28.overlay[-1] if pgh28.overlay else None
+    contA28 = getattr(dlgA28, "content", None) if dlgA28 is not None else None
+    colsA28 = [c for c in walk(dlgA28) if isinstance(c, ft.Column)
+               and getattr(c, "scroll", None) is not None] if dlgA28 is not None else []
+    check("about28: контент с явной высотой + внутренний скролл",
+          contA28 is not None and getattr(contA28, "height", None) is not None
+          and getattr(contA28, "height", 0) <= 480 and len(colsA28) >= 1,
+          f"h={getattr(contA28, 'height', None)} cols={len(colsA28)}")
+
+    # задачи 6-7: настройки без управления справочниками + секция пароля
+    from ui.controls.controls_settings_modal import (
+        create_controls_settings_modal as _csm28)
+    from core.edition import (save_appdata_password_hash as _sph28,
+                              admin_password_required as _apr28)
+    pgm28 = PageStub()
+    stm28 = {"soon_days": 3, "network_enabled": False, "network_role": "admin",
+             "network_user": "", "network_shared_path": "", "notify_sound": True,
+             "notify_log": {}, "extra_people": ["Макаренко Роман Андреевич"],
+             "custom_initiators": ["МВД"]}
+    dlgm28 = _csm28(pgm28, stm28, lambda m: None)
+    mtexts28 = {str(getattr(t, "value", "")) for t in walk(dlgm28)
+                if isinstance(t, ft.Text)}
+    mlabels28 = {str(getattr(t, "label", "")) for t in walk(dlgm28)
+                 if isinstance(t, (ft.TextField, ft.Dropdown))}
+    check("set28: в настройках НЕТ управления справочниками (остались в тулбаре)",
+          not any("Инициаторы (пользовательские)" in t for t in mtexts28)
+          and not any("Справочник людей" in t for t in mtexts28)
+          and "Новый инициатор" not in mlabels28
+          and "Доп. ФИО (исполнитель/контролёр)" not in mlabels28)
+    check("set28: уведомления и сетевой режим на месте",
+          any(t == "Уведомления" for t in mtexts28)
+          and any("Сетевой режим (локальная сеть)" in t for t in mtexts28))
+    check("set28: секция «Пароль администратора» (admin-редакция)",
+          any("Пароль администратора" in t for t in mtexts28)
+          and any("Пароль не установлен" in t for t in mtexts28))
+    # установка пароля из настроек
+    flds28 = {getattr(f, "label", None): f for f in walk(dlgm28)
+              if isinstance(f, ft.TextField) and getattr(f, "label", None)}
+    flds28["Новый пароль"].value = "секрет28"
+    flds28["Повторите новый пароль"].value = "секрет28"
+    setb28 = [b for b in walk(dlgm28) if isinstance(b, ft.ElevatedButton)
+              and getattr(b, "text", None) == "Установить пароль"]
+    setb28[0].on_click(None)
+    ed28f = _le23(force=True)
+    check("set28: пароль установлен (appdata edition.json -> password_hash)",
+          _apr28(ed28f) is True and bool(ed28f.get("password_hash")))
+    check("set28: статус сменился на «Пароль установлен»",
+          any("Пароль установлен" in str(getattr(t, "value", ""))
+              for t in walk(dlgm28) if isinstance(t, ft.Text)))
+    # смена с неверным текущим - отказ
+    chgb28 = [b for b in walk(dlgm28) if isinstance(b, ft.ElevatedButton)
+              and getattr(b, "text", None) == "Сменить пароль"]
+    flds28["Текущий пароль"].value = "неверно"
+    flds28["Новый пароль"].value = "новый28"
+    flds28["Повторите новый пароль"].value = "новый28"
+    chgb28[0].on_click(None)
+    check("set28: смена с неверным текущим отклонена",
+          _le23(force=True).get("password_hash") == ed28f.get("password_hash"))
+    # верная смена
+    flds28["Текущий пароль"].value = "секрет28"
+    chgb28[0].on_click(None)
+    ed28h = _le23(force=True)
+    check("set28: смена пароля работает",
+          ed28h.get("password_hash") != ed28f.get("password_hash")
+          and _apr28(ed28h) is True)
+    # удаление - через подтверждение
+    delb28 = [b for b in walk(dlgm28) if isinstance(b, ft.TextButton)
+              and getattr(b, "text", None) == "Удалить пароль"]
+    delb28[0].on_click(None)
+    conf28 = pgm28.dialogs[-1] if pgm28.dialogs else None
+    yes28 = [b for b in walk(conf28) if isinstance(b, ft.ElevatedButton)
+             and getattr(b, "text", None) == "Удалить"] if conf28 is not None else []
+    check("set28: удаление пароля - через подтверждающий диалог",
+          conf28 is not None and bool(yes28))
+    if yes28:
+        yes28[0].on_click(None)
+    check("set28: пароль удалён", _apr28(_le23(force=True)) is False)
+    # merge не затирает role/user_name
+    _sae23("user", "Тестовый Тест Тестович")
+    _sph28("HASH28")
+    ed28m = _le23(force=True)
+    check("set28: appdata merge - role/user_name/password_hash сосуществуют",
+          ed28m.get("role") == "user"
+          and ed28m.get("user_name") == "Тестовый Тест Тестович"
+          and ed28m.get("password_hash") == "HASH28", f"{ed28m}")
+    try:
+        if os.path.exists(_edfile68):
+            os.remove(_edfile68)
+    except OSError:
+        pass
+    _le23(force=True)
+
     print()
     if FAILURES:
         print("FAILED:", ", ".join(FAILURES))

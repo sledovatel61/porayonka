@@ -377,6 +377,29 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             traceback.print_exc()
         network_user = settings.get("network_user", "") or ""
         network_role = settings.get("network_role", "admin")
+    # Раунд 28 (задача 2): ЗАЩИТНЫЙ ГАРД — явная user-редакция ВСЕГДА
+    # принудительно выставляет роль «user» и ФИО редакции (пустое, если ФИО
+    # не задано — тогда спросит диалог «Кто вы?»), даже если
+    # controls_settings.json остался от прежней admin-установки. Дублирует
+    # apply_edition_to_settings, но с диагностикой — кейс «user-версия
+    # показывает функционал администратора» после переноса portable-версии.
+    if edition_user:
+        _fix28 = False
+        if settings.get("network_role") != "user":
+            settings["network_role"] = "user"
+            _fix28 = True
+        _enm28 = (edition.get("user_name") or "").strip()
+        if (settings.get("network_user") or "").strip() != _enm28:
+            settings["network_user"] = _enm28
+            _fix28 = True
+        if _fix28:
+            print("[CONTROLS_TAB] edition guard: role/user forced from edition.json")
+            try:
+                save_settings(settings)
+            except Exception:
+                traceback.print_exc()
+            network_user = settings.get("network_user", "") or ""
+            network_role = settings.get("network_role", "admin")
 
     state = {
         "controls": [],
@@ -2800,11 +2823,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 # файлы видны сразу: перестроить список вложений
                 _rebuild_attach()
                 try:
-                    # Раунд 23 (задача 1): на Windows-клиенте 0.23.2 точечный
-                    # update attach_col свежедобавленную строку НЕ показывал
-                    # (ложился только после сохранения и переоткрытия карточки).
-                    # Обновляем всю панель секции — прикреплённое фото
-                    # отображается мгновенно.
+                    # Раунд 28 (задача 4): пользовательский ретест — точечный
+                    # update панели (раунд 23) на Win-клиенте всё равно не
+                    # рисовал свежую строку до «Сохранить»+переоткрытия.
+                    # Теперь content панели ПОЛНОСТЬЮ заменяется новым
+                    # инстансом секции — diff-движок не может «пропустить»
+                    # поддерево (как при переоткрытии карточки).
+                    scan_panel.content = _make_scan_section()
                     _safe_update(scan_panel)
                 except Exception:
                     traceback.print_exc()
@@ -3188,14 +3213,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         left_col.controls.append(glass_panel(content=miles_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"]))
 
         # Scan
-        scan_section = ft.Column(controls=[
-            ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), ft.ElevatedButton("Прикрепить файл", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), icon=ft.icons.ATTACH_FILE, on_click=_pick_attach)], spacing=6, tight=True),
-            attach_col,
-        ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        # Раунд 28 (задача 4): секция строится фабрикой — при прикреплении
+        # content панели ПОЛНОСТЬЮ заменяется новым инстансом (форс-ребилд
+        # поддерева, см. _on_attach_picked).
+        _attach_btn28 = ft.ElevatedButton("Прикрепить файл", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), icon=ft.icons.ATTACH_FILE, on_click=_pick_attach)
+
+        def _make_scan_section():
+            return ft.Column(controls=[
+                ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), _attach_btn28], spacing=6, tight=True),
+                attach_col,
+            ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+
         # Раунд 23 (задача 1): ссылка на панель секции нужна _on_attach_picked —
         # точечный update attach_col на Win-клиенте 0.23.2 НЕ перерисовывал
         # свежедобавленную строку («прикреплено, но не видно до переоткрытия»).
-        scan_panel = glass_panel(content=scan_section, radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"])
+        scan_panel = glass_panel(content=_make_scan_section(), radius=12, padding=ft.padding.all(14), bgcolor=GLASS["card_section"])
         left_col.controls.append(scan_panel)
 
         # Decide layout based on page width

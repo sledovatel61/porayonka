@@ -1,5 +1,9 @@
 ; Admin.iss
 ; Установщик администраторской версии Порайонки
+; Раунд 28 (задача 1.1): автозапуск ВСЕГДА (без чекбокса), запуск приложения
+; только на ФИНАЛЬНОЙ странице мастера, страница пароля УБРАНА — пароль
+; задаётся в настройках приложения (пишется как password_hash в
+; %APPDATA%\porayonka\edition.json, поэтому здесь его больше нет).
 
 #include "Common.iss"
 
@@ -29,8 +33,6 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startup"; Description: "Добавить в автозапуск Windows"; GroupDescription: "Автозапуск:"; Flags: unchecked
-Name: "runafterinstall"; Description: "{cm:LaunchProgram,Порайонка — Администратор}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "..\dist_all\Порайонка_Админ\Порайонка_Админ.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -43,60 +45,26 @@ Source: "license.txt"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\Порайонка — Администратор"; Filename: "{app}\Порайонка_Админ.exe"; IconFilename: "{app}\icon_admin.ico"
 Name: "{autodesktop}\Порайонка — Администратор"; Filename: "{app}\Порайонка_Админ.exe"; IconFilename: "{app}\icon_admin.ico"; Tasks: desktopicon
 
+; Автозапуск ВСЕГДА (без чекбокса на странице задач) — раунд 28
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PorayonkaAdmin"; ValueData: """{app}\Порайонка_Админ.exe"""; Flags: uninsdeletevalue; Tasks: startup
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PorayonkaAdmin"; ValueData: """{app}\Порайонка_Админ.exe"""; Flags: uninsdeletevalue
 
+; Запуск — только финальная страница мастера (postinstall без Tasks) — раунд 28
 [Run]
-Filename: "{app}\Порайонка_Админ.exe"; Description: "{cm:LaunchProgram,Порайонка — Администратор}"; Flags: nowait postinstall skipifsilent; Tasks: runafterinstall
+Filename: "{app}\Порайонка_Админ.exe"; Description: "{cm:LaunchProgram,Порайонка — Администратор}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-var
-  PasswordPage: TInputQueryWizardPage;
-
-procedure InitializeWizard();
-begin
-  PasswordPage := CreateInputQueryPage(wpSelectTasks,
-    'Пароль администратора',
-    'Установите пароль для входа в администраторскую версию',
-    'Если оставить поля пустыми, пароль запрашиваться не будет.');
-  PasswordPage.Add('Пароль:', True);
-  PasswordPage.Add('Подтверждение пароля:', True);
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
-  Result := True;
-  if CurPageID = PasswordPage.ID then
-  begin
-    if PasswordPage.Values[0] <> PasswordPage.Values[1] then
-    begin
-      MsgBox('Пароли не совпадают. Повторите ввод.', mbError, MB_OK);
-      Result := False;
-    end;
-  end;
-end;
-
-function ReplaceQuotes(const S: String): String;
-begin
-  StringChangeEx(S, '\', '\\', True);
-  StringChangeEx(S, '"', '\"', True);
-  Result := S;
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   EditionPath: String;
-  Password: String;
   Json: String;
 begin
   if CurStep = ssPostInstall then
   begin
+    { edition.json admin-редакции; пароль НЕ пишем (живёт в %APPDATA%,
+      задаётся из настроек приложения) }
     EditionPath := ExpandConstant('{app}\edition.json');
-    Password := PasswordPage.Values[0];
-    if Password <> '' then
-      Json := '{ "role": "admin", "password": "' + ReplaceQuotes(Password) + '" }'
-    else
-      Json := '{ "role": "admin" }';
+    Json := '{ "role": "admin" }';
     SaveStringToFile(EditionPath, Json, False);
   end;
 end;

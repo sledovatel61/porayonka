@@ -160,9 +160,14 @@ def create_compact_header(
                 ),
                 border_radius=ft.border_radius.only(top_left=12, top_right=12),
             ),
+            # Раунд 28 (задача 5): текст обрезался при 1280x720 — ограничиваем
+            # высоту и даём внутренний скролл (просто Column(scroll=AUTO) внутри
+            # фиксированной высоты — легально по AGENTS §15.11).
             content=ft.Container(
-                width=500,
+                width=520,
+                height=430,
                 content=ft.Column(
+                    scroll=ft.ScrollMode.AUTO,
                     controls=[
                         ft.Text("Порайонка v2.0 DARK final", size=20,
                                 weight=ft.FontWeight.BOLD, color=COLORS["text"]),

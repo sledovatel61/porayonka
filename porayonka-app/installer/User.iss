@@ -1,5 +1,8 @@
 ; User.iss
 ; Установщик пользовательской версии Порайонки (Win10/11)
+; Раунд 28 (задача 1.2): автозапуск ВСЕГДА (без чекбокса), запуск приложения
+; только на ФИНАЛЬНОЙ странице мастера. Страница ФИО остаётся; ФИО можно
+; пропустить — тогда приложение спросит его при первом запуске.
 
 #include "Common.iss"
 
@@ -29,8 +32,6 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startup"; Description: "Добавить в автозапуск Windows"; GroupDescription: "Автозапуск:"; Flags: unchecked
-Name: "runafterinstall"; Description: "{cm:LaunchProgram,Порайонка — Пользователь}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "..\dist_all\Порайонка_Пользователь\Порайонка_Пользователь.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -43,11 +44,13 @@ Source: "license.txt"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\Порайонка — Пользователь"; Filename: "{app}\Порайонка_Пользователь.exe"; IconFilename: "{app}\icon_user.ico"
 Name: "{autodesktop}\Порайонка — Пользователь"; Filename: "{app}\Порайонка_Пользователь.exe"; IconFilename: "{app}\icon_user.ico"; Tasks: desktopicon
 
+; Автозапуск ВСЕГДА (без чекбокса на странице задач) — раунд 28
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PorayonkaUser"; ValueData: """{app}\Порайонка_Пользователь.exe"""; Flags: uninsdeletevalue; Tasks: startup
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PorayonkaUser"; ValueData: """{app}\Порайонка_Пользователь.exe"""; Flags: uninsdeletevalue
 
+; Запуск — только финальная страница мастера (postinstall без Tasks) — раунд 28
 [Run]
-Filename: "{app}\Порайонка_Пользователь.exe"; Description: "{cm:LaunchProgram,Порайонка — Пользователь}"; Flags: nowait postinstall skipifsilent; Tasks: runafterinstall
+Filename: "{app}\Порайонка_Пользователь.exe"; Description: "{cm:LaunchProgram,Порайонка — Пользователь}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 var
@@ -58,21 +61,8 @@ begin
   FIOPage := CreateInputQueryPage(wpSelectTasks,
     'ФИО пользователя',
     'Укажите ФИО для привязки контролей и уведомлений',
-    'Например: Иванов И.И.');
+    'Например: Иванов И.И. (можно пропустить — приложение спросит при первом запуске)');
   FIOPage.Add('ФИО:', False);
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
-  Result := True;
-  if CurPageID = FIOPage.ID then
-  begin
-    if Trim(FIOPage.Values[0]) = '' then
-    begin
-      MsgBox('Введите ФИО пользователя.', mbError, MB_OK);
-      Result := False;
-    end;
-  end;
 end;
 
 function ReplaceQuotes(const S: String): String;
@@ -90,9 +80,13 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
+    { edition.json user-редакции; ФИО пустое — приложение спросит само }
     EditionPath := ExpandConstant('{app}\edition.json');
     FIO := Trim(FIOPage.Values[0]);
-    Json := '{ "role": "user", "user_name": "' + ReplaceQuotes(FIO) + '" }';
+    if FIO <> '' then
+      Json := '{ "role": "user", "user_name": "' + ReplaceQuotes(FIO) + '" }'
+    else
+      Json := '{ "role": "user" }';
     SaveStringToFile(EditionPath, Json, False);
   end;
 end;
