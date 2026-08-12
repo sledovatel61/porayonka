@@ -14,11 +14,22 @@
 import os
 
 _flet_hooks = []
+_flet_datas = []
 try:
     import flet as _flet_pkg
     _d = os.path.join(os.path.dirname(_flet_pkg.__file__), "__pyinstaller")
     if os.path.isdir(_d):
         _flet_hooks = [_d]
+    # Раунд 27: web-режим Flet требует статические файлы клиента (flet/web),
+    # иначе frozen exe падает "Web root path not found: .../flet/web".
+    # Добавляем их в datas + скрытые импорты fastapi/uvicorn.
+    _flet_root = os.path.dirname(_flet_pkg.__file__)
+    _flet_web = os.path.join(_flet_root, "web")
+    if os.path.isdir(_flet_web):
+        _flet_datas.append((_flet_web, "flet/web"))
+    _flet_fastapi = os.path.join(_flet_root, "fastapi")
+    if os.path.isdir(_flet_fastapi):
+        _flet_datas.append((_flet_fastapi, "flet/fastapi"))
 except Exception:
     pass
 
@@ -28,8 +39,14 @@ a = Analysis(
     ["main_web.py"],
     pathex=[],
     binaries=[],
-    datas=[("core", "core"), ("ui", "ui"), ("assets", "assets")],
-    hiddenimports=[],
+    datas=[("core", "core"), ("ui", "ui"), ("assets", "assets")] + _flet_datas,
+    hiddenimports=[
+        "flet.web",
+        "flet.fastapi",
+        "uvicorn",
+        "fastapi",
+        "starlette",
+    ],
     hookspath=_flet_hooks,
     hooksconfig={},
     runtime_hooks=[],

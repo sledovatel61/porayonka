@@ -368,7 +368,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     )
     edition = load_edition()
     edition_user = is_user_edition()
-    if edition_user and apply_edition_to_settings(settings):
+    # Раунд 27: apply_edition_to_settings вызывается всегда, чтобы явная
+    # admin-редакция сбросила старый network_user после user-сборки.
+    if apply_edition_to_settings(settings):
         try:
             save_settings(settings)
         except Exception:

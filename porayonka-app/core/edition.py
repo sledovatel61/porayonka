@@ -160,6 +160,12 @@ def apply_edition_to_settings(settings: dict) -> bool:
         if nm and (settings.get("network_user") or "").strip() != nm:
             settings["network_user"] = nm
             changed = True
+        # Раунд 27: user-дистрибутив без встроенного ФИО должен сбросить
+        # старый network_user (например, после тестов admin), иначе
+        # пользователь увидит чужие контроли и диалог "Кто вы?" не появится.
+        if not nm and (settings.get("network_user") or "").strip():
+            settings["network_user"] = ""
+            changed = True
     elif ed.get("role") == EDITION_ADMIN and ed.get("explicit"):
         if settings.get("network_role") != "admin":
             settings["network_role"] = "admin"
