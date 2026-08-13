@@ -54,31 +54,53 @@ def show_admin_password_gate(page, on_ok, ed=None) -> bool:
         width=280,
     )
 
+    # Раунд 30 (задача 1): защита от ПОВТОРНОГО срабатывания _try. Живой
+    # клиент Flet 0.23.2 может прислать событие submit/клик несколько раз
+    # подряд (как FilePicker-result в раунде 21) — без флага on_ok вызывался
+    # бы повторно и _main_impl строил бы таблицу ВТОРОЙ раз («тускло/дважды»,
+    # см. design/screenshots/13.08.2026/Пароль не принимается.png).
+    _submitted = {"v": False}
+
     def _try(e=None):
+        if _submitted["v"]:
+            return
         ok = False
         try:
             ok = check_admin_password(ed, pw_tf.value or "")
         except Exception:
             ok = False
         if ok:
+            _submitted["v"] = True
             try:
                 page.close(dlg)
+                # Раунд 30 (задача 1): page.update() ПОСЛЕ close гарантирует,
+                # что команда закрытия модального диалога ушла на клиент ДО
+                # построения UI: иначе _main_impl своими update() мог
+                # «перекрыть» закрытие, и таблица рисовалась тусклой под
+                # диалогом.
+                page.update()
             except Exception:
                 pass
             on_ok()
         else:
             # «Если пароль неверный — приложение закрывается» (промпт, задача 5)
+            _submitted["v"] = True
             print("[AUTH] nevernyj parol - vyhod")
             try:
                 page.close(dlg)
+                page.update()
             except Exception:
                 pass
             _close_app(page)
 
     def _quit(e=None):
+        if _submitted["v"]:
+            return
+        _submitted["v"] = True
         print("[AUTH] otkaza ot vvoda - vyhod")
         try:
             page.close(dlg)
+            page.update()
         except Exception:
             pass
         _close_app(page)

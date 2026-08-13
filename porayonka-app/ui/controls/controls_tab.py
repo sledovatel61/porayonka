@@ -36,7 +36,7 @@ from core.controls_data import (
     merge_controls, _should_notify,
     ensure_control_id, attachment_abs,
     # Раунд 29: задачи 7 (синхронизация времени) и 9 (офлайн-вложения)
-    check_time_skew, sync_local_attachments_to_shared,
+    check_time_skew, TIME_SKEW_WARN_SEC, sync_local_attachments_to_shared,
 )
 # Раунд 29 (задача 6): lock-файлы редактирования контроля в общей папке.
 from core import control_locks as _clocks29
@@ -2762,8 +2762,20 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # Attachments — раунд 9 (задача 5): миниатюра для изображений/PDF,
         # клик по миниатюре/имени — полноразмерный предпросмотр в overlay
         # (preview_root/preview_body объявлены на уровне detail_overlay)
-        attach_col = ft.Column(spacing=6, tight=True,
-                               horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        # Раунд 30 (задача 2): колонка вложений хранится в ref и ПЕРЕСОЗДАЁТСЯ
+        # при каждой сборке секции (_make_scan_section) — diff-движок Flet
+        # 0.23.2 НЕ переносит существующий контрол под новый родитель: при
+        # замене scan_panel.content старый Column удалялся на клиенте вместе
+        # со строками, а Python считал их живыми — «прикрепил, сразу не
+        # видно, что pdf прикрепился» (скрин 13.08.2026).
+        attach_col_ref: Dict = {"col": None}
+
+        def _attach_col() -> ft.Column:
+            if attach_col_ref["col"] is None:
+                attach_col_ref["col"] = ft.Column(
+                    spacing=6, tight=True,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+            return attach_col_ref["col"]
 
         def _resolve_abs(rel: str):
             import os as _os
@@ -2893,11 +2905,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 alignment=ft.alignment.center,
             )
 
-        def _rebuild_attach():
-            attach_col.controls.clear()
+        def _fill_attach_col(col):
+            """Наполнить col строками вложений (без update)."""
+            col.controls.clear()
             for rel in detail_state["attachments"]:
                 fn = rel.split("/")[-1]
-                attach_col.controls.append(
+                col.controls.append(
                     glass_panel(
                         content=ft.Row(controls=[
                             _thumb_for(rel),
@@ -2913,8 +2926,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         radius=8, padding=ft.padding.all(8), bgcolor=GLASS["surface_alt"],
                     )
                 )
+
+        def _rebuild_attach():
+            _fill_attach_col(_attach_col())
             try:
-                _safe_update(attach_col)
+                _safe_update(_attach_col())
             except Exception:
                 traceback.print_exc()
 
@@ -3077,12 +3093,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         detail_state["attachments"].append(rel)
             if added:
                 if same_card:
-                    # файлы видны сразу: перестроить список вложений
-                    _rebuild_attach()
+                    # Раунд 30 (задача 2): файлы видны СРАЗУ. content панели
+                    # полностью заменяется секцией с НОВЫМ attach_col (раунд
+                    # 28: полная замена; раунд 30: без переиспользования
+                    # существующего контрола — diff-движок 0.23.2 его не
+                    # переносит под новый родитель, и строка «пропадала» до
+                    # переоткрытия карточки, скрин 13.08.2026).
                     try:
-                        # Раунд 28 (задача 4): content панели ПОЛНОСТЬЮ
-                        # заменяется новым инстансом секции — diff-движок не
-                        # может «пропустить» поддерево.
                         scan_panel.content = _make_scan_section()
                         _safe_update(scan_panel)
                     except Exception:
@@ -3536,9 +3553,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _attach_btn28 = ft.ElevatedButton("Прикрепить файл", bgcolor=GLASS["surface_alt"], color=GLASS["accent"], height=32, style=ft.ButtonStyle(side=ft.BorderSide(1, GLASS["border"]), shape=ft.RoundedRectangleBorder(radius=8)), icon=ft.icons.ATTACH_FILE, on_click=_pick_attach)
 
         def _make_scan_section():
+            # Раунд 30 (задача 2): КАЖДЫЙ вызов создаёт НОВЫЙ attach_col и
+            # наполняет его строками — diff-движок 0.23.2 не переносит
+            # существующий контрол под новый родитель (строка вложения
+            # «терялась» на клиенте до переоткрытия карточки). Переиспользование
+            # контрола с уже выданным uid в новом поддереве — источник бага.
+            col = ft.Column(spacing=6, tight=True,
+                            horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+            attach_col_ref["col"] = col
+            _fill_attach_col(col)
             return ft.Column(controls=[
                 ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), _attach_btn28], spacing=6, tight=True),
-                attach_col,
+                col,
             ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
         # Раунд 23 (задача 1): ссылка на панель секции нужна _on_attach_picked —
@@ -5159,7 +5185,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _skew29 = check_time_skew(settings)
         except Exception:
             _skew29 = None
-        if _skew29 is not None and _skew29 > 300:
+        # Раунд 30 (задача 5): порог — константа TIME_SKEW_WARN_SEC (30 мин);
+        # сравнение mtime vs last_saved не даёт false positive на «давно не
+        # менявшийся» файл.
+        if _skew29 is not None and _skew29 > TIME_SKEW_WARN_SEC:
             print(f"[CONTROLS_TAB] time skew vs shared: {int(_skew29)}s")
             try:
                 _show_time_skew_warning(_skew29)

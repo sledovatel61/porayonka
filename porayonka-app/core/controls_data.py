@@ -412,7 +412,10 @@ def get_person_roles(settings: Optional[dict]) -> dict:
     в одну запись):
       - базовые криминалисты        -> роль "executor"
       - дефолтные контролёры        -> роль "controller"
-      - доп. ФИО (`extra_people`)   -> обе роли
+      - доп. ФИО (`extra_people`)   -> роль "executor" (раунд 30, задача 3:
+        раньше «обе роли» — из-за этого импортированные исполнители попадали
+        в dropdown «За кем контроль»; контролёрская роль — только ЯВНЫМ
+        назначением в справочнике или DEFAULT_CONTROLLERS)
     Без дефолта (теоретически) — обе роли. Явные назначения из
     settings["person_roles"] (по точному имени записи справочника) перекрывают
     дефолты полностью — так снимается и роль-умолчание.
@@ -436,8 +439,10 @@ def get_person_roles(settings: Optional[dict]) -> dict:
     for n in DEFAULT_CONTROLLERS:
         _put(n, "controller")
     for n in (settings.get("extra_people", []) or []):
+        # Раунд 30 (задача 3): extra_people по умолчанию — ТОЛЬКО исполнитель.
+        # Контролёр — только явным назначением person_roles (backward
+        # compatibility: явные назначения ниже перекрывают дефолт).
         _put(n, "executor")
-        _put(n, "controller")
     out = {}
     # порядок канонический — как в get_all_people_names
     for n in get_all_people_names(settings):
@@ -1188,14 +1193,34 @@ def sync_attachments_from_shared(control_id: str, rel_paths: List[str], settings
         _copy_atomic(shared_file, get_attachment_dir(control_id), Path(rel).name)
 
 
-def check_time_skew(settings: dict, tolerance_sec: float = 300.0) -> Optional[float]:
-    """Раунд 29 (задача 7): расхождение локального времени с временем
-    последнего изменения общего файла (секунды, по модулю), или None, если
-    проверка невозможна (сеть выключена, shared отсутствует/недоступен).
+# Раунд 30 (задача 5): порог предупреждения о расхождении часов. Сравнение
+# идёт не с «возрастом» файла, а между mtime и last_saved внутри JSON (см.
+# check_time_skew): при точных часах расхождение ~0 даже если файл давно не
+# менялся; при сбитых часах — заметно больше порога.
+TIME_SKEW_WARN_SEC = 1800.0  # 30 минут
 
-    Используется при старте: > tolerance_sec (5 мин по умолчанию) — часы ПК,
-    скорее всего, сбиты, а значит «курсоровая» синхронизация по mtime и
-    журналы «сегодня» могут работать некорректно.
+
+def check_time_skew(settings: dict,
+                    tolerance_sec: float = TIME_SKEW_WARN_SEC) -> Optional[float]:
+    """Раунд 29 (задача 7) + раунд 30 (задача 5): расхождение часов ЭТОГО ПК
+    с часами машины, писавшей общий файл (секунды, по модулю), или None, если
+    проверка невозможна (сеть выключена, shared отсутствует/недоступен, нет
+    last_saved в файле).
+
+    КАК РАБОТАЕТ: сравниваются НЕ `now` и mtime (это давало false positive:
+    файл, который просто давно не менялся, выглядел как «сбитые часы» — скрин
+    «Сообщение о неверном времени, хотя по факту время правильное.png»), а:
+      - mtime файла — время последней записи в шкале ЭТОГО ПК;
+      - last_saved (ISO внутри controls.json) — время той же записи по часам
+        машины-писателя.
+    При точных часах (и одном часовом поясе — обычная локальная сеть отдела)
+    обе величины совпадают с точностью до секунд — предупреждения нет, даже
+    если файл не менялся сутками. Если часы ПК сбиты — расхождение заметно
+    превышает порог (удваивается из-за интерпретации naive-ISO в локальной
+    шкале, поэтому порог 30 минут: плавающие ±2–3 минуты не тревожат).
+
+    last_saved отсутствует (файл старого формата) — None: надёжно проверить
+    нельзя, не блокируем запуск.
     """
     if not settings.get("network_enabled"):
         return None
@@ -1207,8 +1232,21 @@ def check_time_skew(settings: dict, tolerance_sec: float = 300.0) -> Optional[fl
     except OSError:
         return None
     try:
-        return abs(time.time() - float(mtime))
-    except (OSError, ValueError, TypeError):
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        last_saved = (data or {}).get("last_saved") or ""
+        if not last_saved:
+            return None
+        dt = datetime.fromisoformat(str(last_saved))
+        if dt.tzinfo is not None:
+            last_ts = dt.timestamp()
+        else:
+            # naive-ISO: локальное время писавшего ПК; в одной организации
+            # пояса совпадают — интерпретация в НАШЕЙ локальной шкале даёт
+            # сравнимую с mtime величину
+            last_ts = dt.timestamp()
+        return abs(mtime - last_ts)
+    except (json.JSONDecodeError, OSError, ValueError, TypeError):
         return None
 
 

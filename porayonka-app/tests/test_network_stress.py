@@ -135,10 +135,12 @@ class Client:
     данных (load/save_controls и т.п.) работают с APPDATA этого клиента.
     """
 
-    def __init__(self, name, shared_path, role="admin", user=""):
+    def __init__(self, name, shared_path, role="admin", user="", appdata=None):
         self.name = name
         self.shared_path = shared_path
-        self.appdata = tempfile.mkdtemp(prefix=f"porayonka_stress_{name}_")
+        # appdata можно переиспользовать (сценарий 14: offline-фаза и
+        # «сеть вернулась» - ОДИН клиент с той же локальной базой)
+        self.appdata = appdata or tempfile.mkdtemp(prefix=f"porayonka_stress_{name}_")
         self.settings = {
             "network_enabled": True,
             "network_role": role,
@@ -286,7 +288,7 @@ def scenario_concurrent_edit():
 
     w = merge_controls([vA], [vB])[0]
     check("2: победил сохранивший ПОЗЖЕ (B)", w.updated_at == vB.updated_at)
-    check("2: НЕТ слияния полей — объект целиком B (content B, executors B)",
+    check("2: НЕТ слияния полей - объект целиком B (content B, executors B)",
           w.content == "исходное" and w.executors == ["Исп Б"],
           f"content={w.content!r} executors={w.executors}")
 
@@ -294,7 +296,7 @@ def scenario_concurrent_edit():
     vA_later = _mk("c1", "ВХСОП-1", "2026-08-02T10:00:02",
                    content="правка A", executors=["Исп А"])
     wA = merge_controls([vA_later], [vB])[0]
-    check("2: если позже сохранил A — побеждает A целиком",
+    check("2: если позже сохранил A - побеждает A целиком",
           wA.updated_at == vA_later.updated_at and wA.content == "правка A"
           and wA.executors == ["Исп А"])
     w3 = merge_controls([vA], [vB])[0]
@@ -306,10 +308,10 @@ def scenario_concurrent_edit():
     tie_local = _mk("c1", "ВХСОП-1", "2026-08-02T10:00:00", content="локальная")
     tie_shared = _mk("c1", "ВХСОП-1", "2026-08-02T10:00:00", content="сетевая")
     t = merge_controls([tie_local], [tie_shared])[0]
-    check("2: совпавший updated_at (в пределах микросекунды) — локальная, без слияния",
+    check("2: совпавший updated_at (в пределах микросекунды) - локальная, без слияния",
           t.content == "локальная")
     # поле-в-поле слияния нет и в тай-кейсе: содержимое ровно одной из версий
-    check("2: тай-кейс — содержимое ровно одной версии",
+    check("2: тай-кейс - содержимое ровно одной версии",
           t.content in ("локальная", "сетевая"))
 
 
@@ -325,7 +327,7 @@ def scenario_offline():
               read_shared_controls(cli.settings) == [])
         # «старт приложения»: shared отсутствует — засев из локальных
         ok = write_shared_controls(load_controls(), cli.settings)
-        check("3: seed — shared создан из локальных данных",
+        check("3: seed - shared создан из локальных данных",
               ok and [c.id for c in read_shared_controls(cli.settings)] == ["x1"])
         # пустой shared (файл ЕСТЬ, controls=[]) — локальные НЕ перезаписываются
         write_shared_controls([], server_settings)
@@ -495,7 +497,7 @@ def scenario_slow_network():
             try:
                 page._controls_poll_io()
                 page._controls_poll_io()
-                check("6: mtime не менялся — файл НЕ перечитывается (нет лишней нагрузки)",
+                check("6: mtime не менялся - файл НЕ перечитывается (нет лишней нагрузки)",
                       calls["n"] == 0, f"reads={calls['n']}")
                 write_shared_controls(
                     [_mk("slow1", "ВХСОП-SLOW", "2026-08-01T10:00:00")], cli.settings)
@@ -516,7 +518,7 @@ def scenario_slow_network():
             os.remove(shared_path)
             page._controls_poll_apply(None, [])
             txt = _texts(tab)
-            check("6: shared недоступен — «Сеть: нет связи»",
+            check("6: shared недоступен - «Сеть: нет связи»",
                   any("нет связи" in t for t in txt))
             # сеть вернулась (другой админ пересоздал файл с контролем)
             write_shared_controls(
@@ -524,7 +526,7 @@ def scenario_slow_network():
             mtime = get_shared_mtime(cli.settings)
             page._controls_poll_apply(mtime, read_shared_controls(cli.settings))
             txt = _texts(tab)
-            check("6: сеть вернулась — контроль виден, индикатор «Сеть: админ»",
+            check("6: сеть вернулась - контроль виден, индикатор «Сеть: админ»",
                   "ВХСОП-BACK" in txt and any("Сеть: админ" in t for t in txt))
 
             # битый JSON в shared — не паника, возврат []
@@ -587,7 +589,7 @@ def scenario_many_clients():
         t.start()
     for t in threads:
         t.join(timeout=60)
-    check("7: 4 клиента x 5 записей — все успешны, файл всегда валидный JSON",
+    check("7: 4 клиента x 5 записей - все успешны, файл всегда валидный JSON",
           not errors, f"{errors[:3]}")
     leftovers = [n for n in os.listdir(shared_path.rsplit(os.sep, 1)[0])
                  if n.endswith(".tmp")]
@@ -613,12 +615,12 @@ def scenario_many_clients():
     all_ids = {c.id for pl in payloads for c in pl}
     # last-write-wins: в файле может быть один из наборов — сверка через merge
     reconciled = merge_controls(final, [c for pl in payloads for c in pl])
-    check("7: конвергенция — после merge все 12 контролей на месте",
+    check("7: конвергенция - после merge все 12 контролей на месте",
           len({c.id for c in reconciled}) == 12,
           f"{len({c.id for c in reconciled})}")
     # контроль целостности: содержимое файла — ровно один полный набор (не каша)
     ok_sets = [sorted(c.id for c in pl) for pl in payloads]
-    check("7: содержимое файла — ровно один полный набор (без «каши»)",
+    check("7: содержимое файла - ровно один полный набор (без «каши»)",
           sorted(c.id for c in final) in ok_sets)
 
 
@@ -686,19 +688,19 @@ def scenario_alarms():
     check("9: админ видит все просроченные (кроме исполненных)",
           {c.id for c in adm} == {"al1", "al2"})
     usr = collect_alarm_controls(all_c, 3, "Семисенко Иван Юрьевич")
-    check("9: пользователь — ТОЛЬКО свои контроли", [c.id for c in usr] == ["al1"])
+    check("9: пользователь - ТОЛЬКО свои контроли", [c.id for c in usr] == ["al1"])
     now = datetime(2026, 8, 12, 12, 0, 0)
     due1, log1 = due_alarms([mine, other], {}, now, 2)
-    check("9: первый цикл — оба алармятся, журнал пишется",
+    check("9: первый цикл - оба алармятся, журнал пишется",
           len(due1) == 2 and "al1" in log1)
     due2, log2 = due_alarms([mine, other], log1, now + timedelta(hours=1), 2)
-    check("9: через час (интервал 2 ч) повтора НЕТ — не дублируется бесконечно",
+    check("9: через час (интервал 2 ч) повтора НЕТ - не дублируется бесконечно",
           due2 == [])
     due3, _ = due_alarms([mine, other], log2, now + timedelta(hours=2, minutes=1), 2)
-    check("9: через 2 ч — повтор («злой» аларм)", len(due3) == 2)
+    check("9: через 2 ч - повтор («злой» аларм)", len(due3) == 2)
     due4, _ = due_alarms([mine, other], log1, now + timedelta(hours=5), 24)
-    check("9: админский интервал 24 ч — через 5 ч повтора нет", due4 == [])
-    check("9: интервалы — user 2 ч, админ 24 ч",
+    check("9: админский интервал 24 ч - через 5 ч повтора нет", due4 == [])
+    check("9: интервалы - user 2 ч, админ 24 ч",
           alarm_interval_hours(True) == 2 and alarm_interval_hours(False) == 24)
 
     # UI: один диалог на цикл, журнал подавляет повтор
@@ -750,7 +752,7 @@ def scenario_startup_merge():
             check("10: контроль другого админа из shared виден", "ВХСОП-S2" in txt)
             shared_now = read_shared_controls(cli.settings)
             s0 = next((c for c in shared_now if c.id == "s0"), None)
-            check("10: конфликтная версия s0 — свежая из shared (LWW), не откат",
+            check("10: конфликтная версия s0 - свежая из shared (LWW), не откат",
                   s0 is not None and s0.updated_at == "2026-08-05T10:00:00"
                   and s0.content == "новая версия")
             check("10: локальный l1 запушен обратно в shared при старте",
@@ -799,7 +801,7 @@ def scenario_persist_merge():
                 save_btn[0].on_click(None)
             shared_now = read_shared_controls(cli.settings)
             ids = {c.id for c in shared_now}
-            check("11: merge-before-write — чужой контроль p_other НЕ затёрт",
+            check("11: merge-before-write - чужой контроль p_other НЕ затёрт",
                   "p_other" in ids and "p0" in ids, f"{ids}")
             check("11: новый контроль записан в shared",
                   any(c.incoming_number == "ВХСОП-NEW" for c in shared_now))
@@ -848,6 +850,188 @@ def scenario_attach_sync_client():
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 13. Раунд 30, задача 2: вложение в НОВОЙ карточке видно СРАЗУ + доезжает
+#     до другого админа через shared
+# ──────────────────────────────────────────────────────────────────────────
+def scenario_new_card_attachment_ui():
+    shared_dir, shared_path, server_settings = _shared_ctx()
+    pdf = os.path.join(tempfile.mkdtemp(prefix="stress_src_pdf_"), "scan_new.pdf")
+    with open(pdf, "wb") as f:
+        f.write(b"%PDF-1.4 new-card-attach")
+    with Client("nca", shared_path) as cli_a:
+        cli_a.prepare()
+        write_shared_controls([], cli_a.settings)
+        save_controls([])
+        page, tab, _ = build()
+        try:
+            # открыть НОВУЮ карточку
+            add_btns = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                        and getattr(c, "text", None) == "Добавить контроль"]
+            check("13: кнопка «Добавить контроль» найдена", len(add_btns) == 1)
+            add_btns[0].on_click(None)
+            inc_field = next((c for c in walk(tab) if isinstance(c, ft.TextField)
+                              and (getattr(c, "hint_text", None) or "").startswith("Входящий")), None)
+            check("13: поле «Входящий №» в новой карточке найдено",
+                  inc_field is not None)
+            if inc_field is not None:
+                inc_field.value = "ВХСОП-NEW-ATT"
+            picker = getattr(page, "_controls_attach_picker", None)
+            check("13: пикер вложений зарегистрирован", picker is not None)
+            if picker is None:
+                return
+            _invoke_event_handler(picker.on_result, type("E", (), {
+                "files": [type("F", (), {"path": pdf, "name": "scan_new.pdf"})()]} )())
+            # строка вложения видна СРАЗУ (до «Сохранить») - регресс раунда 30
+            names30 = [str(t.value) for t in walk(tab) if isinstance(t, ft.Text)
+                       and t.value == "scan_new.pdf"]
+            check("13: вложение видно СРАЗУ после прикрепления (новая карточка)",
+                  len(names30) == 1, f"{len(names30)}")
+            # у строки есть миниатюра/иконка и кнопки (предпросмотр/удаление)
+            zooms30 = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                       and getattr(c, "tooltip", None) == "Предпросмотр"]
+            dels30 = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                      and getattr(c, "tooltip", None) == "Удалить"]
+            check("13: у строки вложения есть кнопки (предпросмотр/удаление)",
+                  len(zooms30) >= 1 and len(dels30) >= 1,
+                  f"z={len(zooms30)} d={len(dels30)}")
+            # сохранить новую карточку
+            save_btn = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                        and getattr(c, "text", None) == "Сохранить"]
+            check("13: кнопка «Сохранить» найдена", len(save_btn) == 1)
+            if save_btn:
+                save_btn[0].on_click(None)
+            ctl30 = next((c for c in load_controls()
+                          if c.incoming_number == "ВХСОП-NEW-ATT"), None)
+            check("13: контроль сохранён с вложением",
+                  ctl30 is not None and len(ctl30.attachments) == 1
+                  and str(ctl30.attachments[0]).endswith("/scan_new.pdf"),
+                  f"{ctl30.attachments if ctl30 else None}")
+            sh_ids = {c.id for c in read_shared_controls(cli_a.settings)}
+            check("13: контроль записан в shared",
+                  ctl30 is not None and ctl30.id in sh_ids)
+            sh_att = os.path.join(shared_dir, "controls_attachments",
+                                  ctl30.id, "scan_new.pdf")
+            check("13: файл вложения лежит в shared-папке",
+                  os.path.exists(sh_att))
+        finally:
+            page._controls_poll_stop["flag"] = True
+
+    # другой админ: старт на том же shared - видит контроль и открывает файл
+    with Client("ncb", shared_path) as cli_b:
+        cli_b.prepare()
+        page, tab, _ = build()
+        try:
+            txt = _texts(tab)
+            check("13: другой админ видит контроль из shared", "ВХСОП-NEW-ATT" in txt)
+            # state вкладки B = содержимое shared (при старте _load_initial)
+            ctl_b = next((c for c in read_shared_controls(cli_b.settings)
+                          if c.incoming_number == "ВХСОП-NEW-ATT"), None)
+            local_att = os.path.join(cli_b.appdata, "porayonka",
+                                     "controls_attachments",
+                                     ctl_b.id, "scan_new.pdf") if ctl_b else ""
+            check("13: вложение подтянуто в локальную папку другого админа",
+                  ctl_b is not None and os.path.exists(local_att)
+                  and os.path.getsize(local_att) == len(b"%PDF-1.4 new-card-attach"))
+        finally:
+            page._controls_poll_stop["flag"] = True
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 14. Раунд 30, задача 6: контроль offline-админа (через UI) доезжает до
+#     online-админа; user после синхронизации видит только свои
+# ──────────────────────────────────────────────────────────────────────────
+def scenario_offline_admin_to_online():
+    _, shared_path, server_settings = _shared_ctx()
+    # online-админ B стартует первым: shared засеян его контролем
+    with Client("offb", shared_path) as cli_b:
+        cli_b.prepare()
+        write_shared_controls(
+            [_mk("b0", "ВХСОП-B0", "2026-08-01T10:00:00")], cli_b.settings)
+        save_controls([_mk("b0", "ВХСОП-B0", "2026-08-01T10:00:00")])
+    # offline-админ A: shared недоступен (блокер-файл), добавляет через UI
+    block_dir = tempfile.mkdtemp(prefix="stress_block30_")
+    block = os.path.join(block_dir, "b")
+    with open(block, "w", encoding="utf-8") as f:
+        f.write("x")
+    appdata_a = None
+    with Client("offa", os.path.join(block, "controls.json")) as cli_a:
+        appdata_a = cli_a.appdata  # та же «машина» для фазы «сеть вернулась»
+        cli_a.prepare()
+        page, tab, _ = build()
+        try:
+            txt = _texts(tab)
+            check("14: offline-админ видит индикатор «нет связи»",
+                  any("нет связи" in t for t in txt))
+            add_btns = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                        and getattr(c, "text", None) == "Добавить контроль"]
+            add_btns[0].on_click(None)
+            inc_field = next((c for c in walk(tab) if isinstance(c, ft.TextField)
+                              and (getattr(c, "hint_text", None) or "").startswith("Входящий")), None)
+            if inc_field is not None:
+                inc_field.value = "ВХСОП-OFFLINE"
+            save_btn = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+                        and getattr(c, "text", None) == "Сохранить"]
+            save_btn[0].on_click(None)
+            loc = load_controls()
+            check("14: контроль сохранён ЛОКАЛЬНО (офлайн)",
+                  any(c.incoming_number == "ВХСОП-OFFLINE" for c in loc))
+        finally:
+            page._controls_poll_stop["flag"] = True
+    # сеть вернулась: shared доступен, в нём контроль B; у A - ТА ЖЕ
+    # локальная база (offline-контроль из прошлой сессии)
+    with Client("offa", shared_path, appdata=appdata_a) as cli_a:
+        cli_a.prepare()
+        page, tab, _ = build()
+        try:
+            txt = _texts(tab)
+            check("14: после возврата сети offline-контроль НЕ потерян",
+                  "ВХСОП-OFFLINE" in txt)
+            check("14: контроль online-админа B виден", "ВХСОП-B0" in txt)
+            shared_ids = {c.id for c in read_shared_controls(cli_a.settings)}
+            loc = load_controls()
+            off_c = next((c for c in loc if c.incoming_number == "ВХСОП-OFFLINE"), None)
+            check("14: offline-контроль выгружен обратно в shared",
+                  off_c is not None and off_c.id in shared_ids)
+        finally:
+            page._controls_poll_stop["flag"] = True
+    # online-админ B (перезапуск) видит оба контроля
+    with Client("offb", shared_path) as cli_b:
+        cli_b.prepare()
+        page, tab, _ = build()
+        try:
+            txt = _texts(tab)
+            check("14: админ B после синхронизации видит оба контроля",
+                  "ВХСОП-OFFLINE" in txt and "ВХСОП-B0" in txt)
+        finally:
+            page._controls_poll_stop["flag"] = True
+
+
+def scenario_user_after_sync():
+    """User-редакция после синхронизации видит только свои контроли."""
+    _, shared_path, server_settings = _shared_ctx()
+    with Client("usync", shared_path, role="user",
+                user="Семисенко Иван Юрьевич") as cli_u:
+        cli_u.prepare()
+        write_shared_controls([
+            _mk("u1", "МОЙ-СИНК", "2026-08-01T10:00:00",
+                executors=["Семисенко И.Ю."]),
+            _mk("u2", "ЧУЖОЙ-СИНК", "2026-08-01T10:00:00",
+                executors=["Чужой Ч.Ч."]),
+        ], cli_u.settings)
+        page, tab, _ = build()
+        try:
+            txt = _texts(tab)
+            check("14b: user после синхронизации видит ТОЛЬКО свои",
+                  "МОЙ-СИНК" in txt and "ЧУЖОЙ-СИНК" not in txt,
+                  f"{sorted(txt)[:6]}")
+            rows = _rows(tab)
+            check("14b: в таблице ровно один контроль пользователя",
+                  len(rows) == 1)
+        finally:
+            page._controls_poll_stop["flag"] = True
+
+
+# ──────────────────────────────────────────────────────────────────────────
 def main():
     scenario_concurrent_adds()        # 1
     scenario_concurrent_edit()        # 2
@@ -864,6 +1048,9 @@ def main():
     scenario_startup_merge()          # 10
     scenario_persist_merge()          # 11
     scenario_attach_sync_client()     # 12
+    scenario_new_card_attachment_ui() # 13 (вложение новой карточки)
+    scenario_offline_admin_to_online()  # 14 (offline-админ -> online-админ)
+    scenario_user_after_sync()        # 14b (user-фильтр после синка)
 
     print()
     print(f"Проверок выполнено: {_CHECKS['n']}")

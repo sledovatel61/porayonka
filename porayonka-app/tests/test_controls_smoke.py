@@ -1732,10 +1732,13 @@ def main():
                   f"{st13.get('extra_people')}")
             check("ref13: базовое старое скрыто (hidden_people)",
                   base_name in (st13.get("hidden_people") or []))
-            from core.controls_data import get_controller_names as _gcn
-            cn13 = _gcn(st13)
+            from core.controls_data import get_executor_names as _gen13
+            en13 = _gen13(st13)
+            # Раунд 30 (задача 3): extra-персоны по умолчанию — ТОЛЬКО
+            # исполнители (раньше «обе роли» — импортированные люди попадали
+            # в «За кем контроль»). Проверяем канон через исполнителей.
             check("ref13: канон - новое есть, старого нет",
-                  (base_name + "!!!") in cn13 and base_name not in cn13)
+                  (base_name + "!!!") in en13 and base_name not in en13)
             texts13 = {t.value for t in walk(dlg13) if isinstance(t, ft.Text)}
             check("ref13: список перестроен с новым именем",
                   (base_name + "!!!") in texts13 and base_name not in texts13)
@@ -2404,6 +2407,63 @@ def main():
                           and getattr(ch, "height", None) == 22
                           and getattr(ch, "on_click", None) is not None]
                      for r in init44_rows))
+
+    # ── 86. Раунд 30, задача 3: «За кем контроль» - ТОЛЬКО контролёры ──
+    # Регресс: extra_people по умолчанию получали ОБЕ роли, и импортированные
+    # исполнители попадали в dropdown контролёров новой карточки (скрин
+    # «Новая карточка, за кем контроль эти фамилии.png»).
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True,
+                   "extra_people": ["Авакян Арсен Артурович"],
+                   "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("r86", "Р-86", executors=["Авакян А.А."],
+                     controller="Потемкин С.А.")])
+    page86, tab86, _ = build(1280)
+    # НОВАЯ карточка: dropdown «За кем контроль»
+    _open_card(tab86, via_add=True)
+    cdd86 = _find_dd(tab86, "За кем контроль")
+    check("roles30: dropdown «За кем контроль» в новой карточке найден",
+          cdd86 is not None)
+    if cdd86 is not None:
+        opts86 = [o.key for o in (cdd86.options or [])]
+        check("roles30: импортированный исполнитель (extra) НЕ контролёр",
+              "Авакян Арсен Артурович" not in opts86, f"{opts86}")
+        # Чашин выводится полным ФИО: дефолтный контролёр «Чашин Э.А.» слит
+        # с криминалистом «Чашин Эдуард Александрович» (раунд 18) - одна запись
+        check("roles30: в dropdown только дефолтные контролёры",
+              "Потемкин С.А." in opts86 and "Чашин Эдуард Александрович" in opts86
+              and "Семисенко Иван Юрьевич" not in opts86
+              and len(opts86) == 2, f"{opts86}")
+    # ЯВНОЕ назначение контролёра в справочнике - backward compatibility
+    st86 = load_settings()
+    set_person_roles(st86, "Авакян Арсен Артурович", ["executor", "controller"])
+    page86b, tab86b, _ = build(1280)
+    _open_card(tab86b, via_add=True)
+    cdd86b = _find_dd(tab86b, "За кем контроль")
+    if cdd86b is not None:
+        opts86b = [o.key for o in (cdd86b.options or [])]
+        check("roles30: явно назначенный контролёр ПОЯВЛЯЕТСЯ в dropdown",
+              "Авакян Арсен Артурович" in opts86b
+              and "Потемкин С.А." in opts86b
+              and "Чашин Эдуард Александрович" in opts86b,
+              f"{opts86b}")
+    # текущее значение контроля (даже вне списка контролёров) не теряется
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True,
+                   "extra_people": ["Авакян Арсен Артурович"],
+                   "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("r86c", "Р-86С", executors=["Авакян А.А."],
+                     controller="Авакян Арсен Артурович")])
+    page86c, tab86c, _ = build(1280)
+    _open_card(tab86c, via_add=False)
+    cdd86c = _find_dd(tab86c, "За кем контроль")
+    if cdd86c is not None:
+        opts86c = [o.key for o in (cdd86c.options or [])]
+        check("roles30: текущий контролёр добавлен опцией (данные не теряются)",
+              "Авакян Арсен Артурович" in opts86c
+              and cdd86c.value == "Авакян Арсен Артурович", f"{opts86c}")
 
     # ══════════════════════════════════════════════════════════════════
     # Раунд 19
@@ -4252,6 +4312,20 @@ def main():
     btns26b["Войти"].on_click(None)
     check("auth26: верный пароль - on_ok вызван (запуск), ворота закрыты",
           ok26["v"] == 1 and not pg26b.dialogs)
+    # Раунд 30 (задача 1): повторное событие (двойной клик/двойной submit
+    # клиента Flet) не вызывает on_ok повторно и не плодит таблицы
+    ok26d = {"v": 0}
+    pg26d = PageStub()
+    _gate26(pg26d, on_ok=lambda: ok26d.__setitem__("v", ok26d["v"] + 1),
+            ed={"role": "admin", "password_hash": h26})
+    tfd26 = [c for c in walk(pg26d.dialogs[-1]) if isinstance(c, ft.TextField)]
+    btns26d = {getattr(c, "text", None): c for c in walk(pg26d.dialogs[-1])
+               if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+    tfd26[0].value = "Секрет-1"
+    btns26d["Войти"].on_click(None)
+    btns26d["Войти"].on_click(None)  # повторный клик (клиент дублирует событие)
+    check("auth30: повторный вызов «Войти» НЕ дублирует on_ok (ровно один раз)",
+          ok26d["v"] == 1 and not pg26d.dialogs, f"v={ok26d['v']}")
     ok26c = {"v": 0}
     n26 = _gate26(PageStub(), on_ok=lambda: ok26c.__setitem__("v", 1),
                   ed={"role": "admin"})
@@ -4670,7 +4744,9 @@ def main():
     check("net29: явный путь пользователя НЕ перекрывается дефолтом",
           _ls29().get("network_shared_path") == "D:\\\\tmp\\\\custom")
 
-    # ── 80. Раунд 29, задача 7: контроль рассинхрона времени ──
+    # ── 80. Раунд 29, задача 7 + раунд 30, задача 5: контроль рассинхрона ──
+    # Раунд 30: сравнение mtime vs last_saved (не «возраст файла»!) —
+    # «файл давно не менялся» больше НЕ выглядит как сбитые часы.
     from core.controls_data import check_time_skew as _cts29
     check("time29: сеть выключена - проверки нет (None)",
           _cts29({"network_enabled": False}) is None)
@@ -4682,12 +4758,40 @@ def main():
     with open(_shf29, "w", encoding="utf-8") as _f29:
         _f29.write('{"schema_version": 2, "controls": []}')
     _sk29 = _cts29({"network_enabled": True, "network_shared_path": _shf29})
-    check("time29: свежий mtime - расхождение в допуске",
+    check("time29: файл без last_saved - проверка невозможна (None, не ложная)",
+          _sk29 is None, f"{_sk29}")
+    with open(_shf29, "w", encoding="utf-8") as _f29:
+        _f29.write('{"schema_version": 2, "last_saved": "'
+                   + datetime.now().isoformat()
+                   + '", "controls": []}')
+    _sk29 = _cts29({"network_enabled": True, "network_shared_path": _shf29})
+    check("time29: свежий файл - расхождение в допуске",
           _sk29 is not None and _sk29 < 300, f"{_sk29}")
+    # «файл не менялся 2 часа, часы точные»: mtime И last_saved одинаково
+    # старые — расхождение ~0, предупреждения НЕТ (false positive раунда 30)
+    with open(_shf29, "w", encoding="utf-8") as _f29:
+        _f29.write('{"schema_version": 2, "last_saved": "'
+                   + (datetime.now() - timedelta(hours=2)).isoformat()
+                   + '", "controls": []}')
     os.utime(_shf29, (time.time() - 7200, time.time() - 7200))
     _sk29b = _cts29({"network_enabled": True, "network_shared_path": _shf29})
-    check("time29: mtime 2 часа назад - расхождение > 5 мин",
-          _sk29b is not None and _sk29b > 300, f"{_sk29b}")
+    check("time30: mtime 2 часа назад (last_saved тоже) - БЕЗ предупреждения",
+          _sk29b is not None and _sk29b < 300, f"{_sk29b}")
+    # сбитые часы: last_saved «из будущего» относительно mtime на 2 часа
+    with open(_shf29, "w", encoding="utf-8") as _f29:
+        _f29.write('{"schema_version": 2, "last_saved": "'
+                   + (datetime.now() + timedelta(hours=2)).isoformat()
+                   + '", "controls": []}')
+    os.utime(_shf29, (time.time(), time.time()))
+    _sk29c = _cts29({"network_enabled": True, "network_shared_path": _shf29})
+    check("time30: last_saved из будущего - расхождение ловится",
+          _sk29c is not None and _sk29c > 300, f"{_sk29c}")
+    # битый JSON - None (не паника)
+    with open(_shf29, "w", encoding="utf-8") as _f29:
+        _f29.write("{broken")
+    _sk29d = _cts29({"network_enabled": True, "network_shared_path": _shf29})
+    check("time30: битый JSON - проверка невозможна (None)",
+          _sk29d is None)
 
     # ── 81. Раунд 29, задача 8: edition.json fallback через .bak ──
     for _e29 in list(os.environ):
@@ -4905,7 +5009,10 @@ def main():
     _stg29u = {"soon_days": 3, "network_enabled": False, "network_role": "user",
                "network_user": "Семисенко Иван Юрьевич",
                "network_shared_path": "", "notify_sound": True}
-    # а) ФИО зафиксировано установщиком (env) - dropdown отключён + подсказка
+    # а) ФИО зафиксировано установщиком (env) - read-only вид + подсказка
+    # Раунд 30 (задача 4): вместо disabled Dropdown (клиент рисует его
+    # значение почти чёрным на тёмном фоне) - контейнер с замком и СВЕТЛЫМ
+    # текстом; dropdown'а с label «Пользователь (ФИО)» в дереве нет.
     os.environ["PORAYONKA_EDITION"] = "user"
     os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
     _le23(force=True)
@@ -4914,16 +5021,22 @@ def main():
                and getattr(c, "label", None) == "Пользователь (ФИО)"]
     _utxts29 = {str(getattr(t, "value", "")) for t in walk(dlgu29)
                 if isinstance(t, ft.Text)}
-    check("user29: ФИО зафиксировано установщиком - dropdown ОТКЛЮЧЁН",
-          bool(_udds29) and getattr(_udds29[0], "disabled", False) is True
-          and "Семисенко Иван Юрьевич" in (_udds29[0].value or ""))
+    from core.constants import COLORS as _COLORS29
+    _ro_txt29 = [t for t in walk(dlgu29) if isinstance(t, ft.Text)
+                 and t.value == "Семисенко Иван Юрьевич"]
+    _ro_lock29 = [i for i in walk(dlgu29) if isinstance(i, ft.Icon)
+                  and getattr(i, "name", None) == ft.icons.LOCK_OUTLINE]
+    check("user30: ФИО зафиксировано установщиком - НЕТ отключённого dropdown",
+          not _udds29)
+    check("user30: read-only вид с ФИО и замком, текст СВЕТЛЫЙ (читаемый)",
+          bool(_ro_txt29) and getattr(_ro_txt29[0], "color", None) == _COLORS29["text"]
+          and bool(_ro_lock29),
+          f"color={getattr(_ro_txt29[0], 'color', None) if _ro_txt29 else None}")
     check("user29: подсказка «задан при установке»",
           any("Пользователь задан при установке" in t for t in _utxts29))
-    # сохранение: фиксированное ФИО не переопределяется выбором
+    # сохранение: фиксированное ФИО не переопределяется
     _cap29 = {}
     dlgu29b = _csm29(pgu29, dict(_stg29u), lambda m: _cap29.update(m))
-    if _udds29:
-        _udds29[0].value = "Потемкин Сергей Анатольевич"  # попытка смены
     _svb29 = [b for b in getattr(dlgu29b, "actions", [])
               if isinstance(b, ft.ElevatedButton)
               and getattr(b, "text", None) == "Сохранить"]

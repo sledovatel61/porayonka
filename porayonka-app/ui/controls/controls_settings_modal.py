@@ -111,6 +111,27 @@ def create_controls_settings_modal(
                 user_dd.value = _fixed_user29
         except Exception:
             pass
+    # Раунд 30 (задача 4): зафиксированное установщиком ФИО показываем
+    # read-only ВИДОМ (иконка замка + светлый текст) вместо disabled Dropdown:
+    # клиент Flet 0.23.2 рисует выбранное значение disabled-Dropdown цветом
+    # светлой темы (почти чёрный на тёмном фоне — «Не видно кто пользователь,
+    # текст черный.png»), а text_style/color на disabled-состояние не влияют.
+    user_dd_ro = None
+    if _fixed_user29:
+        user_dd_ro = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.icons.LOCK_OUTLINE, size=16,
+                        color=COLORS["text_secondary"]),
+                ft.Text(_fixed_user29, size=13, color=COLORS["text"],
+                        weight=ft.FontWeight.W_600, expand=True, no_wrap=True,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                        tooltip=_fixed_user29),
+            ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
+            border_radius=8,
+            padding=ft.padding.symmetric(horizontal=12, vertical=12),
+            width=340,
+        )
     # Раунд 29 (задача 10, смежно): роль в user-редакции тоже редактируется
     # только редакцией — не даём уйти в «Администратор» и сохранить мусор
     # (apply_edition_to_settings всё равно вернул бы «user» при запуске).
@@ -340,7 +361,7 @@ def create_controls_settings_modal(
                         weight=ft.FontWeight.BOLD, color=COLORS["text"]),
                 net_switch,
                 role_dd,
-                user_dd,
+                (user_dd_ro if user_dd_ro is not None else user_dd),
                 user_hint,
                 path_field,
                 hint_text,
