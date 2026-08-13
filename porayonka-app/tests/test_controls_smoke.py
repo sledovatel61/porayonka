@@ -181,9 +181,10 @@ import json
 import os
 import sys
 import tempfile
+import time
 import contextlib
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -4151,6 +4152,18 @@ def main():
         check("build24: edition.json рядом с программой подхватывается (роль+ФИО)",
               ed74.get("role") == "user" and ed74.get("user_name") == "Сборкин С.С.")
     finally:
+        # Раунд 29 (задача 8): self-heal edition.py создаёт/восстанавливает
+        # из .bak — чистим ОБА, иначе восстановление «воскресит» файл для
+        # следующих секций.
+        try:
+            os.remove(ed_path74)
+        except OSError:
+            pass
+        try:
+            os.remove(ed_path74 + ".bak")
+        except OSError:
+            pass
+        # удаляем снова: self-heal мог восстановить edition.json из .bak
         try:
             os.remove(ed_path74)
         except OSError:
@@ -4426,8 +4439,13 @@ def main():
         _le23(force=True)
         page, tab, _ = build(1280)
     finally:
+        # Раунд 29 (задача 8): чистим и запасную копию .bak (self-heal).
         try:
             os.remove(edjson28)
+        except OSError:
+            pass
+        try:
+            os.remove(edjson28 + ".bak")
         except OSError:
             pass
         os.environ.pop("PORAYONKA_WEB", None)
@@ -4562,6 +4580,432 @@ def main():
     except OSError:
         pass
     _le23(force=True)
+
+    # ── 78. Раунд 29, задача 5: импорт ФИО - «склеенные инициалы» ──
+    # Реальные строки из скринов LLM/13.08.2026: стр.48 «Потемкин С.А.,
+    # Семисенко И.Ю.» -> отображалось «Потемкин С.А.С.И.Ю.», стр.45
+    # «Семисенко И.Ю.А.О.В.», стр.37 «Гайнутдинов С.И.Т.С.А.С.И.Ю.».
+    from core.controls_exporter import (split_executors as _se29,
+                                        import_from_excel as _ifx29,
+                                        TABLE_HEADERS as _TH29)
+    from core.controls_models import short_name as _sn29
+    check("fio29: первопричина документирована - short_name склеивает "
+          "два ФИО, пришедших ОДНИМ элементом",
+          _sn29("Потемкин С.А. Семисенко И.Ю.") == "Потемкин С.А.С.И.Ю.")
+    check("fio29: стр.48 - два ФИО через запятую", _se29("Потемкин С.А., Семисенко И.Ю.")
+          == ["Потемкин С.А.", "Семисенко И.Ю."])
+    check("fio29: склейка пробелом (без запятой) разбивается",
+          _se29("Потемкин С.А. Семисенко И.Ю.")
+          == ["Потемкин С.А.", "Семисенко И.Ю."])
+    check("fio29: стр.45 - Семисенко+Агеев", _se29("Семисенко И.Ю. Агеев О.В.")
+          == ["Семисенко И.Ю.", "Агеев О.В."])
+    check("fio29: стр.37 - три ФИО подряд",
+          _se29("Гайнутдинов С.И. Тихонин С.А. Семисенко И.Ю.")
+          == ["Гайнутдинов С.И.", "Тихонин С.А.", "Семисенко И.Ю."])
+    check("fio29: не-ASCII запятые (U+201A/U+FF0C/U+060C) - разделители",
+          _se29("Потемкин С.А.‚ Семисенко И.Ю.") == ["Потемкин С.А.", "Семисенко И.Ю."]
+          and _se29("Потемкин С.А.，Семисенко И.Ю.") == ["Потемкин С.А.", "Семисенко И.Ю."]
+          and _se29("Потемкин С.А.، Семисенко И.Ю.") == ["Потемкин С.А.", "Семисенко И.Ю."])
+    check("fio29: NBSP после запятой", _se29("Потемкин С.А., Семисенко И.Ю.")
+          == ["Потемкин С.А.", "Семисенко И.Ю."])
+    check("fio29: одиночное ФИО и голая фамилия не ломаются",
+          _se29("Семисенко И.Ю.") == ["Семисенко И.Ю."]
+          and _se29("Семисенко") == ["Семисенко"]
+          and _se29("Иванов-Петров А.Б., Сидорова В.Г.")
+          == ["Иванов-Петров А.Б.", "Сидорова В.Г."])
+    check("fio29: союз «и» между ФИО - разделитель",
+          _se29("Потемкин С.А. и Семисенко И.Ю.")
+          == ["Потемкин С.А.", "Семисенко И.Ю."])
+    # полный цикл импорта из xlsx с реальными значениями скринов
+    try:
+        from openpyxl import Workbook as _WB29
+        _wb29 = _WB29()
+        _ws29 = _wb29.active
+        _ws29.append(_TH29)
+        _ws29.append([47, "Иссоп 100-200-16", "01.08.2026", "ГУК ЮФО",
+                      "Текст 45", "Семисенко И.Ю. Агеев О.В.",
+                      "Чашин Э.А.", "разовый", "05.09.2026", ""])
+        _ws29.append([48, "Иссоп 206-3269-16", "01.08.2026", "ГУК ЮФО",
+                      "Текст 48", "Потемкин С.А. Семисенко И.Ю.",
+                      "Чашин Э.А.", "разовый", "01.09.2026", ""])
+        _fx29 = os.path.join(tempfile.gettempdir(), "fio29.xlsx")
+        _wb29.save(_fx29)
+        _imp29, _st29 = _ifx29(_fx29, [])
+        _by_in = {c.incoming_number: c for c in _imp29}
+        check("fio29: import_from_excel стр.48 -> 2 исполнителя",
+              _by_in.get("Иссоп 206-3269-16") is not None
+              and _by_in["Иссоп 206-3269-16"].executors
+              == ["Потемкин С.А.", "Семисенко И.Ю."],
+              f"{_by_in.get('Иссоп 206-3269-16') and _by_in['Иссоп 206-3269-16'].executors}")
+        check("fio29: import_from_excel стр.45 -> 2 исполнителя",
+              _by_in.get("Иссоп 100-200-16") is not None
+              and _by_in["Иссоп 100-200-16"].executors
+              == ["Семисенко И.Ю.", "Агеев О.В."])
+    except Exception as e29:
+        check("fio29: import_from_excel xlsx", False, f"exc: {e29}")
+
+    # ── 79. Раунд 29, задача 4: сетевой путь по умолчанию ──
+    from core.controls_data import (DEFAULT_NETWORK_PATH as _DNP29,
+                                    load_settings as _ls29)
+    check("net29: дефолтный UNC-путь задан",
+          _DNP29 == r"\\192.168.0.60\общая\Гайнутдинов\Porayonka workspace")
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True, "extra_people": [],
+                   "person_roles": {}})
+    # имитация СТАРОЙ установки: в файле ключа/значения пути вообще нет
+    _sf29 = os.path.join(_TEST_APPDATA, "porayonka", "controls_settings.json")
+    with open(_sf29, "w", encoding="utf-8") as _f29:
+        json.dump({"soon_days": 3, "network_enabled": False}, _f29,
+                  ensure_ascii=False)
+    check("net29: старый файл без network_shared_path - подставлен дефолт",
+          _ls29().get("network_shared_path") == _DNP29)
+    with open(_sf29, "w", encoding="utf-8") as _f29:
+        json.dump({"network_shared_path": ""}, _f29, ensure_ascii=False)
+    check("net29: пустой network_shared_path - подставлен дефолт",
+          _ls29().get("network_shared_path") == _DNP29)
+    with open(_sf29, "w", encoding="utf-8") as _f29:
+        json.dump({"network_shared_path": "D:\\\\tmp\\\\custom"}, _f29,
+                  ensure_ascii=False)
+    check("net29: явный путь пользователя НЕ перекрывается дефолтом",
+          _ls29().get("network_shared_path") == "D:\\\\tmp\\\\custom")
+
+    # ── 80. Раунд 29, задача 7: контроль рассинхрона времени ──
+    from core.controls_data import check_time_skew as _cts29
+    check("time29: сеть выключена - проверки нет (None)",
+          _cts29({"network_enabled": False}) is None)
+    _tsh29 = tempfile.mkdtemp(prefix="porayonka_tskew_")
+    check("time29: shared отсутствует - без предупреждения (None)",
+          _cts29({"network_enabled": True,
+                  "network_shared_path": _tsh29}) is None)
+    _shf29 = os.path.join(_tsh29, "controls.json")
+    with open(_shf29, "w", encoding="utf-8") as _f29:
+        _f29.write('{"schema_version": 2, "controls": []}')
+    _sk29 = _cts29({"network_enabled": True, "network_shared_path": _shf29})
+    check("time29: свежий mtime - расхождение в допуске",
+          _sk29 is not None and _sk29 < 300, f"{_sk29}")
+    os.utime(_shf29, (time.time() - 7200, time.time() - 7200))
+    _sk29b = _cts29({"network_enabled": True, "network_shared_path": _shf29})
+    check("time29: mtime 2 часа назад - расхождение > 5 мин",
+          _sk29b is not None and _sk29b > 300, f"{_sk29b}")
+
+    # ── 81. Раунд 29, задача 8: edition.json fallback через .bak ──
+    for _e29 in list(os.environ):
+        if _e29.startswith("PORAYONKA_EDITION") or _e29 == "PORAYONKA_USER":
+            os.environ.pop(_e29, None)
+    _edp29 = os.path.join(_appdir24, "edition.json")
+    for _p29 in (_edp29, _edp29 + ".bak"):
+        try:
+            if os.path.exists(_p29):
+                os.remove(_p29)
+        except OSError:
+            pass
+    try:
+        if os.path.exists(_edfile68):
+            os.remove(_edfile68)
+    except OSError:
+        pass
+    _le23(force=True)
+    try:
+        # 1) нет ни файлов, ни appdata -> default admin
+        check("edit29: без файлов - default admin (обратная совместимость)",
+              _le23(force=True).get("role") == "admin"
+              and _le23(force=True).get("explicit") is False)
+        # 2) только .bak (основной удалён) -> восстановление + роль из .bak
+        with open(_edp29 + ".bak", "w", encoding="utf-8") as _f29:
+            _f29.write('{ "role": "user", "user_name": "Сборкин С.С." }')
+        _edb29 = _le23(force=True)
+        check("edit29: edition.json отсутствует, но .bak есть - роль из .bak",
+              _edb29.get("role") == "user"
+              and _edb29.get("user_name") == "Сборкин С.С.")
+        check("edit29: основной edition.json ВОССТАНОВЛЕН из .bak",
+              os.path.exists(_edp29))
+        # 3) основной приоритетнее .bak
+        with open(_edp29, "w", encoding="utf-8") as _f29:
+            _f29.write('{ "role": "admin" }')
+        check("edit29: основной файл приоритетнее .bak",
+              _le23(force=True).get("role") == "admin")
+        # 4) ни основного, ни .bak, но есть appdata -> appdata (НЕ default)
+        os.remove(_edp29)
+        os.remove(_edp29 + ".bak")
+        _sae23("user", "Сборкин С.С.")
+        check("edit29: без файлов рядом с exe - appdata выше default admin",
+              _le23(force=True).get("role") == "user"
+              and _le23(force=True).get("user_name") == "Сборкин С.С.")
+        try:
+            os.remove(_edfile68)
+        except OSError:
+            pass
+        # 5) self-heal: есть основной, нет .bak -> .bak создаётся
+        with open(_edp29, "w", encoding="utf-8") as _f29:
+            _f29.write('{ "role": "user" }')
+        _le23(force=True)
+        check("edit29: self-heal - отсутствующий .bak создан из основного",
+              os.path.exists(_edp29 + ".bak"))
+    finally:
+        for _p29 in (_edp29, _edp29 + ".bak"):
+            try:
+                if os.path.exists(_p29):
+                    os.remove(_p29)
+            except OSError:
+                pass
+        try:
+            if os.path.exists(_edfile68):
+                os.remove(_edfile68)
+        except OSError:
+            pass
+        _le23(force=True)
+
+    # ── 82. Раунд 29, задача 6: lock-файлы редактирования ──
+    from core import control_locks as _cl29
+    _lkdir29 = tempfile.mkdtemp(prefix="porayonka_locks_")
+    _lks29 = {"network_enabled": True,
+              "network_shared_path": os.path.join(_lkdir29, "controls.json")}
+    okl29, ownl29 = _cl29.acquire_lock(_lks29, "cid-A", "Администратор Первый")
+    _lkf29 = os.path.join(_lkdir29, ".locks", "cid-A.lock")
+    check("lock29: acquire создаёт lock-файл в shared/.locks",
+          okl29 is True and ownl29 is None and os.path.exists(_lkf29))
+    with open(_lkf29, "r", encoding="utf-8") as _f29:
+        _lkinf29 = json.load(_f29)
+    check("lock29: содержимое lock - user/machine/since",
+          _lkinf29.get("user") == "Администратор Первый"
+          and bool(_lkinf29.get("machine") is not None)
+          and bool(_lkinf29.get("since")))
+    check("lock29: чужой активный lock - lock_owner виден",
+          (_cl29.lock_owner(_lks29, "cid-A") or {}).get("user")
+          == "Администратор Первый")
+    okl29b, ownl29b = _cl29.acquire_lock(_lks29, "cid-A", "Администратор Второй")
+    check("lock29: второй админ блокируется (False + owner)",
+          okl29b is False
+          and (ownl29b or {}).get("user") == "Администратор Первый")
+    okl29c, _ = _cl29.acquire_lock(_lks29, "cid-A", "Администратор Первый")
+    check("lock29: владельцу - повторный acquire ок", okl29c is True)
+    _cl29.release_lock(_lks29, "cid-A", "Администратор Первый")
+    check("lock29: release снимает lock", not os.path.exists(_lkf29)
+          and _cl29.lock_owner(_lks29, "cid-A") is None)
+    # мёртвый lock (старше 10 минут) не блокирует
+    _stale29 = (datetime.now() - timedelta(minutes=11)).isoformat()
+    with open(_lkf29, "w", encoding="utf-8") as _f29:
+        json.dump({"user": "Упавший Админ", "machine": "PC-9",
+                   "since": _stale29}, _f29, ensure_ascii=False)
+    check("lock29: stale-lock 11 мин - не блокирует (owner None)",
+          _cl29.lock_owner(_lks29, "cid-A") is None)
+    okl29d, ownl29d = _cl29.acquire_lock(_lks29, "cid-A", "Администратор Второй")
+    check("lock29: stale-lock перезахватывается другим админом",
+          okl29d is True and os.path.exists(_lkf29))
+    # touch держит lock свежим
+    os.utime(_lkf29, (time.time() - 700, time.time() - 700))
+    _cl29.touch_lock(_lks29, "cid-A", "Администратор Второй")
+    with open(_lkf29, "r", encoding="utf-8") as _f29:
+        _tinf29 = json.load(_f29)
+    _tage29 = abs(datetime.now().timestamp()
+                  - datetime.fromisoformat(_tinf29["since"]).timestamp())
+    check("lock29: touch обновляет since (lock не протухает)",
+          _tage29 < 30, f"{_tage29:.1f}s")
+    # битый lock-файл не вечен
+    with open(_lkf29, "w", encoding="utf-8") as _f29:
+        _f29.write("{broken json")
+    check("lock29: битый lock-файл удаляется и не блокирует",
+          _cl29.lock_owner(_lks29, "cid-A") is None
+          and not os.path.exists(_lkf29))
+    # UI: открытие карточки с чужим lock'ом - диалог; закрытие - снятие
+    save_settings({"network_enabled": True, "network_role": "admin",
+                   "network_user": "Администратор Первый",
+                   "network_shared_path": _lkdir29,
+                   "notify_log": {}, "notify_sound": True, "extra_people": [],
+                   "person_roles": {}, "alarm_enabled": False})
+    _seed_raw([_ctrl("lk29a", "ВХ-LOCK-29", executors=["Семисенко И.Ю."])])
+    _le23(force=True)
+    page29a, tab29a, _ = build(1280)
+    rows29a = _visible_rows(tab29a)
+    rows29a[0].on_click(None)  # админ-1 открывает карточку -> lock создан
+    _lkf29a = os.path.join(_lkdir29, ".locks", "lk29a.lock")
+    check("lock29: открытие карточки создало lock-файл",
+          os.path.exists(_lkf29a))
+    save_settings({"network_enabled": True, "network_role": "admin",
+                   "network_user": "Администратор Второй",
+                   "network_shared_path": _lkdir29,
+                   "notify_log": {}, "notify_sound": True, "extra_people": [],
+                   "person_roles": {}, "alarm_enabled": False})
+    page29b, tab29b, _ = build(1280)
+    _visible_rows(tab29b)[0].on_click(None)  # админ-2 пытается открыть
+    lockdlg29 = page29b.dialogs[-1] if page29b.dialogs else None
+    _ldtxts29 = {str(getattr(t, "value", "")) for t in walk(lockdlg29)
+                 if isinstance(t, ft.Text)} if lockdlg29 is not None else set()
+    check("lock29: второй админ видит диалог «уже редактируется» с ФИО",
+          lockdlg29 is not None
+          and any("уже редактируется администратором Администратор Первый" in t
+                  for t in _ldtxts29), f"{sorted(t for t in _ldtxts29)[:3]}")
+    # кнопки диалога: «Обновить и открыть» / «Отмена»
+    _ldbtns29 = {getattr(b, "text", None): b for b in walk(lockdlg29)
+                 if isinstance(b, (ft.ElevatedButton, ft.TextButton))
+                 and getattr(b, "text", None)} if lockdlg29 is not None else {}
+    check("lock29: диалог - кнопки «Обновить и открыть»/«Отмена»",
+          "Обновить и открыть" in _ldbtns29 and "Отмена" in _ldbtns29)
+    if "Отмена" in _ldbtns29:
+        _ldbtns29["Отмена"].on_click(None)
+    # карточка не открыта: ни один overlay (bg overlay_bg) не видим
+    _ov29 = [c for c in walk(tab29b) if isinstance(c, ft.Container)
+             and getattr(c, "bgcolor", None) == GLASS["overlay_bg"]
+             and getattr(c, "visible", True)]
+    check("lock29: «Отмена» закрыла диалог, карточка НЕ открыта",
+          not page29b.dialogs and not _ov29)
+    # админ-1 сохраняет карточку -> lock снят -> админ-2 открывает свободно
+    _sv29 = [b for b in walk(tab29a) if isinstance(b, ft.ElevatedButton)
+             and getattr(b, "text", None) == "Сохранить"]
+    if _sv29:
+        _sv29[0].on_click(None)
+    check("lock29: сохранение/закрытие карточки сняло lock",
+          not os.path.exists(_lkf29a))
+    _visible_rows(tab29b)[0].on_click(None)
+    check("lock29: после снятия lock карточка открывается без диалога",
+          not page29b.dialogs
+          and os.path.exists(_lkf29a))  # теперь lock админа-2
+    # уборка: закрыть карточку админа-2 через сохранение
+    _sv29b = [b for b in walk(tab29b) if isinstance(b, ft.ElevatedButton)
+              and getattr(b, "text", None) == "Сохранить"]
+    if _sv29b:
+        _sv29b[0].on_click(None)
+
+    # ── 83. Раунд 29, задача 9: офлайн-вложения <-> shared ──
+    from core.controls_data import (sync_local_attachments_to_shared as _sla29,
+                                    get_attachment_dir as _gad29)
+    _sld29 = tempfile.mkdtemp(prefix="porayonka_offatt_")
+    _sls29 = {"network_enabled": True, "network_shared_path": _sld29}
+    _cid29 = "off-att-29"
+    _ladir29 = _gad29(_cid29)
+    _ladir29.mkdir(parents=True, exist_ok=True)
+    _laf29 = _ladir29 / "scan.pdf"
+    _laf29.write_bytes(b"%PDF-1.4 test29")
+    _cobj29 = Control(id=_cid29, incoming_number="ВХ-OFF-29",
+                      executors=["Семисенко И.Ю."], attachments=[f"{_cid29}/scan.pdf"])
+    _n29 = _sla29([_cobj29], _sls29)
+    check("att29: локальное вложение выгружено в shared",
+          _n29 == 1 and os.path.exists(os.path.join(
+              _sld29, "controls_attachments", _cid29, "scan.pdf")))
+    check("att29: повторная выгрузка - без дублей (0)",
+          _sla29([_cobj29], _sls29) == 0)
+    check("att29: сеть выключена - мягкий 0",
+          _sla29([_cobj29], {"network_enabled": False}) == 0)
+    # обратное направление: чужое вложение из shared подтягивается локально
+    _cid29b = "off-att-29b"
+    _shb29 = os.path.join(_sld29, "controls_attachments", _cid29b)
+    os.makedirs(_shb29, exist_ok=True)
+    with open(os.path.join(_shb29, "other.png"), "wb") as _f29:
+        _f29.write(b"PNG29")
+    from core.controls_data import sync_attachments_from_shared as _saf29
+    _saf29(_cid29b, [f"{_cid29b}/other.png"], _sls29)
+    check("att29: чужое вложение подтянуто из shared локально",
+          (_gad29(_cid29b) / "other.png").exists())
+
+    # ── 84. Раунд 29, задача 10: dropdown пользователя в user-редакции ──
+    from ui.controls.controls_settings_modal import (
+        create_controls_settings_modal as _csm29)
+    pgu29 = PageStub()
+    _stg29u = {"soon_days": 3, "network_enabled": False, "network_role": "user",
+               "network_user": "Семисенко Иван Юрьевич",
+               "network_shared_path": "", "notify_sound": True}
+    # а) ФИО зафиксировано установщиком (env) - dropdown отключён + подсказка
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
+    _le23(force=True)
+    dlgu29 = _csm29(pgu29, dict(_stg29u), lambda m: None)
+    _udds29 = [c for c in walk(dlgu29) if isinstance(c, ft.Dropdown)
+               and getattr(c, "label", None) == "Пользователь (ФИО)"]
+    _utxts29 = {str(getattr(t, "value", "")) for t in walk(dlgu29)
+                if isinstance(t, ft.Text)}
+    check("user29: ФИО зафиксировано установщиком - dropdown ОТКЛЮЧЁН",
+          bool(_udds29) and getattr(_udds29[0], "disabled", False) is True
+          and "Семисенко Иван Юрьевич" in (_udds29[0].value or ""))
+    check("user29: подсказка «задан при установке»",
+          any("Пользователь задан при установке" in t for t in _utxts29))
+    # сохранение: фиксированное ФИО не переопределяется выбором
+    _cap29 = {}
+    dlgu29b = _csm29(pgu29, dict(_stg29u), lambda m: _cap29.update(m))
+    if _udds29:
+        _udds29[0].value = "Потемкин Сергей Анатольевич"  # попытка смены
+    _svb29 = [b for b in getattr(dlgu29b, "actions", [])
+              if isinstance(b, ft.ElevatedButton)
+              and getattr(b, "text", None) == "Сохранить"]
+    if _svb29:
+        _svb29[0].on_click(None)
+    check("user29: «Сохранить» оставляет зафиксированное ФИО",
+          _cap29.get("network_user") == "Семисенко Иван Юрьевич",
+          f"{_cap29.get('network_user')!r}")
+    # б) ФИО не зафиксировано - dropdown доступен, подсказка «выберите себя»
+    os.environ["PORAYONKA_USER"] = ""
+    _le23(force=True)
+    dlgu29c = _csm29(pgu29, dict(_stg29u), lambda m: None)
+    _udds29c = [c for c in walk(dlgu29c) if isinstance(c, ft.Dropdown)
+                and getattr(c, "label", None) == "Пользователь (ФИО)"]
+    _utxts29c = {str(getattr(t, "value", "")) for t in walk(dlgu29c)
+                 if isinstance(t, ft.Text)}
+    check("user29: ФИО НЕ зафиксировано - dropdown доступен + «Выберите себя»",
+          bool(_udds29c) and getattr(_udds29c[0], "disabled", False) is False
+          and any("Выберите себя из списка" in t for t in _utxts29c))
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+    dlgu29d = _csm29(pgu29, dict(_stg29u, network_role="admin"),
+                     lambda m: None)
+    _udds29d = [c for c in walk(dlgu29d) if isinstance(c, ft.Dropdown)
+                and getattr(c, "label", None) == "Пользователь (ФИО)"]
+    check("user29: admin-редакция - dropdown доступен",
+          bool(_udds29d) and getattr(_udds29d[0], "disabled", False) is False)
+
+    # ── 85. Раунд 29, задачи 1-3: PDF-предпросмотр/настройки/секция пароля ──
+    # задача 1: PDF в предпросмотре - явная кнопка «Открыть»
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True, "extra_people": [],
+                   "person_roles": {}, "alarm_enabled": False})
+    _pdfc29 = _ctrl("pdf29", "ВХ-PDF-29", executors=["Семисенко И.Ю."])
+    _pdfc29["attachments"] = ["pdf29/scan.pdf"]
+    _pdir29 = _gad29("pdf29")
+    _pdir29.mkdir(parents=True, exist_ok=True)
+    (_pdir29 / "scan.pdf").write_bytes(b"%PDF-1.4 test29")
+    _seed_raw([_pdfc29])
+    page29p, tab29p, _ = build(1280)
+    _visible_rows(tab29p)[0].on_click(None)
+    _zooms29 = [c for c in walk(tab29p) if isinstance(c, ft.IconButton)
+                and getattr(c, "tooltip", None) == "Предпросмотр"]
+    check("pdf29: у строки вложения есть кнопка «Предпросмотр»",
+          bool(_zooms29))
+    if _zooms29:
+        _zooms29[0].on_click(None)
+    _pvtxts29 = {str(getattr(t, "value", "")) for t in walk(tab29p)
+                 if isinstance(t, ft.Text)}
+    _pvbtns29 = {getattr(b, "text", None) for b in walk(tab29p)
+                 if isinstance(b, ft.ElevatedButton) and getattr(b, "text", None)}
+    check("pdf29: PDF-предпросмотр - «PDF-документ» + кнопка «Открыть»",
+          "PDF-документ" in _pvtxts29 and "Открыть" in _pvbtns29)
+    # задача 2: в настройках только Уведомления/Сеть/Пароль (нет справочников)
+    pgm29 = PageStub()
+    dlgm29 = _csm29(pgm29, dict(_stg29u, network_role="admin",
+                                network_user=""), lambda m: None)
+    _mtxts29 = {str(getattr(t, "value", "")) for t in walk(dlgm29)
+                if isinstance(t, ft.Text)}
+    check("set29: настройки - только Уведомления/Сеть/Пароль (без справочников)",
+          any(t == "Уведомления" for t in _mtxts29)
+          and any("Сетевой режим" in t for t in _mtxts29)
+          and any("Пароль администратора" in t for t in _mtxts29)
+          and not any("Справочник" in t for t in _mtxts29)
+          and not any("Инициаторы" in t for t in _mtxts29))
+    # задача 3: user-редакция - секции пароля НЕТ в дереве
+    os.environ["PORAYONKA_EDITION"] = "user"
+    _le23(force=True)
+    dlgm29u = _csm29(pgm29, dict(_stg29u), lambda m: None)
+    _mtxts29u = {str(getattr(t, "value", "")) for t in walk(dlgm29u)
+                 if isinstance(t, ft.Text)}
+    check("set29: user-редакция - секции «Пароль администратора» нет",
+          not any("Пароль администратора" in t for t in _mtxts29u))
+    os.environ.pop("PORAYONKA_EDITION", None)
+    _le23(force=True)
+    # задача 4 (UI): поле пути подсказывает дефолтный UNC
+    _mhints29 = {str(getattr(t, "hint_text", "") or "") for t in walk(dlgm29)
+                 if isinstance(t, ft.TextField)}
+    check("set29: placeholder пути - дефолтный UNC \\\\192.168.0.60",
+          any("192.168.0.60" in h for h in _mhints29))
 
     print()
     if FAILURES:

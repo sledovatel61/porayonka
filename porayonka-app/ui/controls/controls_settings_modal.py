@@ -8,8 +8,16 @@ import flet as ft
 from typing import Callable
 
 from core.constants import COLORS
-from core.controls_data import DEFAULT_SETTINGS, get_criminalist_names
+from core.controls_data import (
+    DEFAULT_SETTINGS, DEFAULT_NETWORK_PATH, get_criminalist_names,
+)
 from core.controls_models import short_name
+
+
+def _default_net_path29() -> str:
+    """Раунд 29 (задача 4): дефолтный сетевой путь (UNC), если поле пути
+    оставлено пустым — чтобы не вводить вручную на каждом ПК."""
+    return DEFAULT_NETWORK_PATH
 
 
 def create_controls_settings_modal(
@@ -53,15 +61,65 @@ def create_controls_settings_modal(
 
     criminalist_names = get_criminalist_names()
     current_user = settings.get("network_user", "") or ""
+    # Раунд 29 (задача 10): user-редакция с ФИО, зафиксированным установщиком
+    # (edition.json рядом с exe), не должна позволять смену пользователя из
+    # настроек — раньше выбор «другого» сохранялся в настройки, но при
+    # следующем запуске apply_edition_to_settings возвращал зафиксированное
+    # ФИО, и пользователь видел несостоявшуюся смену («остался Семисенко»).
+    from core.edition import load_edition as _load_edition29  # noqa: E402
+    try:
+        _edition29 = _load_edition29() or {}
+    except Exception:
+        _edition29 = {}
+    _fixed_user29 = ""
+    try:
+        if (_edition29.get("role") == "user"
+                and (_edition29.get("user_name") or "").strip()):
+            _fixed_user29 = (_edition29.get("user_name") or "").strip()
+    except Exception:
+        _fixed_user29 = ""
+    _is_user_edition29 = (_edition29.get("role") == "user")
     user_dd = ft.Dropdown(
         label="Пользователь (ФИО)",
-        value=current_user if current_user in criminalist_names else None,
+        value=(_fixed_user29 or current_user)
+        if (_fixed_user29 or current_user) in criminalist_names else None,
         options=[ft.dropdown.Option(n, short_name(n)) for n in criminalist_names],
         label_style=ft.TextStyle(color=COLORS["text_secondary"]),
         border_radius=8, border_color=COLORS["border"],
         focused_border_color=COLORS["btn_save"],
         bgcolor=COLORS["card"], color=COLORS["text"], width=340,
+        disabled=bool(_fixed_user29),
     )
+    # Раунд 29 (задача 10): подсказка под dropdown'ом пользователя.
+    user_hint = ft.Text(
+        ("Пользователь задан при установке. Для смены переустановите "
+         "приложение или обратитесь к администратору."
+         if _fixed_user29 else
+         ("Выберите себя из списка — к ФИО привязываются «свои» контроли "
+          "и напоминания о сроках." if _is_user_edition29 else
+          "Пользователь (ФИО) — для роли «Пользователь»: свои контроли и "
+          "напоминания о сроках.")),
+        size=10, color=COLORS["text_muted"],
+    )
+    if _fixed_user29:
+        # Зафиксированное ФИО обязано быть ВИДНО даже если справочник
+        # переименовали/почистили — добавляем опцией.
+        try:
+            if _fixed_user29 not in criminalist_names:
+                user_dd.options.append(
+                    ft.dropdown.Option(_fixed_user29, short_name(_fixed_user29)))
+                user_dd.value = _fixed_user29
+        except Exception:
+            pass
+    # Раунд 29 (задача 10, смежно): роль в user-редакции тоже редактируется
+    # только редакцией — не даём уйти в «Администратор» и сохранить мусор
+    # (apply_edition_to_settings всё равно вернул бы «user» при запуске).
+    if _is_user_edition29:
+        try:
+            role_dd.value = "user"
+            role_dd.disabled = True
+        except Exception:
+            pass
     path_field = ft.TextField(
         value=settings.get("network_shared_path", ""),
         label="Путь к общей папке/файлу (например \\\\SERVER\\share\\porayonka\\controls.json)",
@@ -71,10 +129,14 @@ def create_controls_settings_modal(
         bgcolor=COLORS["card"], color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
         width=556,
+        # Раунд 29 (задача 4): дефолтный UNC-путь уже подставлен при загрузке
+        # настроек (load_settings); здесь — напоминание в placeholder.
+        hint_text="Оставьте как есть: \\\\192.168.0.60\\общая\\Гайнутдинов\\Porayonka workspace",
     )
     hint_text = ft.Text(
         "Синхронизация: общий JSON + обновление раз в ~20 сек. "
-        "Перед перезаписью — резервная копия. Вложения — в общей папке.",
+        "Перед перезаписью — резервная копия. Вложения — в общей папке. "
+        "При пустом пути подставляется сетевой путь по умолчанию.",
         size=10, color=COLORS["text_muted"],
     )
 
@@ -220,6 +282,15 @@ def create_controls_settings_modal(
         _is_admin_edition = (load_edition().get("role") == "admin")
     except Exception:
         _is_admin_edition = False
+    # Раунд 29 (задача 3): диагностика «не вижу пароль в настройках» —
+    # фиксируем в консоли, по какой редакции принято решение (force-перечитку
+    # не делаем: load_edition уже инициализирован при старте вкладки).
+    try:
+        if not _is_admin_edition:
+            print("[SETTINGS] Parol' admin skryt: redakcija ne admin "
+                  "(load_edition role != admin)")
+    except Exception:
+        pass
 
     def _close(e=None):
         dialog.open = False
@@ -231,16 +302,22 @@ def create_controls_settings_modal(
         except ValueError:
             soon = 3
         merged = dict(DEFAULT_SETTINGS)
+        # Раунд 29: ключи из текущих настроек сохраняем ВСЕ (мапа выше
+        # перекрывает редактируемые) — раньше терялись col_widths/refs_* /
+        # person_roles / alarm_log и пр. не-редактируемые здесь ключи.
+        merged.update(settings or {})
         merged.update({
             "soon_days": soon,
             "network_enabled": bool(net_switch.value),
             "network_role": role_dd.value or "admin",
-            "network_user": user_dd.value or "",
-            "network_shared_path": (path_field.value or "").strip(),
-            "custom_initiators": list(settings.get("custom_initiators", []) or []),
+            # Раунд 29 (задача 10): фиксированное установщиком ФИО не подменяем
+            # выбором из отключённого dropdown (оно всё равно вернулось бы
+            # при запуске — см. apply_edition_to_settings).
+            "network_user": (_fixed_user29 or (user_dd.value or "")),
+            # Раунд 29 (задача 4): пустой путь -> сетевой путь по умолчанию.
+            "network_shared_path": (path_field.value or "").strip()
+            or _default_net_path29(),
             "notify_sound": bool(sound_check.value),
-            "notify_log": settings.get("notify_log") or {},
-            "extra_people": list(settings.get("extra_people", []) or []),
         })
         on_apply(merged)
         dialog.open = False
@@ -264,6 +341,7 @@ def create_controls_settings_modal(
                 net_switch,
                 role_dd,
                 user_dd,
+                user_hint,
                 path_field,
                 hint_text,
             ], spacing=8, tight=True),

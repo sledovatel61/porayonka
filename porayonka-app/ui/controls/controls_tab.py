@@ -34,7 +34,11 @@ from core.controls_data import (
     add_custom_initiator,
     merge_controls, _should_notify,
     ensure_control_id, attachment_abs,
+    # Раунд 29: задачи 7 (синхронизация времени) и 9 (офлайн-вложения)
+    check_time_skew, sync_local_attachments_to_shared,
 )
+# Раунд 29 (задача 6): lock-файлы редактирования контроля в общей папке.
+from core import control_locks as _clocks29
 
 FILTER_OTHER = "__other__"  # пункт «Прочие» в фильтрах исполнителей/контролёров
 
@@ -425,6 +429,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         "my_status_map": {},             # id -> deadline_status для моих контролей (задача 2)
         "known_attachments": {},         # id -> tuple(attachments) для синка вложений (задача 5)
         "last_attach_sig": None,         # раунд 21 (задача 5): антидубль result-события FilePicker
+        "lock_id": None,                 # раунд 29 (задача 6): id контроля, чей lock мы держим
+        "lock_owner_warned": "",         # раунд 29 (задача 6): анти-спам диалога «редактируется»
         "card_w": int(settings.get("card_width", 0) or 920),
         "card_h": int(settings.get("card_height", 0) or 780),
         # Раунд 16 (задача 4): размеры окна справочников — из настроек (дефолт 680x560)
@@ -2125,9 +2131,37 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             traceback.print_exc()
 
+    def _lock_user() -> str:
+        """Раунд 29 (задача 6): владелец lock-файла — ФИО админа из настроек
+        (network_user), иначе ФИО редакции, иначе имя ПК — чтобы диалог
+        «уже редактируется» показывал осмысленное имя."""
+        nm = (network_user or "").strip()
+        if nm:
+            return nm
+        try:
+            nm = (load_edition().get("user_name") or "").strip()
+            if nm:
+                return nm
+        except Exception:
+            pass
+        import os as _os29
+        return (_os29.getenv("USERNAME") or _os29.getenv("USER") or "").strip() or "админ"
+
+    def _release_edit_lock():
+        """Раунд 29 (задача 6): снять наш lock при закрытии карточки."""
+        lid = state.get("lock_id")
+        if not lid:
+            return
+        state["lock_id"] = None
+        try:
+            _clocks29.release_lock(settings, lid, _lock_user())
+        except Exception:
+            pass
+
     def _hide_detail(e=None):
         detail_overlay_container.visible = False
         state["editing"] = False
+        _release_edit_lock()  # Раунд 29 (задача 6): закрытие карточки снимает lock
         _close_global_cal()
         # раунд 9: закрыть предпросмотр вложений вместе с карточкой
         try:
@@ -2150,8 +2184,129 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             traceback.print_exc()
 
+    def _show_lock_dialog(ctl: Control, owner: dict):
+        """Раунд 29 (задача 6): контроль уже редактируется другим админом —
+        диалог с владельцем lock'а и действиями «Обновить и открыть» /
+        «Отмена». Не путаем с read-only просмотром user-редакции: она сюда
+        не попадает (локи создают только админы).
+
+        Время в owner["since"] — ISO по ЧАСАМ создателя lock'а; при свежем
+        lock'е и сбитых собственных часах «с HH:MM» может выглядеть «из
+        будущего» — это нормально (см. задачу 7 — предупреждение о времени).
+        """
+        inc = ctl.incoming_number or (ctl.id or "")[:8] or "—"
+        who = (owner.get("user") or "?").strip() or "?"
+        since_txt = ""
+        try:
+            since_txt = datetime.fromisoformat(owner.get("since") or "").strftime("%H:%M")
+        except (ValueError, TypeError):
+            since_txt = ""
+        info_txt = ft.Text(
+            f"Контроль вх.№ {inc} уже редактируется администратором {who}"
+            + (f" с {since_txt}" if since_txt else "")
+            + ".", size=12, color=GLASS["text"])
+        mach = (owner.get("machine") or "").strip()
+        machine_txt = ft.Text(
+            (f"Компьютер: {mach}. " if mach else "")
+            + "Изменения, сохранённые одновременно, перезаписывают друг "
+              "друга — дождитесь, пока коллега закончит.",
+            size=11, color=GLASS["text_secondary"])
+
+        def _retry(e=None):
+            """Перечитать shared, проверить lock заново и открыть (если свободен)."""
+            try:
+                if settings.get("network_enabled"):
+                    shared = read_shared_controls(settings)
+                    if shared:
+                        merged = merge_controls(state["controls"], shared)
+                        state["controls"] = merged
+                        try:
+                            state["shared_mtime"] = get_shared_mtime(settings)
+                        except Exception:
+                            pass
+                        _sync_attachments(merged)
+                        _rebuild_table()
+                        _refresh_counters()
+            except Exception:
+                traceback.print_exc()
+            fresh = None
+            for x in state["controls"]:
+                if x.id == ctl.id:
+                    fresh = x
+                    break
+            cur = None
+            try:
+                cur = _clocks29.lock_owner(settings, ctl.id)
+            except Exception:
+                cur = None
+            try:
+                page.close(dlg29)
+            except Exception:
+                traceback.print_exc()
+            if cur is not None and (cur.get("user") or "") != _lock_user():
+                # Всё ещё занят — показать актуальную информацию снова.
+                _show_lock_dialog(fresh or ctl, cur)
+                return
+            _open_detail(fresh or ctl)
+
+        def _cancel(e=None):
+            try:
+                page.close(dlg29)
+            except Exception:
+                traceback.print_exc()
+
+        dlg29 = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Row(controls=[
+                ft.Icon(ft.icons.LOCK_OUTLINE, size=18, color=GLASS["today"]),
+                ft.Text("Контроль редактируется", size=15,
+                        weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            ], spacing=8, tight=True),
+            content=ft.Container(
+                width=430,
+                content=ft.Column(controls=[info_txt, machine_txt],
+                                  spacing=6, tight=True),
+            ),
+            actions=[
+                ft.TextButton("Отмена", on_click=_cancel,
+                              style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+                ft.ElevatedButton("Обновить и открыть", on_click=_retry,
+                                  bgcolor=GLASS["accent"], color="#ffffff",
+                                  style=ft.ButtonStyle(
+                                      shape=ft.RoundedRectangleBorder(radius=10))),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        try:
+            page.open(dlg29)
+        except Exception:
+            traceback.print_exc()
+
     def _open_detail(ctl: Optional[Control]):
         is_new = ctl is None
+        # Раунд 29 (задача 6): lock редактирования. Новая карточка — без lock
+        # (её ещё нет в shared); user-редакция — read-only, lock не создаём.
+        # Чужой АКТИВНЫЙ lock -> диалог и НЕ открываем; «мёртвый» (10+ мин) —
+        # перезахватываем (внутри acquire).
+        if ctl is not None and not edition_user:
+            try:
+                me29 = _lock_user()
+                owner29 = _clocks29.lock_owner(settings, ctl.id)
+                if owner29 is not None and (owner29.get("user") or "") != me29:
+                    _show_lock_dialog(ctl, owner29)
+                    return
+                ok29, owner29 = _clocks29.acquire_lock(settings, ctl.id, me29)
+                if not ok29 and owner29 is not None:
+                    _show_lock_dialog(ctl, owner29)
+                    return
+                if ok29 and settings.get("network_enabled"):
+                    state["lock_id"] = ctl.id
+                else:
+                    state["lock_id"] = None
+            except Exception:
+                state["lock_id"] = None
         state["editing"] = True
         state["pending_dialog_shown"] = False
         detail_state["is_new"] = is_new
@@ -2642,11 +2797,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     traceback.print_exc()
                     controls.append(ft.Text("Не удалось загрузить изображение", size=12, color=GLASS["text_secondary"]))
             else:
+                # Раунд 29 (задача 1): PDF не рендерится в overlay — вместо
+                # «мертвой» заглушки явная кнопка «Открыть» системным
+                # просмотрщиком (os.startfile/explorer на Windows).
                 controls.append(ft.Container(
                     content=ft.Column(controls=[
-                        ft.Icon(ft.icons.PICTURE_AS_PDF, size=96, color=GLASS["text_muted"]),
-                        ft.Text("PDF — предпросмотр недоступен, откройте в программе", size=14,
-                                color=GLASS["text_secondary"]),
+                        ft.Icon(ft.icons.PICTURE_AS_PDF, size=96, color=GLASS["overdue"]),
+                        ft.Text("PDF-документ", size=14, weight=ft.FontWeight.W_600,
+                                color=GLASS["text"]),
+                        ft.Text("Встроенного просмотра PDF нет — откройте файл "
+                                "в программе по умолчанию.", size=12,
+                                color=GLASS["text_secondary"], text_align=ft.TextAlign.CENTER),
+                        ft.ElevatedButton(
+                            "Открыть", icon=ft.icons.OPEN_IN_NEW, height=38,
+                            bgcolor=GLASS["accent"], color="#ffffff",
+                            style=ft.ButtonStyle(
+                                shape=ft.RoundedRectangleBorder(radius=10),
+                                padding=ft.padding.symmetric(horizontal=22)),
+                            on_click=lambda e, r=rel: _open_attach(r)),
                     ], spacing=10, tight=True, alignment=ft.MainAxisAlignment.CENTER,
                        horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                     expand=True,
@@ -2713,6 +2881,64 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 traceback.print_exc()
 
+        def _show_open_failed_dialog(path):
+            """Раунд 29 (задача 1): системный просмотрщик недоступен/упал —
+            показать путь и предложить открыть вручную (+ «Открыть папку»)."""
+            p_str = str(path)
+
+            def _close29(e=None):
+                try:
+                    page.close(dlg_of)
+                except Exception:
+                    traceback.print_exc()
+
+            def _open_folder(e=None):
+                import subprocess, sys, os
+                try:
+                    if sys.platform == "win32":
+                        subprocess.Popen(["explorer", "/select,", p_str])
+                    elif sys.platform == "darwin":
+                        subprocess.Popen(["open", "-R", p_str])
+                    else:
+                        subprocess.Popen(
+                            ["xdg-open", os.path.dirname(p_str) or "."])
+                except Exception:
+                    traceback.print_exc()
+                _close29()
+
+            dlg_of = ft.AlertDialog(
+                modal=True, bgcolor=GLASS["surface_solid"],
+                title=ft.Row(controls=[
+                    ft.Icon(ft.icons.ERROR_OUTLINE, size=18, color=GLASS["today"]),
+                    ft.Text("Не удалось открыть файл", size=15,
+                            weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+                ], spacing=8, tight=True),
+                content=ft.Container(
+                    width=460,
+                    content=ft.Column(controls=[
+                        ft.Text("Системный просмотрщик не ответил. Откройте "
+                                "файл вручную по пути:", size=12,
+                                color=GLASS["text_secondary"]),
+                        ft.Text(p_str, size=11, color=GLASS["text"],
+                                selectable=True),
+                    ], spacing=8, tight=True),
+                ),
+                actions=[
+                    ft.TextButton("Закрыть", on_click=_close29,
+                                  style=ft.ButtonStyle(color=GLASS["text_secondary"])),
+                    ft.ElevatedButton("Открыть папку", on_click=_open_folder,
+                                      bgcolor=GLASS["accent"], color="#ffffff",
+                                      style=ft.ButtonStyle(
+                                          shape=ft.RoundedRectangleBorder(radius=10))),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+                shape=ft.RoundedRectangleBorder(radius=12),
+            )
+            try:
+                page.open(dlg_of)
+            except Exception:
+                traceback.print_exc()
+
         def _open_attach(rel: str):
             import subprocess, sys, os
             path = resolve_attachment(detail_state["control_id"], rel, settings)
@@ -2736,6 +2962,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     subprocess.Popen(["xdg-open", str(path)])
             except Exception as ex:
                 print(f"[CONTROLS_TAB] open attach error: {ex}")
+                # Раунд 29 (задача 1): просмотрщик недоступен — путь руками
+                try:
+                    _show_open_failed_dialog(path)
+                except Exception:
+                    traceback.print_exc()
 
         def _confirm_remove_attach(rel: str):
             def _confirm(e=None):
@@ -4285,6 +4516,39 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _post_to_ui(_poll_notifications)
             _post_to_ui(_check_my_notifications)
             _post_to_ui(_check_deadline_alarms)  # Раунд 23: «злой» аларм срока
+            # Раунд 29 (задачи 6/9): touch своих lock'ов + выгрузка локальных
+            # вложений в shared (~раз в 60 сек — шаг этого крыла цикла).
+            _post_to_ui(_poll_locks_and_attachments)
+
+    def _poll_locks_and_attachments():
+        """Раунд 29 (задачи 6/9), фоновая серия (~раз в 60 сек):
+        1) «подогреть» lock открытой карточки — пока редактор жив, lock не
+           протухает (упавшее приложение перестаёт звонить — через 10 мин
+           чужие админы откроют карточку);
+        2) выгрузить в shared локальные вложения, прикреплённые, пока сеть
+           была недоступна. Обратное направление (shared -> локально) уже
+           делает _sync_attachments при каждом merge/poll."""
+        if not settings.get("network_enabled"):
+            return
+        try:
+            lid = state.get("lock_id")
+            if lid:
+                _clocks29.refresh_locks(settings, [(lid, _lock_user())],
+                                        _lock_user())
+        except Exception:
+            traceback.print_exc()
+        try:
+            uploaded = sync_local_attachments_to_shared(state["controls"], settings)
+            if uploaded:
+                print(f"[CONTROLS_TAB] offline attachments uploaded: {uploaded}")
+                try:
+                    from ui.toast import show_toast
+                    show_toast(page, f"Вложения выгружены в общую папку: {uploaded}",
+                               icon=ft.icons.CLOUD_UPLOAD)
+                except Exception:
+                    pass
+        except Exception:
+            traceback.print_exc()
 
     def _notify_user(message: str):
         """Персональное уведомление: звук + toast (вызовы из фонового потока — в try/except)."""
@@ -4717,8 +4981,67 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             traceback.print_exc()
 
+    def _show_time_skew_warning(skew_sec: float):
+        """Раунд 29 (задача 7): предупреждение о рассинхроне часов ПК с общим
+        файлом (разовое, не блокирующее работу)."""
+        try:
+            minutes = int(round((skew_sec or 0) / 60.0))
+        except Exception:
+            minutes = 0
+
+        def _ok(e=None):
+            try:
+                page.close(dlg_ts)
+            except Exception:
+                traceback.print_exc()
+
+        dlg_ts = ft.AlertDialog(
+            modal=True,
+            bgcolor=GLASS["surface_solid"],
+            title=ft.Row(controls=[
+                ft.Icon(ft.icons.SCHEDULE, size=18, color=GLASS["today"]),
+                ft.Text("Проверьте системное время", size=15,
+                        weight=ft.FontWeight.BOLD, color=GLASS["text"]),
+            ], spacing=8, tight=True),
+            content=ft.Container(
+                width=440,
+                content=ft.Column(controls=[
+                    ft.Text(
+                        "Время на этом ПК существенно расходится с временем "
+                        "изменения общего файла"
+                        + (f" (примерно на {minutes} мин)." if minutes else ".")
+                        + " Проверьте системное время, иначе синхронизация "
+                          "может работать некорректно.",
+                        size=12, color=GLASS["text"]),
+                ], spacing=6, tight=True),
+            ),
+            actions=[ft.ElevatedButton("Понятно", on_click=_ok,
+                                       bgcolor=GLASS["accent"], color="#ffffff",
+                                       style=ft.ButtonStyle(
+                                           shape=ft.RoundedRectangleBorder(radius=10)))],
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12),
+        )
+        try:
+            page.open(dlg_ts)
+        except Exception:
+            traceback.print_exc()
+
     def _first_table_init():
         _load_initial()
+        # Раунд 29 (задача 7): при старте в сетевом режиме — контроль
+        # расхождения локального времени с mtime общего файла (> 5 мин).
+        # Shared недоступен — молчим (fallback None).
+        try:
+            _skew29 = check_time_skew(settings)
+        except Exception:
+            _skew29 = None
+        if _skew29 is not None and _skew29 > 300:
+            print(f"[CONTROLS_TAB] time skew vs shared: {int(_skew29)}s")
+            try:
+                _show_time_skew_warning(_skew29)
+            except Exception:
+                traceback.print_exc()
         # Раунд 15 (задача 2): начальная геометрия — явная ширина панели/
         # заголовка/строк до правого края + выравнивание колонок под бюджет
         # окна (внутри _apply_table_geometry вызываются
