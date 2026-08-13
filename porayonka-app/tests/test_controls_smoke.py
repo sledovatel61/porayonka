@@ -2554,6 +2554,34 @@ def main():
           (_ws87.cell(row=3, column=9).fill.patternType or "") != "solid",
           f"{_ws87.cell(row=3, column=9).fill.fgColor.rgb}")
 
+    # ── 88. Раунд 32, задача 3: персонализация экспорта по user_name ──
+    # Контроль _ctl87: п.6 (Семисенко/Чащин, просрочен 180 дн. назад),
+    # п.2 (Миронович, +2 дня). Экспорт для Мироновича: колонка I = ЕГО дата,
+    # без жёлтой (его пункт не просрочен). Для Семисенко: его пункт
+    # просрочен -> жёлтая. Admin (без user_name): общий срок -> жёлтая.
+    _x88 = os.path.join(tempfile.mkdtemp(prefix="porayonka_x32a_"), "exp32a.xlsx")
+    _cee87().export([_c87], _x88, soon_days=3, full=False,
+                    user_name="Миронович Д.В.")
+    _ws88 = _lwb87(_x88)["Контроли"]
+    _exp_due88 = _t87 + _td87(days=2)
+    _cell_i88 = _ws88.cell(row=3, column=9).value
+    check("exp32: user-экспорт - колонка «Следующая дата» = дата СВОЕГО пункта",
+          _cell_i88 == datetime(_exp_due88.year, _exp_due88.month, _exp_due88.day),
+          f"{_cell_i88}")
+    check("exp32: user-экспорт - непросроченный свой пункт БЕЗ жёлтой заливки",
+          (_ws88.cell(row=3, column=9).fill.patternType or "") != "solid")
+    _x88b = os.path.join(tempfile.mkdtemp(prefix="porayonka_x32b_"), "exp32b.xlsx")
+    _cee87().export([_c87], _x88b, soon_days=3, full=False,
+                    user_name="Семисенко И.Ю.")
+    _ws88b = _lwb87(_x88b)["Контроли"]
+    check("exp32: user-экспорт - просроченный СВОЙ пункт подсвечен жёлтым",
+          (_ws88b.cell(row=3, column=9).fill.patternType or "") == "solid")
+    _x88c = os.path.join(tempfile.mkdtemp(prefix="porayonka_x32c_"), "exp32c.xlsx")
+    _cee87().export([_c87], _x88c, soon_days=3, full=False)
+    _ws88c = _lwb87(_x88c)["Контроли"]
+    check("exp32: admin-экспорт (без user_name) - общий срок + жёлтая",
+          (_ws88c.cell(row=3, column=9).fill.patternType or "") == "solid")
+
     # ══════════════════════════════════════════════════════════════════
     # Раунд 19
     # ══════════════════════════════════════════════════════════════════
@@ -4270,6 +4298,100 @@ def main():
                 sys.modules[_m31] = _obj31
         import ui.tray_icon as _ti31
         _ti31._ACTIVE_ICON = None  # сброс singleton, чтобы не влиять на другие тесты
+
+    # ── Раунд 32, задача 2: «Открыть» восстанавливает окно, «Выход» завершает ──
+    # (закрытие крестиком -> сворачивание проверяем src-проверкой main.py ниже)
+    import types as _types32
+    _t32 = {"show": None, "quit": None, "stopped": 0}
+
+    class _FI32:
+        def run_detached(self):
+            pass
+
+        def stop(self):
+            _t32["stopped"] += 1
+
+    class _FPy32:
+        def Menu(self, *items):
+            for it in items:
+                if it.text and "Открыть" in it.text:
+                    _t32["show"] = it.action
+                elif it.text == "Выход":
+                    _t32["quit"] = it.action
+            return object()
+
+        def MenuItem(self, text, action, default=False):
+            return _types32.SimpleNamespace(text=text, action=action)
+
+        def Icon(self, *a, **kw):
+            return _FI32()
+
+    class _FPIL32:
+        class Image:
+            @staticmethod
+            def open(path):
+                return object()
+
+    class _Win32:
+        def __init__(self):
+            self.visible = False
+            self.minimized = True
+            self.destroyed = 0
+            self.closed = 0
+            self.fronted = 0
+
+        def to_front(self):
+            self.fronted += 1
+
+        def destroy(self):
+            self.destroyed += 1
+
+        def close(self):
+            self.closed += 1
+
+    class _Page32:
+        def __init__(self):
+            self.window = _Win32()
+
+        def update(self):
+            pass
+
+    _mods32 = {}
+    for _m32, _o32 in (("pystray", _FPy32()), ("PIL", _FPIL32())):
+        _mods32[_m32] = sys.modules.get(_m32)
+        sys.modules[_m32] = _o32
+    try:
+        with _mock_platform("win32"):
+            from ui.tray_icon import start_tray as _st32
+            pg32t = _Page32()
+            ic32t = _st32(pg32t)
+            check("tray32: иконка создана в dev-режиме (мок-окно)",
+                  ic32t is not None)
+            _t32["show"](None, None)  # клик «Открыть»
+            check("tray32: «Открыть» восстанавливает окно (visible, minimize снят, to_front)",
+                  pg32t.window.visible is True and pg32t.window.minimized is False
+                  and pg32t.window.fronted >= 1,
+                  f"vis={pg32t.window.visible} min={pg32t.window.minimized}")
+            _t32["quit"](_FI32(), None)  # «Выход» — полный выход (icon от pystray)
+            check("tray32: «Выход» - icon.stop + window.destroy",
+                  _t32["stopped"] == 1 and pg32t.window.destroyed == 1,
+                  f"stopped={_t32['stopped']} destroyed={pg32t.window.destroyed}")
+    finally:
+        for _m32, _obj32 in _mods32.items():
+            if _obj32 is None:
+                sys.modules.pop(_m32, None)
+            else:
+                sys.modules[_m32] = _obj32
+        import ui.tray_icon as _ti32
+        _ti32._ACTIVE_ICON = None
+    # src: закрытие окна крестиком -> сворачивание (не убийство процесса)
+    _src_main32 = open(main23, encoding="utf-8").read()
+    check("tray32: main.py - close сворачивает в трей при наличии _tray_icon",
+          'getattr(page, "_tray_icon", None)' in _src_main32
+          and "page.window.visible = False" in _src_main32)
+    check("tray32: main.py - без трея обычный выход (prevent_close=False + close)",
+          "page.window.prevent_close = False" in _src_main32
+          and "page.window.close()" in _src_main32)
     with _mock_platform("win32", frozen=True, blocked=("pystray", "PIL", "winreg")):
         check("tray25: мок-frozen Windows без pystray/PIL - мягкий None",
               _tray23(PageStub()) is None)
@@ -4483,38 +4605,70 @@ def main():
     check("auth26: main.py - ворота вызываются ДО сборки UI (_main_impl)",
           "show_admin_password_gate" in src_main23 and "_main_impl" in src_main23)
 
-    # ── Раунд 31, задача 1: dev-режим — env верховная над appdata-паролем ──
+    # ── Раунд 32, задача 1: dev-режим — env задаёт роль, пароль из appdata ──
     from core.edition import (admin_password_required as _apr31,
                               check_admin_password as _cap31)
     _edp31 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
     os.makedirs(os.path.dirname(_edp31), exist_ok=True)
-    _chash31 = _ph26("чужой-пароль")
+    _chash31 = _ph26("1")  # пароль, установленный через настройки
     with open(_edp31, "w", encoding="utf-8") as _f31:
         json.dump({"role": "admin", "password_hash": _chash31}, _f31,
                   ensure_ascii=False)
     try:
-        # env admin БЕЗ env-пароля: чужой hash из appdata НЕ подтягивается
+        # env admin БЕЗ env-пароля: пароль ЧИТАЕТСЯ из appdata (round 32)
         os.environ["PORAYONKA_EDITION"] = "admin"
         os.environ.pop("PORAYONKA_ADMIN_PASSWORD", None)
         _le23(force=True)
         _ed31 = _le23(force=True)
-        check("auth31: dev env admin БЕЗ env-пароля - вход без пароля (чужой hash из appdata НЕ тянется)",
-              _apr31(_ed31) is False and not (_ed31.get("password_hash") or ""),
+        check("auth32: dev env admin БЕЗ env-пароля - пароль подтянут из appdata",
+              _apr31(_ed31) is True
+              and bool(_ed31.get("password_hash"))
+              and _cap31(_ed31, "1") is True,
               f"hash={bool(_ed31.get('password_hash'))}")
-        # env admin + PORAYONKA_ADMIN_PASSWORD=1: пароль «1» принимается
-        os.environ["PORAYONKA_ADMIN_PASSWORD"] = "1"
+        # env admin + PORAYONKA_ADMIN_PASSWORD=2: env-пароль ПРИОРИТЕТНЕЕ appdata
+        os.environ["PORAYONKA_ADMIN_PASSWORD"] = "2"
         _le23(force=True)
         _ed31b = _le23(force=True)
-        check("auth31: env-пароль PORAYONKA_ADMIN_PASSWORD=1 - ворота требуются",
-              _apr31(_ed31b) is True)
-        check("auth31: пароль «1» из env принимается",
-              _cap31(_ed31b, "1") is True and _cap31(_ed31b, "2") is False)
+        check("auth32: env-пароль приоритетнее appdata («2» из env, «1» из файла)",
+              _apr31(_ed31b) is True
+              and _cap31(_ed31b, "2") is True and _cap31(_ed31b, "1") is False)
     finally:
         os.environ.pop("PORAYONKA_EDITION", None)
         os.environ.pop("PORAYONKA_ADMIN_PASSWORD", None)
         _le23(force=True)
         try:
             os.remove(_edp31)
+        except OSError:
+            pass
+    # auth32 (UI): dev env admin + пароль «1» из appdata — диалог закрывается,
+    # on_ok вызывается ровно один раз
+    _edp32 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
+    os.makedirs(os.path.dirname(_edp32), exist_ok=True)
+    with open(_edp32, "w", encoding="utf-8") as _f32:
+        json.dump({"role": "admin", "password_hash": _ph26("1")}, _f32,
+                  ensure_ascii=False)
+    try:
+        os.environ["PORAYONKA_EDITION"] = "admin"
+        os.environ.pop("PORAYONKA_ADMIN_PASSWORD", None)
+        _le23(force=True)
+        ok32 = {"v": 0}
+        pg32 = PageStub()
+        _gate26(pg32, on_ok=lambda: ok32.__setitem__("v", ok32["v"] + 1))
+        tf32 = [c for c in walk(pg32.dialogs[-1]) if isinstance(c, ft.TextField)]
+        btns32 = {getattr(c, "text", None): c for c in walk(pg32.dialogs[-1])
+                  if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+        check("auth32: dev env admin + appdata-пароль - ворота требуются",
+              len(pg32.dialogs) == 1 and bool(tf32) and "Войти" in btns32)
+        tf32[0].value = "1"
+        btns32["Войти"].on_click(None)
+        btns32["Войти"].on_click(None)  # дубль события клиента
+        check("auth32: верный пароль - диалог ЗАКРЫТ, on_ok ровно один раз",
+              ok32["v"] == 1 and not pg32.dialogs, f"v={ok32['v']} dlg={len(pg32.dialogs)}")
+    finally:
+        os.environ.pop("PORAYONKA_EDITION", None)
+        _le23(force=True)
+        try:
+            os.remove(_edp32)
         except OSError:
             pass
 

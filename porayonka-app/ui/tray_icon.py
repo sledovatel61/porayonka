@@ -99,7 +99,10 @@ def start_tray(page=None, title: str = "Пораёнка — Контроли",
             print(f"[TRAY] open browser error: {e}")
             return
         try:
+            # Раунд 32 (задача 2): окно могло быть скрыто/свёрнуто при
+            # закрытии крестиком — полностью восстанавливаем.
             page.window.visible = True
+            page.window.minimized = False
             page.window.to_front()
             page.update()
         except Exception as e:
@@ -117,13 +120,27 @@ def start_tray(page=None, title: str = "Пораёнка — Контроли",
             except Exception:
                 pass
             return
+        # Раунд 32 (задача 2): «Выход» из трея — ПОЛНЫЙ выход: останавливаем
+        # фоновый polling и завершаем процесс (destroy -> close -> os._exit).
+        try:
+            if page is not None and hasattr(page, "_controls_poll_stop"):
+                page._controls_poll_stop["flag"] = True
+        except Exception:
+            pass
         try:
             page.window.destroy()
+            return
         except Exception:
-            try:
-                page.window.close()
-            except Exception as e:
-                print(f"[TRAY] close window error: {e}")
+            pass
+        try:
+            page.window.close()
+            return
+        except Exception as e:
+            print(f"[TRAY] close window error: {e}")
+        try:
+            os._exit(0)
+        except Exception:
+            pass
 
     try:
         image = Image.open(_icon_path())

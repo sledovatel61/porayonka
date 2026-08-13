@@ -61,6 +61,33 @@ def show_admin_password_gate(page, on_ok, ed=None) -> bool:
     # см. design/screenshots/13.08.2026/Пароль не принимается.png).
     _submitted = {"v": False}
 
+    def _force_close_dialog():
+        """Раунд 32 (задача 1): ГАРАНТИРОВАННО закрыть модальный диалог.
+
+        В Flet 0.23.2 page.close(dlg) выставляет dlg.open=False и делает
+        update(), но на живом клиенте диалог может остаться видимым
+        (повторное событие submit/клик «перекрывало» закрытие). Пробуем
+        КОМБИНАЦИЮ: page.close + dlg.open=False + снятие диалога из
+        offstage-списка страницы + page.update()."""
+        try:
+            page.close(dlg)
+        except Exception:
+            pass
+        try:
+            dlg.open = False
+        except Exception:
+            pass
+        try:
+            off = getattr(page, "_Page__offstage", None)
+            if off is not None and dlg in getattr(off, "controls", []):
+                off.controls.remove(dlg)
+        except Exception:
+            pass
+        try:
+            page.update()
+        except Exception:
+            pass
+
     def _try(e=None):
         if _submitted["v"]:
             return
@@ -71,26 +98,16 @@ def show_admin_password_gate(page, on_ok, ed=None) -> bool:
             ok = False
         if ok:
             _submitted["v"] = True
-            try:
-                page.close(dlg)
-                # Раунд 30 (задача 1): page.update() ПОСЛЕ close гарантирует,
-                # что команда закрытия модального диалога ушла на клиент ДО
-                # построения UI: иначе _main_impl своими update() мог
-                # «перекрыть» закрытие, и таблица рисовалась тусклой под
-                # диалогом.
-                page.update()
-            except Exception:
-                pass
+            _force_close_dialog()
+            # Раунд 30 (задача 1): закрытие уходит на клиент ДО построения
+            # UI (иначе _main_impl своими update() «перекрывал» бы закрытие,
+            # и таблица рисовалась тусклой под диалогом).
             on_ok()
         else:
             # «Если пароль неверный — приложение закрывается» (промпт, задача 5)
             _submitted["v"] = True
             print("[AUTH] nevernyj parol - vyhod")
-            try:
-                page.close(dlg)
-                page.update()
-            except Exception:
-                pass
+            _force_close_dialog()
             _close_app(page)
 
     def _quit(e=None):

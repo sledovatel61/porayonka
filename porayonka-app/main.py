@@ -419,12 +419,7 @@ def _main_impl(page: ft.Page) -> None:
     # Сохранение при закрытии окна (страховка в дополнение к autosave)
     def _on_window_event(e):
         if e.data == "close":
-            # Остановить фоновый polling вкладки «Контроли»
-            try:
-                if hasattr(page, "_controls_poll_stop"):
-                    page._controls_poll_stop["flag"] = True
-            except Exception:
-                pass
+            # Сохраняем данные всегда (страховка в дополнение к autosave)
             try:
                 save_departments(departments)
                 if hasattr(page, "_zonal_collection") and save_zonal_collection is not None:
@@ -433,7 +428,23 @@ def _main_impl(page: ft.Page) -> None:
                 print("[MAIN] Data saved on window close")
             except Exception as ex:
                 print(f"[MAIN] Save on close error: {ex}")
-            finally:
+            # Раунд 32 (задача 2): если есть трей — закрытие крестиком
+            # СВОРАЧИВАЕТ приложение в трей (процесс живёт, polling
+            # продолжает работать, «Открыть» в трее восстанавливает окно).
+            # Без трея — обычный выход.
+            _tray32 = getattr(page, "_tray_icon", None)
+            if _tray32 is not None:
+                try:
+                    page.window.visible = False
+                    page.update()
+                except Exception:
+                    pass
+            else:
+                try:
+                    if hasattr(page, "_controls_poll_stop"):
+                        page._controls_poll_stop["flag"] = True
+                except Exception:
+                    pass
                 try:
                     page.window.prevent_close = False
                     page.window.close()

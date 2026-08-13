@@ -5061,3 +5061,64 @@ python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
 
 Агент работает в ветке `arena/019ffa1e-porayonka` (или доступной `arena/XXXXXXXX-porayonka`) от `main` `7df7810`. После приёмки оркестратор внедряет файлы в `main`, обновляет `AGENTS.md` §74 и запускает обязательные проверки из §37.2.
 
+
+### 74.4 Результаты фиксов раунда 32
+
+**Задача 1 (пароль админа в dev-режиме).**
+- `core/edition.py::load_edition`: в dev (не frozen) env `PORAYONKA_EDITION`
+  задаёт РОЛЬ, но пароль берётся так: env-пароль (`PORAYONKA_ADMIN_PASSWORD` /
+  `PORAYONKA_ADMIN_PASSWORD_HASH`) приоритетен; если его нет — пароль
+  читается из `%APPDATA%\porayonka\edition.json` (установлен через настройки).
+  Раньше (round 31) файлы в dev игнорировались полностью — установленный
+  пароль нельзя было протестировать. user_name по-прежнему дополняется из
+  appdata.
+- `ui/admin_gate.py::show_admin_password_gate`: `_force_close_dialog()` —
+  КОМБИНАЦИЯ закрытий: `page.close(dlg)` + `dlg.open=False` + снятие диалога
+  из offstage-списка страницы (`_Page__offstage.controls.remove`) +
+  `page.update()` — диалог гарантированно закрывается ДО `on_ok()` (UI не
+  строится «тускло» под диалогом). Флаг `_submitted` предотвращает повторные
+  вызовы при дублировании событий клиента.
+  Тесты: smoke §75 (auth32 — dev env admin + appdata-пароль «1»: ворота
+  требуются, «1» принимается, env-пароль приоритетнее; диалог закрыт, on_ok
+  ровно один раз при двойном клике).
+
+**Задача 2 (трей: «Открыть» не восстанавливал окно).**
+- `main.py::_on_window_event` (close): если есть трей (`page._tray_icon`) —
+  окно СКРЫВАЕТСЯ (`page.window.visible = False` + update), данные
+  сохраняются, polling НЕ останавливается (продолжает работать в фоне);
+  без трея — обычный выход (остановка polling + close).
+- `ui/tray_icon.py::_show`: восстановление окна полностью —
+  `visible=True` + `minimized=False` + `to_front()` + `update()`.
+- `ui/tray_icon.py::_quit`: полный выход — `icon.stop()`, остановка polling,
+  `window.destroy()` -> `window.close()` -> `os._exit(0)` (fallback).
+  Тесты: smoke §73 (tray32 — мок-окно: «Открыть» восстанавливает
+  visible/minimized/to_front; «Выход» — stop+destroy; src-проверка main.py:
+  close сворачивает при трее, обычный выход без трея).
+
+**Задача 3 (Excel-персонализация).**
+- `core/controls_exporter.py::ControlsExcelExporter.export` — новый параметр
+  `user_name: str = ""`: при заданном ФИО колонка «Следующая дата
+  исполнения» (9) = `user_effective_due_date` (по пунктам пользователя),
+  статус для жёлтой заливки = `user_deadline_status` (только OVERDUE/TODAY);
+  при пустом (admin) — как раньше (`effective_due_date` + `deadline_status`).
+  Исправлено: при персонализации `due_iso` берётся из user-даты, а не из
+  общей `ctl.due_date` (иначе тест с заданным due_date показывал общий срок).
+- `ui/controls/controls_tab.py::_on_export_picked` передаёт user_name:
+  user-редакция — `settings.network_user`; admin с выбранным конкретным
+  исполнителем в фильтре — это ФИО; иначе — пусто.
+  Тесты: smoke §88 (exp32 — user-экспорт: дата своего пункта, без жёлтой при
+  непросроченном; просроченный свой пункт — жёлтая; admin — общий срок).
+
+**Задача 4 (обязательные проверки).**
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py \
+    ui/controls/controls_tab.py ui/controls/controls_settings_modal.py \
+    ui/controls/control_card_modal.py ui/tray_icon.py \
+    core/controls_data.py core/controls_models.py core/controls_notify.py \
+    core/controls_exporter.py core/edition.py                    # OK
+python -c "import sys; sys.path.insert(0, '.'); \
+    from ui.controls.controls_tab import create_controls_tab; print('OK')"  # OK
+python tests/test_controls_smoke.py    # ALL OK (auth32, tray32, exp32 добавлены)
+python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
+```

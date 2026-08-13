@@ -3928,7 +3928,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             return
         try:
             mode = (export_mode_dd.value or "table") == "full"
-            ControlsExcelExporter().export(_visible_base(), e.path, soon_days, full=mode)
+            # Раунд 32 (задача 3): персонализация экспорта.
+            # - user-редакция: экспорт по ФИО пользователя (его пункты);
+            # - admin с выбранным конкретным исполнителем в фильтре: по нему;
+            # - иначе (admin «Все»/«Прочие») — общий вид.
+            _u32 = ""
+            if network_role == "user":
+                _u32 = (settings.get("network_user") or "").strip()
+            elif network_role == "admin":
+                _fex32 = state.get("f_executor")
+                if _fex32 and _fex32 not in ("all", FILTER_OTHER):
+                    _u32 = _fex32
+            ControlsExcelExporter().export(_visible_base(), e.path, soon_days,
+                                           full=mode, user_name=_u32)
             from ui.toast import show_export_toast
             show_export_toast(page, "Контроли Excel")
         except Exception as ex:

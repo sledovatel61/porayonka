@@ -11,6 +11,7 @@ from .controls_models import (
     Control, ControlTask, ControlMilestone, ONE_TIME, PERIODIC,
     effective_due_date, deadline_status, parse_date, short_name,
     parse_content_tasks, resolve_task_assignees,
+    user_effective_due_date, user_deadline_status,
     OVERDUE, TODAY, SOON, COMPLETED,
     # Раунд 29 (задача 5): разбор «склеек» ФИО при импорте.
     _PERSON_FULL_RE, _norm_person_name,
@@ -124,10 +125,14 @@ class ControlsExcelExporter:
     """Экспорт контролей в .xlsx."""
 
     def export(self, controls: List[Control], filepath: str, soon_days: int = 3,
-               full: bool = False) -> None:
+               full: bool = False, user_name: str = "") -> None:
         """Экспорт.
 
         :param full: True → «полный» режим (добавляет скрытый лист для round-trip)
+        :param user_name: раунд 32 (задача 3) — персонализация: при заданном
+            ФИО колонка «Следующая дата исполнения» (9) = user_effective_due_date,
+            а статус для жёлтой подсветки = user_deadline_status (по пунктам
+            пользователя, только OVERDUE/TODAY). Пусто (admin) — общий срок.
         """
         try:
             from openpyxl import Workbook
@@ -175,11 +180,27 @@ class ControlsExcelExporter:
         ws.row_dimensions[2].height = 56.25
 
         active = [c for c in controls if not c.archived]
+        # Раунд 32 (задача 3): персонализация — user видит СВОИ даты/статусы
+        _un32 = (user_name or "").strip()
+        if _un32:
+            def _due_of(c):
+                return user_effective_due_date(c, _un32)
+
+            def _status_of(c):
+                return user_deadline_status(c, _un32, soon_days)
+        else:
+            _due_of = effective_due_date
+            _status_of = deadline_status
         row = 3
         for idx, ctl in enumerate(active, 1):
-            st = deadline_status(ctl, soon_days)
-            due = effective_due_date(ctl)
-            due_iso = ctl.due_date or (due.isoformat() if due else None)
+            st = _status_of(ctl)
+            due = _due_of(ctl)
+            # Раунд 32 (задача 3): при персонализации колонка «Следующая дата»
+            # = user-дата (по его пунктам), а не общая ctl.due_date
+            if _un32:
+                due_iso = due.isoformat() if due else None
+            else:
+                due_iso = ctl.due_date or (due.isoformat() if due else None)
             done_txt = _done_text(ctl)
             values = [
                 idx,

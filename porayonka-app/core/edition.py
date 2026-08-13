@@ -135,20 +135,24 @@ def load_edition(force: bool = False) -> dict:
         password = (os.getenv("PORAYONKA_ADMIN_PASSWORD") or "").strip()
         password_hash = (os.getenv("PORAYONKA_ADMIN_PASSWORD_HASH") or "").strip()
     if env_role in (EDITION_ADMIN, EDITION_USER) and not getattr(sys, "frozen", False):
-        # Раунд 31 (задача 1): DEV-режим — env ВЕРХОВНАЯ для роли и ПАРОЛЯ:
-        # password_hash/password из файлов (в т.ч. %APPDATA% с чужим hash)
-        # НЕ читаются — иначе `set PORAYONKA_EDITION=admin && python main.py`
-        # запрашивал бы чужой пароль. Исключение — user_name: если env его не
-        # задаёт, дополняем из %APPDATA% (выбранное пользователем ФИО при
-        # первом запуске user-редакции — иначе диалог «Кто вы?» спрашивал бы
-        # каждый раз). Файл рядом с программой в dev не читается.
-        if not user_name:
-            try:
-                _apd = _read_edition_file(_appdata_edition_file())
-                if _apd:
+        # Раунд 31 (задача 1) + раунд 32 (задача 1): DEV-режим — env задаёт
+        # РОЛЬ, но пароль берётся так: если env задаёт пароль
+        # (PORAYONKA_ADMIN_PASSWORD / PORAYONKA_ADMIN_PASSWORD_HASH) — он
+        # приоритетен (для тестов); иначе пароль читается из
+        # %APPDATA%\porayonka\edition.json (пароль, установленный через
+        # настройки приложения) — иначе `set PORAYONKA_EDITION=admin &&
+        # python main.py` не мог бы протестировать установленный пароль.
+        # user_name дополняется из appdata (выбор ФИО пользователем).
+        try:
+            _apd = _read_edition_file(_appdata_edition_file())
+            if _apd:
+                if not user_name:
                     user_name = str(_apd.get("user_name") or "").strip()
-            except Exception:
-                pass
+                if not password and not password_hash:
+                    password = str(_apd.get("password") or "").strip()
+                    password_hash = str(_apd.get("password_hash") or "").strip()
+        except Exception:
+            pass
         _cache = {"role": role, "user_name": user_name, "explicit": explicit,
                   "password": password, "password_hash": password_hash}
         return _cache
