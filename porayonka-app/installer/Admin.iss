@@ -66,5 +66,8 @@ begin
     EditionPath := ExpandConstant('{app}\edition.json');
     Json := '{ "role": "admin" }';
     SaveStringToFile(EditionPath, Json, False);
+    { Раунд 29 (задача 8): запасная копия .bak — защита от случайного
+      удаления edition.json (приложение восстановит основной из копии) }
+    SaveStringToFile(ExpandConstant('{app}\edition.json.bak'), Json, False);
   end;
 end;

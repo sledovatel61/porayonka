@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -18,12 +19,17 @@ DEFAULT_INITIATORS = [
     "СУ", "ГУК СК", "ГУК ЮФО", "СК РФ", "ПСК", "ГСУ", "ОКРИМ",
 ]
 
+# Раунд 29 (задача 4): общий сетевой путь по умолчанию — чтобы на каждом ПК
+# не вводить вручную, достаточно включить сетевой режим. Подставляется,
+# когда в настройках network_shared_path пустой.
+DEFAULT_NETWORK_PATH = r"\\192.168.0.60\общая\Гайнутдинов\Porayonka workspace"
+
 DEFAULT_SETTINGS = {
     "soon_days": 3,          # за сколько дней считать срок «скорым»
     "network_enabled": False,
     "network_role": "admin",     # admin | user
     "network_user": "",          # имя пользователя (по-фамильно), из списка криминалистов
-    "network_shared_path": "",   # путь к общей папке/файлу
+    "network_shared_path": DEFAULT_NETWORK_PATH,  # путь к общей папке/файлу
     "custom_initiators": [],     # список пользовательских инициаторов (v2)
     "notify_log": {},            # журнал уведомлений: {"<control_id>:<status>": "YYYY-MM-DD"}
     "notify_sound": True,        # звук уведомлений (winsound.MessageBeep)
@@ -217,6 +223,11 @@ def load_settings() -> dict:
         # (например, col_widths — иначе ширины колонок терялись при перезапуске)
         for k, v in data.items():
             settings[k] = v
+        # Раунд 29 (задача 4): пустой путь (старая установка) — подставить
+        # дефолтный сетевой путь: пользователю не нужно ничего вводить,
+        # чтобы стартовать синхронизацию (достаточно включить сетевой режим).
+        if not (settings.get("network_shared_path") or "").strip():
+            settings["network_shared_path"] = DEFAULT_NETWORK_PATH
         return settings
     except (json.JSONDecodeError, OSError) as e:
         print(f"[CONTROLS_DATA] Oshibka zagruzki settings: {e}")
@@ -1085,3 +1096,65 @@ def sync_attachments_from_shared(control_id: str, rel_paths: List[str], settings
             shutil.copy2(shared_file, local)
         except OSError:
             pass
+
+
+def check_time_skew(settings: dict, tolerance_sec: float = 300.0) -> Optional[float]:
+    """Раунд 29 (задача 7): расхождение локального времени с временем
+    последнего изменения общего файла (секунды, по модулю), или None, если
+    проверка невозможна (сеть выключена, shared отсутствует/недоступен).
+
+    Используется при старте: > tolerance_sec (5 мин по умолчанию) — часы ПК,
+    скорее всего, сбиты, а значит «курсоровая» синхронизация по mtime и
+    журналы «сегодня» могут работать некорректно.
+    """
+    if not settings.get("network_enabled"):
+        return None
+    p = _parse_shared_path(settings)
+    if not p or not p.exists():
+        return None
+    try:
+        mtime = p.stat().st_mtime
+    except OSError:
+        return None
+    try:
+        return abs(time.time() - float(mtime))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def sync_local_attachments_to_shared(controls: List["Control"], settings: dict) -> int:
+    """Раунд 29 (задача 9): выгрузить в общую папку локальные вложения,
+    которых там ещё нет (прикреплённые, пока сеть была недоступна).
+
+    Проходит по спискам вложений контролей; если файл есть локально, но
+    отсутствует в shared/controls_attachments/<id>/ — копирует. Возвращает
+    число выгруженных файлов. Shared недоступен / сеть выключена — мягкий 0.
+    """
+    if not settings.get("network_enabled"):
+        return 0
+    shared_dir = _shared_dir(settings)
+    if shared_dir is None:
+        return 0
+    uploaded = 0
+    for c in controls or []:
+        cid = getattr(c, "id", None)
+        if not cid:
+            continue
+        for rel in (c.attachments or []):
+            name = Path(str(rel)).name
+            if not name:
+                continue
+            try:
+                shared_file = shared_dir / "controls_attachments" / cid / name
+                if shared_file.exists():
+                    continue
+                local = get_attachment_source_path(cid, rel)
+                if not (local and local.exists()):
+                    continue
+                shared_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(local, shared_file)
+                uploaded += 1
+            except OSError:
+                # сеть отвалилась на середине — догрузим в следующий цикл
+                return uploaded
+    return uploaded

@@ -34,9 +34,13 @@ def edition_file_candidates():
 
     Установщик кладёт `edition.json` рядом с exe; в dev-режиме — рядом с
     main.py; переопределение на уровне пользователя — %APPDATA%/porayonka.
+    Раунд 29 (задача 8): между exe-файлом и appdata вставлена запасная
+    копия `edition.json.bak` — защита от случайного удаления основного файла
+    (иначе приложение молча становилось admin-редакцией по умолчанию).
     """
     return [
         _app_dir() / "edition.json",
+        _app_dir() / "edition.json.bak",
         _appdata_edition_file(),
     ]
 
@@ -53,6 +57,28 @@ def _read_edition_file(path: Path) -> Optional[dict]:
     return None
 
 
+def _self_heal_edition_files() -> None:
+    """Раунд 29 (задача 8): самовосстановление edition.json рядом с программой.
+
+    - основного файла нет, а запасная копия .bak есть -> восстановить из .bak;
+    - основной есть, а .bak нет -> создать .bak (страховка от удаления).
+    Запись может быть запрещена (Program Files) — мягко пропускаем; в
+    установщиках .bak кладётся инсталлятором.
+    """
+    main_f = _app_dir() / "edition.json"
+    bak_f = _app_dir() / "edition.json.bak"
+    try:
+        if not main_f.exists() and bak_f.exists():
+            import shutil
+            shutil.copy2(bak_f, main_f)
+            print("[EDITION] edition.json vosstanovlen iz edition.json.bak")
+        elif main_f.exists() and not bak_f.exists():
+            import shutil
+            shutil.copy2(main_f, bak_f)
+    except OSError:
+        pass
+
+
 def load_edition(force: bool = False) -> dict:
     """Вернуть редакцию: {"role": ..., "user_name": ..., "explicit": ...,
     "password"/"password_hash": ... (если заданы)}.
@@ -60,9 +86,12 @@ def load_edition(force: bool = False) -> dict:
     Источники в порядке приоритета:
       1) переменные окружения PORAYONKA_EDITION / PORAYONKA_USER (dev/test);
       2) edition.json рядом с программой;
-      3) edition.json в %APPDATA%/porayonka (записывается, напр., первым
+      3) edition.json.bak рядом с программой (раунд 29, задача 8 — защита
+         от случайного удаления основного; при этом сам основной
+         восстанавливается из копии — см. _self_heal_edition_files);
+      4) edition.json в %APPDATA%/porayonka (записывается, напр., первым
          запуском user-редакции после выбора ФИО);
-      4) умолчание — admin (обратная совместимость со старыми установками).
+      5) умолчание — admin (обратная совместимость со старыми установками).
 
     Роль (edition) берётся из самого приоритетного источника, а ФИО — из
     самого приоритетного источника, где оно НЕПУСТОЕ: установщик кладёт рядом
@@ -82,6 +111,7 @@ def load_edition(force: bool = False) -> dict:
     global _cache
     if _cache is not None and not force:
         return _cache
+    _self_heal_edition_files()
     role: Optional[str] = None
     user_name = ""
     explicit = False

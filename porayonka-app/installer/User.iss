@@ -88,5 +88,8 @@ begin
     else
       Json := '{ "role": "user" }';
     SaveStringToFile(EditionPath, Json, False);
+    { Раунд 29 (задача 8): запасная копия .bak — защита от случайного
+      удаления edition.json (приложение восстановит основной из копии) }
+    SaveStringToFile(ExpandConstant('{app}\edition.json.bak'), Json, False);
   end;
 end;

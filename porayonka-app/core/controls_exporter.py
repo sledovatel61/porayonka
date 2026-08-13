@@ -12,6 +12,8 @@ from .controls_models import (
     effective_due_date, deadline_status, parse_date, short_name,
     parse_content_tasks, resolve_task_assignees,
     OVERDUE, TODAY, SOON, COMPLETED,
+    # Раунд 29 (задача 5): разбор «склеек» ФИО при импорте.
+    _PERSON_FULL_RE, _norm_person_name,
 )
 
 # Заголовки в формате пользователя — 1:1 с эталоном «Контроли ОКРИМ.xlsx»
@@ -323,12 +325,66 @@ def parse_periodicity(text: str) -> Tuple[str, int]:
     return ONE_TIME, 0
 
 
+# Раунд 29 (задача 5): «склеенные инициалы» — строка исходного Excel
+# «Потемкин С.А., Семисенко И.Ю.» после импорта отображалась как
+# «Потемкин С.А.С.И.Ю.» (short_name сшивал вторую фамилию в инициалы первой —
+# ровно когда ФИО приходили ОДНИМ элементом: разделитель в ячейке не был
+# обычной запятой/;/переносом, либо его не было вообще — просто пробел).
+# Теперь: 1) не-ASCII «запятые» (‚ ، ، · • | /) заранее приводятся к
+# обычной; 2) кусок без явных разделителей дополнительно разбирается как
+# цепочка «Фамилия И.О.» — два и более таких паттерна подряд, не разделённых
+# посторонним текстом, считаются отдельными исполнителями.
+_GLUE_COMMA_CHARS = "\u201a\u060c\uff0c\u00b7\u2022|/"  # ne-ASCII "zapyatye" iz raznyh raskladok + tochki/palochki
+_GLUE_COMMA_TRANS = {ord(c): "," for c in _GLUE_COMMA_CHARS}
+_PERSON_SPLIT_RE = re.compile(_PERSON_FULL_RE)
+# Допустимый «мусор» между ФИО в склейке: пробелы, знаки, союз «и».
+_GLUE_GAP_RE = re.compile(r"^(?:[\s,.;:]|и\b|[-–—])*$")
+
+
+def _split_glued_fio(part: str) -> List[str]:
+    """Разбить кусок без явного разделителя на отдельные «Фамилия И.О.»,
+    если их там несколько и весь текст покрывается такими паттернами
+    (плюс пробелы/знаки/«и»). Посторонний текст — кусок возвращается как есть."""
+    txt = " ".join((part or "").split())
+    if not txt:
+        return []
+    matches = list(_PERSON_SPLIT_RE.finditer(txt))
+    if len(matches) < 2:
+        # Одиночное полное ФИО — нормализуем инициалы («Чашин Э. А.» ->
+        # «Чашин Э.А.»); голая фамилия/прочее — как есть.
+        if (len(matches) == 1 and matches[0].start() == 0
+                and matches[0].end() == len(txt)):
+            return [_norm_person_name(matches[0].group(0))]
+        return [txt]
+    out: List[str] = []
+    pos = 0
+    for m in matches:
+        gap = txt[pos:m.start()]
+        if gap and not _GLUE_GAP_RE.fullmatch(gap):
+            return [txt]  # посторонний текст между ФИО — не рискуем резать
+        out.append(_norm_person_name(m.group(0)))
+        pos = m.end()
+    tail = txt[pos:]
+    if tail and not _GLUE_GAP_RE.fullmatch(tail):
+        return [txt]
+    return out
+
+
 def split_executors(text) -> List[str]:
-    """Разбить поле «Исполнитель (ФИО)» по , + ; \n."""
+    """Разбить поле «Исполнитель (ФИО)» по , + ; \\n (+ «склейки» ФИО)."""
     if not text:
         return []
-    parts = re.split(r"[,+;]|\s*\n\s*", str(text))
-    return [p.strip() for p in parts if p.strip()]
+    # NBSP — в обычный пробел: «Потемкин С.А., Семисенко» с NBSP после
+    # запятой и так резался, а вот дальнейший разбор склеек и strip()
+    # надёжнее над нормальными пробелами.
+    raw = str(text).replace(" ", " ").translate(_GLUE_COMMA_TRANS)
+    out: List[str] = []
+    for part in re.split(r"[,+;]|\s*\n\s*", raw):
+        part = part.strip()
+        if not part:
+            continue
+        out.extend(_split_glued_fio(part))
+    return out
 
 
 def import_from_excel(
