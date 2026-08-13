@@ -1,5 +1,6 @@
 # ui/controls/controls_tab.py
 # Glass Dark redesign — доработка таблицы + ПОЛНЫЙ редизайн карточки (2 колонки, календарь без клипа)
+import os
 import threading
 import time
 import traceback
@@ -258,6 +259,22 @@ def _attach_event_is_duplicate(state: dict, sig: tuple, now=None, window: float 
     last = state.get("last_attach_sig")
     state["last_attach_sig"] = (sig, now)
     return bool(last and last[0] == sig and (now - last[1]) < window)
+
+
+# Аудит сети (раунд 30): файлы крупнее этого порога копируются в ФОНОВОМ
+# потоке — копирование 10–50 МБ по медленному SMB занимает минуты и не должно
+# замораживать UI-поток. Мелкие копируются синхронно (мгновенно, результат
+# виден сразу — поведение раундов 23/28 сохранено).
+_ATTACH_ASYNC_MB = 5
+
+
+def _file_size_mb(fobj) -> float:
+    """Размер файла в МБ (0.0, если путь не читается)."""
+    try:
+        p = getattr(fobj, "path", None)
+        return os.path.getsize(p) / (1024 * 1024) if p else 0.0
+    except Exception:
+        return 0.0
 
 
 def _filter_new_attach_files(files, existing_names):
@@ -580,6 +597,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     state["controls"] = merged
                     state["pending_shared"] = None  # сетевые изменения уже применены
                     _sync_attachments(merged)
+                    # Аудит сети: локальный файл не должен отставать от state —
+                    # иначе после merge локальная копия «старее» shared, и при
+                    # перезапуске с выключенной сетью контроли из shared теряются.
+                    try:
+                        save_controls(merged)
+                    except Exception:
+                        traceback.print_exc()
             ok = write_shared_controls(controls, settings)
             state["network_ok"] = bool(ok)
             try:
@@ -612,13 +636,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _load_initial():
         state["known_attachments"] = {}
         if settings.get("network_enabled"):
+            local = load_controls()
             shared = read_shared_controls(settings)
             if shared:
-                state["controls"] = shared
+                # Аудит сети (раунд 30): раньше shared ПОДМЕНЯЛ state целиком,
+                # и локальные правки оффлайн-сессии (добавленные контроли)
+                # молча пропадали при старте, когда сеть снова доступна.
+                # Теперь — merge; если локальные данные добавили что-то новое,
+                # результат сразу отдаётся обратно в shared.
+                merged = merge_controls(local, shared)
+                if len(merged) > len(shared):
+                    print(f"[CONTROLS_TAB] startup merge: +{len(merged) - len(shared)} local controls")
+                    try:
+                        write_shared_controls(merged, settings)
+                    except Exception:
+                        traceback.print_exc()
+                state["controls"] = merged
                 state["network_ok"] = True
             else:
                 # shared пуст/не существует — грузим локальные и засеваем shared
-                state["controls"] = load_controls()
+                state["controls"] = local
                 try:
                     ok = write_shared_controls(state["controls"], settings)
                     state["network_ok"] = bool(ok)
@@ -2758,29 +2795,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             dlg = ft.AlertDialog(modal=True, bgcolor=GLASS["surface_solid"], title=ft.Text("Удаление вложения", size=14, weight=ft.FontWeight.BOLD, color=GLASS["text"]), content=ft.Text("Удалить файл вложения?", size=12, color=GLASS["text"]), actions=[ft.TextButton("Отмена", on_click=_cancel), ft.ElevatedButton("Удалить", bgcolor=GLASS["overdue"], color="#ffffff", on_click=_confirm)], shape=ft.RoundedRectangleBorder(radius=12))
             page.open(dlg)
 
-        def _on_attach_picked(e):
-            files = getattr(e, "files", None)
-            if not files:
-                return
-            # Раунд 21 (задача 5): антидубль события FilePicker — клиент шлёт
-            # result несколько раз подряд («фото прикрепилось 13 раз.png»).
-            _sig = tuple(sorted(str(getattr(_f, "path", None) or getattr(_f, "name", "")) for _f in files))
-            if _attach_event_is_duplicate(state, _sig):
-                return
-            # Раунд 13 (задача 5): у новой карточки control_id уже uuid (см.
-            # _open_detail), но страховка на краевых случаях — генерируем, если
-            # вдруг None/пусто. Иначе shared_dir / ... / None -> TypeError.
-            cid = detail_state.get("control_id")
-            if not cid:
-                cid = str(uuid4())
-                detail_state["control_id"] = cid
-            added = []
+        def _copy_batch(files, cid, existing_names):
+            """Скопировать файлы вложений (shared → локальный фолбэк).
+
+            Аудит сети (раунд 30): ЧИСТОЕ копирование без доступа к
+            detail_state/UI — безопасно вызывать из фонового потока.
+            Возвращает (added_rels, failed). Имена уже прикреплённых файлов
+            не копируются повторно (раунд 21, задача 5)."""
+            added: List[str] = []
             failed = 0
-            # Раунд 21 (задача 5): файл с уже прикреплённым именем не копируем
-            # повторно — иначе повторные события/повторные выборы порождали бы
-            # name_1, name_2, ... (те самые «13 одинаковых фото»).
-            existing_names = {str(rel).split("/")[-1] for rel in detail_state["attachments"]}
-            files, skipped = _filter_new_attach_files(files, existing_names)
             for fobj in files:
                 try:
                     fpath = fobj.path
@@ -2789,14 +2812,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if not fpath:
                     continue
                 _base = str(fpath).replace("\\", "/").split("/")[-1]
-                try:
-                    import os
-                    sz = os.path.getsize(fpath) / (1024*1024)
-                    if sz > ATTACHMENT_WARN_MB:
-                        from ui.toast import show_toast
-                        show_toast(page, f"Файл > 20 МБ: {fobj.name}", icon=ft.icons.WARNING_AMBER)
-                except Exception:
-                    traceback.print_exc()
+                if _base in existing_names:
+                    continue
                 rel = None
                 if settings.get("network_enabled"):
                     try:
@@ -2808,35 +2825,42 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if not rel:
                     # Раунд 13 (задача 5): локальное копирование как фолбэк
                     rel = copy_attachment_to_local(cid, fpath)
-                if rel and rel not in detail_state["attachments"]:
-                    detail_state["attachments"].append(rel)
-                    added.append(rel)
+                if rel:
                     existing_names.add(_base)
-                elif not rel:
+                    added.append(rel)
+                else:
                     failed += 1
-            if not added and skipped and not failed:
-                # Раунд 21 (задача 5): все выбранные файлы уже прикреплены
-                from ui.toast import show_toast
-                show_toast(page, "Файл уже прикреплён", icon=ft.icons.ATTACH_FILE)
-                return
+            return added, failed
+
+        def _apply_attach_result(cid, is_new, added, failed, skipped):
+            """Применить результат копирования вложений в UI-потоке.
+
+            Аудит сети (раунд 30): вызывается и для синхронной, и для фоновой
+            партии. Если карточка за время копирования закрылась/сменилась —
+            вложения всё равно сохраняются в контроле (как при синхронном
+            копировании), но UI списка не перестраивается зря."""
+            same_card = (detail_state.get("control_id") == cid)
+            if same_card:
+                for rel in added:
+                    if rel not in detail_state["attachments"]:
+                        detail_state["attachments"].append(rel)
             if added:
-                # файлы видны сразу: перестроить список вложений
-                _rebuild_attach()
-                try:
-                    # Раунд 28 (задача 4): пользовательский ретест — точечный
-                    # update панели (раунд 23) на Win-клиенте всё равно не
-                    # рисовал свежую строку до «Сохранить»+переоткрытия.
-                    # Теперь content панели ПОЛНОСТЬЮ заменяется новым
-                    # инстансом секции — diff-движок не может «пропустить»
-                    # поддерево (как при переоткрытии карточки).
-                    scan_panel.content = _make_scan_section()
-                    _safe_update(scan_panel)
-                except Exception:
-                    traceback.print_exc()
-                if not detail_state["is_new"]:
+                if same_card:
+                    # файлы видны сразу: перестроить список вложений
+                    _rebuild_attach()
+                    try:
+                        # Раунд 28 (задача 4): content панели ПОЛНОСТЬЮ
+                        # заменяется новым инстансом секции — diff-движок не
+                        # может «пропустить» поддерево.
+                        scan_panel.content = _make_scan_section()
+                        _safe_update(scan_panel)
+                    except Exception:
+                        traceback.print_exc()
+                if not is_new:
                     for x in state["controls"]:
                         if x.id == cid:
-                            x.attachments = list(detail_state["attachments"])
+                            x.attachments = list(detail_state["attachments"]) if same_card \
+                                else sorted(set((x.attachments or []) + added))
                             break
                     try:
                         _persist(state["controls"])
@@ -2855,9 +2879,71 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 # toast только после успешного копирования
                 from ui.toast import show_toast
                 show_toast(page, f"Файл прикреплён: {len(added)}", icon=ft.icons.ATTACH_FILE)
+            elif skipped and not failed:
+                # Раунд 21 (задача 5): все выбранные файлы уже прикреплены
+                from ui.toast import show_toast
+                show_toast(page, "Файл уже прикреплён", icon=ft.icons.ATTACH_FILE)
+                return
             if failed:
                 from ui.toast import show_error_toast
                 show_error_toast(page, "Не удалось прикрепить файл")
+
+        def _on_attach_picked(e):
+            files = getattr(e, "files", None)
+            if not files:
+                return
+            # Раунд 21 (задача 5): антидубль события FilePicker — клиент шлёт
+            # result несколько раз подряд («фото прикрепилось 13 раз.png»).
+            _sig = tuple(sorted(str(getattr(_f, "path", None) or getattr(_f, "name", "")) for _f in files))
+            if _attach_event_is_duplicate(state, _sig):
+                return
+            # Раунд 13 (задача 5): у новой карточки control_id уже uuid (см.
+            # _open_detail), но страховка на краевых случаях — генерируем, если
+            # вдруг None/пусто. Иначе shared_dir / ... / None -> TypeError.
+            cid = detail_state.get("control_id")
+            if not cid:
+                cid = str(uuid4())
+                detail_state["control_id"] = cid
+            # Раунд 21 (задача 5): файл с уже прикреплённым именем не копируем
+            # повторно — иначе повторные события/повторные выборы порождали бы
+            # name_1, name_2, ... (те самые «13 одинаковых фото»).
+            existing_names = {str(rel).split("/")[-1] for rel in detail_state["attachments"]}
+            files, skipped = _filter_new_attach_files(files, existing_names)
+            if not files:
+                if skipped:
+                    from ui.toast import show_toast
+                    show_toast(page, "Файл уже прикреплён", icon=ft.icons.ATTACH_FILE)
+                return
+            # Аудит сети (раунд 30): предупреждение >20 МБ — сразу, на UI-потоке;
+            # крупные файлы (>5 МБ) копируются в ФОНОВОМ потоке, чтобы копия по
+            # медленному SMB не замораживала интерфейс (мелкие — синхронно).
+            big: List = []
+            small: List = []
+            for fobj in files:
+                sz_mb = _file_size_mb(fobj)
+                if sz_mb > ATTACHMENT_WARN_MB:
+                    from ui.toast import show_toast
+                    show_toast(page, f"Файл > 20 МБ: {getattr(fobj, 'name', fobj.path)}",
+                               icon=ft.icons.WARNING_AMBER)
+                (big if sz_mb > _ATTACH_ASYNC_MB else small).append(fobj)
+            added, failed = _copy_batch(small, cid, existing_names)
+            _apply_attach_result(cid, detail_state["is_new"], added, failed, skipped)
+            if big:
+                is_new_at_pick = detail_state["is_new"]
+                def _bg_copy():
+                    try:
+                        a, f = _copy_batch(big, cid, existing_names)
+                    except Exception:
+                        traceback.print_exc()
+                        a, f = [], 1
+                    _post_to_ui(lambda: _apply_attach_result(cid, is_new_at_pick,
+                                                             a, f, skipped))
+                try:
+                    threading.Thread(target=_bg_copy, daemon=True).start()
+                except Exception as ex:
+                    print(f"[CONTROLS_TAB] attach bg copy error: {ex}")
+                    from ui.toast import show_error_toast
+                    show_error_toast(page, "Не удалось прикрепить файл")
 
         _ensure_file_picker(page, "_controls_attach_picker", _on_attach_picked)
 
@@ -4277,11 +4363,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             time.sleep(20)
             if _poll_stop["flag"]:
                 break
-            # Раунд 19 (задача 5): ВСЕ опросы — только через UI-поток
-            _post_to_ui(_poll_network)
+            # Аудит сети (раунд 30): СЕТЕВОЙ I/O (stat/чтение shared) выполняется
+            # в этом фоновом потоке, а не в UI-потоке — на медленном SMB
+            # (latency 0.5–2 с, таймауты) опрос больше не замораживает интерфейс.
+            # В UI-поток уходит только применение результата (_poll_network_apply).
+            _poll_network_io()
             time.sleep(40)
             if _poll_stop["flag"]:
                 break
+            # Раунд 19 (задача 5): остальные опросы — только через UI-поток
             _post_to_ui(_poll_notifications)
             _post_to_ui(_check_my_notifications)
             _post_to_ui(_check_deadline_alarms)  # Раунд 23: «злой» аларм срока
@@ -4355,12 +4445,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 print("[CONTROLS_TAB] update toast error")
 
-    def _on_network_back(mtime: float):
-        """Задача 4: сеть вернулась после офлайна — merge (НЕ подмена), локальные правки дороже."""
-        try:
-            shared = read_shared_controls(settings)
-        except Exception:
-            shared = []
+    def _on_network_back(mtime: float, shared: Optional[List[Control]] = None):
+        """Задача 4: сеть вернулась после офлайна — merge (НЕ подмена), локальные правки дороже.
+        Аудит сети: `shared` может быть передан уже прочитанным (I/O в фоновом потоке)."""
+        if shared is None:
+            try:
+                shared = read_shared_controls(settings)
+            except Exception:
+                shared = []
         if not shared:
             state["shared_mtime"] = mtime
             state["network_ok"] = True
@@ -4394,13 +4486,40 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             print("[CONTROLS_TAB] network back toast error")
 
-    def _poll_network():
+    def _poll_network_io():
+        """Аудит сети (раунд 30): СЕТЕВОЙ I/O опроса — в фоновом потоке.
+
+        get_shared_mtime/read_shared_controls по медленному SMB могут
+        блокироваться на секунды (и дольше — таймауты SMB). Раньше весь опрос
+        маршаллился в UI-поток (_post_to_ui(_poll_network)) и интерфейс
+        замирал на время каждого обращения. Теперь здесь только I/O, а
+        применение результата уходит в UI-поток через _post_to_ui.
+        """
         if not settings.get("network_enabled"):
             return
         try:
             mtime = get_shared_mtime(settings)
         except Exception:
             mtime = None
+        if mtime is None:
+            _post_to_ui(lambda: _poll_network_apply(mtime, []))
+            return
+        # mtime не изменился (и мы в сети) — файл читать не нужно: полный
+        # разбор JSON по SMB на каждом цикле был бы лишней нагрузкой на сеть.
+        # При network_ok=False пропускаем ранний выход — файл мог появиться
+        # с тем же mtime, и возврат сети нужно обработать.
+        if mtime == state.get("shared_mtime") and state["network_ok"]:
+            return
+        try:
+            shared = read_shared_controls(settings)
+        except Exception:
+            shared = []
+        _post_to_ui(lambda: _poll_network_apply(mtime, shared))
+
+    def _poll_network_apply(mtime: Optional[float], shared: List[Control]):
+        """Применить результат опроса shared в UI-потоке (см. _poll_network_io)."""
+        if not settings.get("network_enabled"):
+            return
         if mtime is None:
             # Задача 4: shared недоступен — красный индикатор
             if state["network_ok"]:
@@ -4413,14 +4532,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         if not state["network_ok"]:
             # сеть вернулась после офлайна
             try:
-                _on_network_back(mtime)
+                _on_network_back(mtime, shared)
             except Exception:
                 traceback.print_exc()
             return
         if mtime == state["shared_mtime"]:
             return
-        shared = read_shared_controls(settings)
         if not shared:
+            # shared существует, но пуст (напр. другой админ сделал «Удалить
+            # все»). Локальные данные не трогаем (не перезаписываем свои
+            # правки пустым файлом), но mtime принимаем — иначе файл
+            # перечитывался бы на каждом цикле опроса без конца.
+            state["shared_mtime"] = mtime
             return
         if state["editing"]:
             # Задача 3: карточка открыта — не трогаем state, копим в pending_shared
@@ -4739,6 +4862,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     # Раунд 23: тест-хук ручного запуска проверки алармов (фоновый цикл
     # опрашивает раз в минуту — в headless-тестах вызываем напрямую).
     page._controls_alarm_check = _check_deadline_alarms
+    # Аудит сети (раунд 30): тест-хуки сетевого опроса — I/O (фоновый поток)
+    # и применение результата в UI-потоке. В headless-тестах вызываются
+    # напрямую, чтобы проверить поведение без ожидания 20–60 с.
+    page._controls_poll_io = _poll_network_io
+    page._controls_poll_apply = _poll_network_apply
 
     try:
         t = threading.Thread(target=_background_loop, daemon=True)
