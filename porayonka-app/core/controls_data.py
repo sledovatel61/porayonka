@@ -144,7 +144,14 @@ def _make_backup(file_path: Path, keep: int = 3, prefix: Optional[str] = None) -
                 except OSError:
                     pass
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            shutil.copy2(file_path, file_path.with_name(f"{prefix}.{stamp}"))
+            for attempt in range(3):
+                try:
+                    shutil.copy2(file_path, file_path.with_name(f"{prefix}.{stamp}"))
+                    break
+                except OSError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.1)
     except OSError as e:
         print(f"[CONTROLS_DATA] Backup error: {e}")
 
@@ -1079,11 +1086,25 @@ def read_shared_controls(settings: dict) -> List[Control]:
     p = _parse_shared_path(settings)
     if not p or not p.exists():
         return []
+    data = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            break
+        except (json.JSONDecodeError, OSError, ValueError) as e:
+            last_err = e
+            if attempt == 2:
+                break
+            time.sleep(0.1)
+    if data is None:
+        if last_err is not None:
+            print(f"[CONTROLS_DATA] Oshibka chteniya obshego fayla: {last_err}")
+        return []
     try:
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
         return [Control.from_dict(d) for d in data.get("controls", [])]
-    except (json.JSONDecodeError, OSError, ValueError) as e:
+    except (ValueError, TypeError) as e:
         print(f"[CONTROLS_DATA] Oshibka chteniya obshego fayla: {e}")
         return []
 
@@ -1097,6 +1118,10 @@ def write_shared_controls(controls: List[Control], settings: dict) -> bool:
     переименовать tmp, пока второй ещё писал в него (запись молча уходила в
     «никуда», хотя функция возвращала True). Атомарность os.replace
     сохранена. Бэкапы подрезаются до 5 (см. _make_backup).
+
+    На Windows `os.replace` может вернуть WinError 5 (Access denied), если
+    целевой файл в этот момент читается/блокируется другим клиентом или
+    антивирусом. Поэтому — 3 попытки с короткой задержкой.
     """
     p = _parse_shared_path(settings)
     if not p:
@@ -1114,8 +1139,14 @@ def write_shared_controls(controls: List[Control], settings: dict) -> bool:
         tmp = p.with_name(f"{p.name}.{uuid4().hex}.tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, p)  # атомарная замена
-        return True
+        for attempt in range(3):
+            try:
+                os.replace(tmp, p)  # атомарная замена
+                return True
+            except OSError:
+                if attempt == 2:
+                    raise
+                time.sleep(0.15)
     except OSError as e:
         print(f"[CONTROLS_DATA] Oshibka zapisi v obshiy fayl: {e}")
         if tmp is not None:
@@ -1124,6 +1155,7 @@ def write_shared_controls(controls: List[Control], settings: dict) -> bool:
             except OSError:
                 pass
         return False
+    return False
 
 
 def get_shared_mtime(settings: dict) -> Optional[float]:

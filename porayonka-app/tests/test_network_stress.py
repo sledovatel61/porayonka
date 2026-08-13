@@ -6,7 +6,7 @@
 сеть, рассинхрон часов, алармы, удаление shared-файла.
 
 Сценарии — по PROMPT_контроли_стресс_аудит.md:
-  1. конфликты при одновременном добавлении (оба офлайн → сеть вернулась);
+  1. конфликты при одновременном добавлении (оба офлайн -> сеть вернулась);
   2. конфликт при одновременном редактировании одного контроля (LWW, без
      слияния полей, тай-брейк);
   3. offline-режим: локальные данные не затираются пустым shared, seed;
@@ -14,7 +14,7 @@
      при сохранении;
   5. большие вложения: атомарная копия, обрыв на полпути без битых файлов,
      фоновое копирование (>5 МБ) без зависания UI;
-  6. медленная/нестабильная сеть: mtime не читается → offline, битый JSON →
+  6. медленная/нестабильная сеть: mtime не читается -> offline, битый JSON ->
      recovery, нет повторных чтений файла;
   7. множественные клиенты: гонка записей (уникальные tmp + os.replace),
      подрезка .bak, конвергенция через merge, user-фильтры;
@@ -189,7 +189,7 @@ def _shared_ctx():
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 1. Конфликты при одновременном добавлении (оба офлайн → сеть вернулась)
+# 1. Конфликты при одновременном добавлении (оба офлайн -> сеть вернулась)
 # ──────────────────────────────────────────────────────────────────────────
 def scenario_concurrent_adds():
     shared_dir, shared_path, server_settings = _shared_ctx()
@@ -321,7 +321,7 @@ def scenario_offline():
     with Client("off", shared_path) as cli:
         cli.prepare()
         save_controls([_mk("x1", "ВХСОП-X", "2026-08-01T10:00:00")])
-        check("3: shared отсутствует → read_shared_controls = []",
+        check("3: shared отсутствует -> read_shared_controls = []",
               read_shared_controls(cli.settings) == [])
         # «старт приложения»: shared отсутствует — засев из локальных
         ok = write_shared_controls(load_controls(), cli.settings)
@@ -398,7 +398,7 @@ def scenario_attachments():
             rel2 = copy_attachment_to_shared("cid2", src, cli.settings)
         finally:
             cd_module.shutil.copy2 = orig_copy2
-        check("5: оборванная копия → None (без исключения)", rel2 is None)
+        check("5: оборванная копия -> None (без исключения)", rel2 is None)
         cid2_dir = os.path.join(shared_dir, "controls_attachments", "cid2")
         names = os.listdir(cid2_dir) if os.path.isdir(cid2_dir) else []
         check("5: НЕТ битого файла под финальным именем", "scan.pdf" not in names,
@@ -412,13 +412,13 @@ def scenario_attachments():
         check("5: resolve находит полный локальный файл (не битый shared)",
               p is not None and os.path.getsize(p) == os.path.getsize(src))
         # битый/пустой control_id — None без TypeError (раунд 22)
-        check("5: пустой control_id → None без TypeError",
+        check("5: пустой control_id -> None без TypeError",
               copy_attachment_to_shared(None, src, cli.settings) is None
               and copy_attachment_to_local(None, src) is None)
 
 
 def scenario_big_attach_async_ui():
-    """Полный прогон: событие FilePicker с крупным файлом → фоновая копия."""
+    """Полный прогон: событие FilePicker с крупным файлом -> фоновая копия."""
     shared_dir, shared_path, server_settings = _shared_ctx()
     big = os.path.join(tempfile.gettempdir(), "stress_big_scan2.pdf")
     with open(big, "wb") as f:
@@ -512,7 +512,7 @@ def scenario_slow_network():
             finally:
                 ct_module.read_shared_controls = real_read
 
-            # shared недоступен → offline-индикатор, без паники
+            # shared недоступен -> offline-индикатор, без паники
             os.remove(shared_path)
             page._controls_poll_apply(None, [])
             txt = _texts(tab)
@@ -531,7 +531,7 @@ def scenario_slow_network():
             with open(shared_path, "w", encoding="utf-8") as f:
                 f.write("{broken json!!!")
             got = read_shared_controls(cli.settings)
-            check("6: битый shared-файл → [] без исключений", got == [])
+            check("6: битый shared-файл -> [] без исключений", got == [])
             check("6: mtime битого файла читается без падения",
                   get_shared_mtime(cli.settings) is not None)
         finally:
@@ -587,7 +587,7 @@ def scenario_many_clients():
         t.start()
     for t in threads:
         t.join(timeout=60)
-    check("7: 4 клиента × 5 записей — все успешны, файл всегда валидный JSON",
+    check("7: 4 клиента x 5 записей — все успешны, файл всегда валидный JSON",
           not errors, f"{errors[:3]}")
     leftovers = [n for n in os.listdir(shared_path.rsplit(os.sep, 1)[0])
                  if n.endswith(".tmp")]
@@ -599,7 +599,7 @@ def scenario_many_clients():
     # детерминированная проверка подрезки ниже, при последовательной записи
     check("7: при гонке бэкапы не размножаются лавинообразно (<=8)",
           len(baks) <= 8, f"{len(baks)}")
-    # детерминированно: 12 последовательных записей одного клиента → <=5 .bak
+    # детерминированно: 12 последовательных записей одного клиента -> <=5 .bak
     _bak_dir = tempfile.mkdtemp(prefix="stress_bak_")
     _bak_settings = {"network_enabled": True,
                      "network_shared_path": os.path.join(_bak_dir, "controls.json")}
@@ -607,7 +607,7 @@ def scenario_many_clients():
         write_shared_controls(
             [_mk(f"b{i}", updated=f"2026-08-01T10:00:{i:02d}")], _bak_settings)
     _baks = [n for n in os.listdir(_bak_dir) if n.startswith("controls.json.bak.")]
-    check("7: бэкапы в shared ПОДРЕЗАНЫ (12 записей → <=5, не копятся вечно)",
+    check("7: бэкапы в shared ПОДРЕЗАНЫ (12 записей -> <=5, не копятся вечно)",
           len(_baks) <= 5, f"{len(_baks)}")
     final = read_shared_controls(server_settings)
     all_ids = {c.id for pl in payloads for c in pl}
@@ -659,7 +659,7 @@ def scenario_clock_skew():
                            [_mk("x", updated="2026-08-01T10:00:00")])
     check("8: битое updated_at старее валидного",
           m_bad[0].updated_at == "2026-08-01T10:00:00")
-    # UTC-нормализация: naive-ISO трактуется как UTC → одинаковый результат
+    # UTC-нормализация: naive-ISO трактуется как UTC -> одинаковый результат
     # на любом ПК (раньше каждый ПК считал epoch в своём поясе)
     key = _updated_sort_key(_mk("t", updated="2026-08-13T10:00:00"))
     expected = datetime(2026, 8, 13, 10, 0, 0, tzinfo=timezone.utc).timestamp()
