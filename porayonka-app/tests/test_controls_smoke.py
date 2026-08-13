@@ -4229,75 +4229,104 @@ def main():
     with _mock_platform("linux"):  # Раунд 25: независимо от реальной ОС
         check("os23: автозапуск вне Windows - supported=False, включение не падает",
               _as23.is_supported() is False and _as23.enable_autostart() is False)
-    # Раунд 25: те же ветки на «мок-Windows» - детерминированно на любой ОС
-    with _mock_platform("win32"):
-        check("os25: мок-Windows dev-run (без frozen) - supported=True, в реестр не пишет",
-              _as23.is_supported() is True and _as23.enable_autostart() is False)
-        check("tray25: мок-Windows dev-run (без frozen) - трей None",
-              _tray23(PageStub()) is None)
-        _rs25 = _play23(True)  # на Windows-хосте реально играет MP3 через MCI
-        check("sound25: мок-Windows - звук играет (Win) или graceful False (не падает)",
-              _rs25 in (True, False))
-    # Раунд 31 (задача 3): dev-режим + установленные pystray/pillow —
-    # трей ЗАПУСКАЕТСЯ (frozen-guard снят). Проверяем на ФЕЙК-модулях:
-    # реальный pystray на Linux не стартует (win32 backend).
-    import types as _types31
-    _tray_state31 = {"started": 0, "stopped": 0, "menu_labels": []}
+    # Раунд 25: те же ветки на «мок-Windows» - детерминированно на любой ОС.
+    # Раунд 32 (доделка): трей теперь работает и в dev-режиме Windows при
+    # наличии pystray/pillow — старое ожидание «dev-run -> None» устарело.
+    # Все tray-проверки изолированы: importlib.reload(ui.tray_icon) ВНУТРИ
+    # мок-контекста сбрасывает _ACTIVE_ICON и module-level состояние, а
+    # pystray/PIL подменяются фейками или блокируются (None) — на живом
+    # Windows тесты НЕ стартуют настоящий значок и не зависят от
+    # установленных библиотек/платформы.
+    import importlib as _il_tray
+    import ui.tray_icon as _ti_tray
 
-    class _FakeIcon31:
+    def _tray_reload():
+        _il_tray.reload(_ti_tray)
+        return _ti_tray
+
+    _tray_st = {"started": 0, "stopped": 0, "menu_labels": []}
+
+    class _TrayFakeIcon:
         def __init__(self, *a, **kw):
             pass
 
         def run_detached(self):
-            _tray_state31["started"] += 1
+            _tray_st["started"] += 1
 
         def stop(self):
-            _tray_state31["stopped"] += 1
+            _tray_st["stopped"] += 1
 
-    class _FakePystray31:
+    import types as _types_tray
+
+    class _TrayFakePy:
         def Menu(self, *items):
-            _tray_state31["menu_labels"] = [getattr(i, "text", None)
-                                            for i in items]
+            _tray_st["menu_labels"] = [getattr(i, "text", None)
+                                       for i in items]
             return object()
 
         def MenuItem(self, text, action, default=False):
-            return _types31.SimpleNamespace(text=text, action=action)
+            return _types_tray.SimpleNamespace(text=text, action=action)
 
         def Icon(self, *a, **kw):
-            return _FakeIcon31()
+            return _TrayFakeIcon()
 
-    class _FakePIL31:
+    class _TrayFakePIL:
         class Image:
             @staticmethod
             def open(path):
                 return object()
 
-    _mods31 = {}
-    for _m31, _obj31 in (("pystray", _FakePystray31()),
-                         ("PIL", _FakePIL31())):
-        _mods31[_m31] = sys.modules.get(_m31)
-        sys.modules[_m31] = _obj31
+    def _install_tray_mods(objs):
+        """Подменить sys.modules['pystray']/['PIL'] (None = «модуль отсутствует»)."""
+        _mods = {}
+        for _m, _o in objs:
+            _mods[_m] = sys.modules.get(_m)
+            sys.modules[_m] = _o
+        return _mods
+
+    def _restore_tray_mods(_mods):
+        for _m, _o in _mods.items():
+            if _o is None:
+                sys.modules.pop(_m, None)
+            else:
+                sys.modules[_m] = _o
+
+    with _mock_platform("win32"):
+        check("os25: мок-Windows dev-run (без frozen) - supported=True, в реестр не пишет",
+              _as23.is_supported() is True and _as23.enable_autostart() is False)
+        _rs25 = _play23(True)  # на Windows-хосте реально играет MP3 через MCI
+        check("sound25: мок-Windows - звук играет (Win) или graceful False (не падает)",
+              _rs25 in (True, False))
+
+    # tray25 (актуализирован): dev-режим Windows БЕЗ pystray/pillow -> None
+    _mods_no = _install_tray_mods((("pystray", None), ("PIL", None)))
     try:
         with _mock_platform("win32"):
-            from ui.tray_icon import start_tray as _st31
-            # первый вызов — web-режим (меню «Открыть в браузере»)
-            ic31 = _st31(None, web_url="http://127.0.0.1:8555")
-            check("tray31: dev-режим + pystray/pillow - иконка создана",
-                  ic31 is not None and _tray_state31["started"] == 1)
-            check("tray31: web-режим - меню «Открыть в браузере»",
-                  any("браузере" in (l or "") for l in _tray_state31["menu_labels"]),
-                  f"{_tray_state31['menu_labels']}")
-            ic31b = _st31(PageStub())
-            check("tray31: повторный вызов возвращает ТОТ ЖЕ объект (singleton)",
-                  ic31b is ic31 and _tray_state31["started"] == 1)
+            check("tray25: dev-run Windows без pystray/pillow - мягкий None",
+                  _tray_reload().start_tray(PageStub()) is None)
     finally:
-        for _m31, _obj31 in _mods31.items():
-            if _obj31 is None:
-                sys.modules.pop(_m31, None)
-            else:
-                sys.modules[_m31] = _obj31
-        import ui.tray_icon as _ti31
-        _ti31._ACTIVE_ICON = None  # сброс singleton, чтобы не влиять на другие тесты
+        _restore_tray_mods(_mods_no)
+        _tray_reload()
+
+    # tray31 (актуализирован): dev-режим Windows + ФЕЙК pystray/pillow
+    _mods31 = _install_tray_mods((("pystray", _TrayFakePy()),
+                                  ("PIL", _TrayFakePIL())))
+    try:
+        with _mock_platform("win32"):
+            _tm31 = _tray_reload()
+            # первый вызов — web-режим (меню «Открыть в браузере»)
+            ic31 = _tm31.start_tray(None, web_url="http://127.0.0.1:8555")
+            check("tray31: dev-режим + pystray/pillow - иконка создана",
+                  ic31 is not None and _tray_st["started"] == 1)
+            check("tray31: web-режим - меню «Открыть в браузере»",
+                  any("браузере" in (l or "") for l in _tray_st["menu_labels"]),
+                  f"{_tray_st['menu_labels']}")
+            ic31b = _tm31.start_tray(PageStub())
+            check("tray31: повторный вызов возвращает ТОТ ЖЕ объект (singleton)",
+                  ic31b is ic31 and _tray_st["started"] == 1)
+    finally:
+        _restore_tray_mods(_mods31)
+        _tray_reload()
 
     # ── Раунд 32, задача 2: «Открыть» восстанавливает окно, «Выход» завершает ──
     # (закрытие крестиком -> сворачивание проверяем src-проверкой main.py ниже)
@@ -4356,12 +4385,10 @@ def main():
         def update(self):
             pass
 
-    _mods32 = {}
-    for _m32, _o32 in (("pystray", _FPy32()), ("PIL", _FPIL32())):
-        _mods32[_m32] = sys.modules.get(_m32)
-        sys.modules[_m32] = _o32
+    _mods32 = _install_tray_mods((("pystray", _FPy32()), ("PIL", _FPIL32())))
     try:
         with _mock_platform("win32"):
+            _tm32 = _tray_reload()
             from ui.tray_icon import start_tray as _st32
             pg32t = _Page32()
             ic32t = _st32(pg32t)
@@ -4377,13 +4404,8 @@ def main():
                   _t32["stopped"] == 1 and pg32t.window.destroyed == 1,
                   f"stopped={_t32['stopped']} destroyed={pg32t.window.destroyed}")
     finally:
-        for _m32, _obj32 in _mods32.items():
-            if _obj32 is None:
-                sys.modules.pop(_m32, None)
-            else:
-                sys.modules[_m32] = _obj32
-        import ui.tray_icon as _ti32
-        _ti32._ACTIVE_ICON = None
+        _restore_tray_mods(_mods32)
+        _tray_reload()
     # src: закрытие окна крестиком -> сворачивание (не убийство процесса)
     _src_main32 = open(main23, encoding="utf-8").read()
     check("tray32: main.py - close сворачивает в трей при наличии _tray_icon",
@@ -4394,7 +4416,7 @@ def main():
           and "page.window.close()" in _src_main32)
     with _mock_platform("win32", frozen=True, blocked=("pystray", "PIL", "winreg")):
         check("tray25: мок-frozen Windows без pystray/PIL - мягкий None",
-              _tray23(PageStub()) is None)
+              _tray_reload().start_tray(PageStub()) is None)
         check("os25: мок-frozen Windows без winreg - включение не падает (False)",
               _as23.enable_autostart() is False)
     check("env25: после мок-патчей sys.platform/frozen восстановлены",
