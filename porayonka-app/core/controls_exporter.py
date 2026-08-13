@@ -197,7 +197,9 @@ class ControlsExcelExporter:
                 c = ws.cell(row=row, column=col_i, value=v)
                 c.border = border
                 c.font = data_font
-                c.alignment = center_wrap if col_i in (5, 7, 8) else center
+                # Раунд 31 (задача 5): «Содержание» (5) и «Исполнители» (6) —
+                # wrap_text=True (без обрезания ячеек в Excel)
+                c.alignment = center_wrap if col_i in (5, 6, 7, 8) else center
             # Даты — настоящие даты Excel с форматом dd.mm.yyyy (эталон хранит serial)
             for col_i in (3, 9):
                 d = parse_date(values[col_i - 1])
@@ -205,15 +207,23 @@ class ControlsExcelExporter:
                     cell = ws.cell(row=row, column=col_i)
                     cell.value = datetime(d.year, d.month, d.day)
                     cell.number_format = date_fmt
-            # Жёлтая заливка «Следующая дата исполнения» при наступившем/близком сроке
-            if st in (OVERDUE, TODAY, SOON):
+            # Раунд 31 (задача 5): жёлтая заливка «Следующая дата исполнения»
+            # — ТОЛЬКО просрочен/сегодня (SOON больше не подсвечивается:
+            # «желтым должны подсвечиваться только контроли, которые либо
+            # просрочены, либо срок сегодня»).
+            if st in (OVERDUE, TODAY):
                 ws.cell(row=row, column=9).fill = yellow_fill
             # Зелёная заливка «Исполнено + дата» при исполнении
             if ctl.done:
                 ws.cell(row=row, column=10).fill = green_fill
 
+            # Раунд 31 (задача 5): высота строки — по контенту и «Содержания»,
+            # и «Исполнителей» (wrap_text=True у обеих колонок — без обрезания
+            # ячеек, скрины «Экспорт контролей у пользователя1/2.png»).
+            exec_lines = max(1, -(-len(", ".join(short_name(x) for x in ctl.executors)) // 30))
             content_lines = max(1, -(-len(ctl.content or "") // 46))
-            ws.row_dimensions[row].height = max(24, content_lines * 16 + 8)
+            ws.row_dimensions[row].height = max(
+                24, max(content_lines, exec_lines) * 16 + 8)
             row += 1
 
         # Автофильтр как в эталоне: от шапки (строка 2) до последней строки данных

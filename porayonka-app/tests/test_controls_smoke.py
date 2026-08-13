@@ -205,7 +205,7 @@ from core.controls_data import (  # noqa: E402
     canonical_initiator_group, initiator_filter_options,
 )
 from core.controls_models import (  # noqa: E402
-    Control, OVERDUE, TODAY, name_matches,
+    Control, OVERDUE, TODAY, SOON, IN_PROGRESS, deadline_status, name_matches,
 )
 from core.controls_exporter import ControlsExcelExporter, import_from_excel  # noqa: E402
 from ui.controls.glass_theme import GLASS  # noqa: E402
@@ -2465,6 +2465,95 @@ def main():
               "Авакян Арсен Артурович" in opts86c
               and cdd86c.value == "Авакян Арсен Артурович", f"{opts86c}")
 
+    # ── 87. Раунд 31, задача 5: персонализация просрочек по пользователю ──
+    # Сценарий пользователя: в контроле просрочен ЧУЖОЙ пункт п.6
+    # (Семисенко, Чащин - 16.02.2026), а свой пункт п.2 (Миронович) ещё не
+    # наступил. Миронович НЕ должен видеть контроль в «Просрочено».
+    from datetime import date as _date87, timedelta as _td87
+    from core.controls_models import (
+        user_effective_due_date as _ued87,
+        user_deadline_status as _uds87,
+    )
+    from core.controls_notify import collect_alarm_controls as _cac87
+    _t87 = _date87.today()
+    _ctl87 = _ctrl("p87", "ПЕРС-87", executors=["Чащин Э.А.", "Миронович Д.В."],
+                   controller="Потемкин С.А.")
+    _ctl87["tasks"] = [
+        {"id": "t87a", "title": "п.6", "assignees": ["Семисенко И.Ю.", "Чащин Э.А."],
+         "due_date": (_t87 - _td87(days=180)).isoformat(), "is_done": False,
+         "done_date": None, "comment": ""},
+        {"id": "t87b", "title": "п.2", "assignees": ["Миронович Д.В."],
+         "due_date": (_t87 + _td87(days=2)).isoformat(), "is_done": False,
+         "done_date": None, "comment": ""},
+    ]
+    # unit: user-срок и статус
+    _c87 = Control.from_dict(_ctl87)
+    check("pers31: user-срок Мироновича = дата ЕГО пункта (не чужого)",
+          _ued87(_c87, "Миронович Д.В.") == _t87 + _td87(days=2),
+          f"{_ued87(_c87, 'Миронович Д.В.')}")
+    check("pers31: user-статус Мироновича - «Скоро», НЕ «Просрочено»",
+          _uds87(_c87, "Миронович Д.В.", 3) == SOON,
+          f"{_uds87(_c87, 'Миронович Д.В.', 3)}")
+    check("pers31: у Семисенко его просроченный пункт даёт «Просрочено»",
+          _uds87(_c87, "Семисенко И.Ю.", 3) == OVERDUE)
+    check("pers31: admin-статус (общий) - «Просрочено» (мин из всех пунктов)",
+          deadline_status(_c87, 3) == OVERDUE)
+    # collect_alarm_controls: user не алармится по чужому пункту
+    check("pers31: алармы Мироновича пусты (чужой просроченный пункт не будит)",
+          _cac87([_c87], 3, "Миронович Д.В.") == [])
+    check("pers31: алармы Семисенко содержат контроль",
+          [c.id for c in _cac87([_c87], 3, "Семисенко И.Ю.")] == ["p87"])
+    check("pers31: алармы админа содержат контроль (общий статус)",
+          [c.id for c in _cac87([_c87], 3)] == ["p87"])
+    # UI user-режим: счётчики/фильтры по user-статусу
+    save_settings({"network_enabled": False, "network_role": "user",
+                   "network_user": "Миронович Д.В.", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True, "extra_people": [],
+                   "person_roles": {}, "hidden_people": [], "alarm_enabled": False})
+    _seed_raw([_ctl87])
+    page87, tab87, _ = build(1280)
+    check("pers31: user видит контроль в «Все»",
+          "ПЕРС-87" in _visible_texts(tab87))
+    check("pers31: user-фильтр «Просрочено» - 0 контролей (чужой пункт не виден)",
+          _set_filter(tab87, "Все статусы", OVERDUE))
+    vis87 = _visible_texts(tab87)
+    check("pers31: после фильтра «Просрочено» контроль скрыт",
+          "ПЕРС-87" not in vis87, f"{sorted(vis87)[:8]}")
+    check("pers31: user-фильтр «Скоро» - контроль виден (свой пункт)",
+          _set_filter(tab87, "Все статусы", SOON))
+    check("pers31: после фильтра «Скоро» контроль виден",
+          "ПЕРС-87" in _visible_texts(tab87))
+    # admin: фильтр «Просрочено» показывает контроль
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True, "extra_people": [],
+                   "person_roles": {}, "hidden_people": [], "alarm_enabled": False})
+    _seed_raw([_ctl87])
+    page87b, tab87b, _ = build(1280)
+    check("pers31: admin-фильтр «Просрочено» - контроль виден (общий статус)",
+          _set_filter(tab87b, "Все статусы", OVERDUE))
+    check("pers31: admin видит контроль в «Просрочено»",
+          "ПЕРС-87" in _visible_texts(tab87b))
+    # Экспорт: wrap «Содержание»/«Исполнители», SOON НЕ подсвечен жёлтым.
+    # Чистый контроль БЕЗ просроченных пунктов: due = сегодня+2 -> SOON.
+    from core.controls_exporter import ControlsExcelExporter as _cee87
+    from openpyxl import load_workbook as _lwb87
+    _xlsx87 = os.path.join(tempfile.mkdtemp(prefix="porayonka_x31_"),
+                           "export31.xlsx")
+    _c87b = _ctrl("e87", "ЭКСП-31", executors=["Миронович Д.В."],
+                  controller="Потемкин С.А.")
+    _c87b["due_date"] = (_t87 + _td87(days=2)).isoformat()  # SOON
+    _c87b["content"] = "Длинное содержание для проверки переноса " * 3
+    _cee87().export([Control.from_dict(_c87b)], _xlsx87, soon_days=3, full=False)
+    _ws87 = _lwb87(_xlsx87)["Контроли"]
+    check("exp31: «Содержание» (E) с wrap_text=True",
+          bool(_ws87.cell(row=3, column=5).alignment.wrap_text))
+    check("exp31: «Исполнители» (F) с wrap_text=True",
+          bool(_ws87.cell(row=3, column=6).alignment.wrap_text))
+    check("exp31: SOON НЕ подсвечивается жёлтым (только OVERDUE/TODAY)",
+          (_ws87.cell(row=3, column=9).fill.patternType or "") != "solid",
+          f"{_ws87.cell(row=3, column=9).fill.fgColor.rgb}")
+
     # ══════════════════════════════════════════════════════════════════
     # Раунд 19
     # ══════════════════════════════════════════════════════════════════
@@ -4121,6 +4210,66 @@ def main():
         _rs25 = _play23(True)  # на Windows-хосте реально играет MP3 через MCI
         check("sound25: мок-Windows - звук играет (Win) или graceful False (не падает)",
               _rs25 in (True, False))
+    # Раунд 31 (задача 3): dev-режим + установленные pystray/pillow —
+    # трей ЗАПУСКАЕТСЯ (frozen-guard снят). Проверяем на ФЕЙК-модулях:
+    # реальный pystray на Linux не стартует (win32 backend).
+    import types as _types31
+    _tray_state31 = {"started": 0, "stopped": 0, "menu_labels": []}
+
+    class _FakeIcon31:
+        def __init__(self, *a, **kw):
+            pass
+
+        def run_detached(self):
+            _tray_state31["started"] += 1
+
+        def stop(self):
+            _tray_state31["stopped"] += 1
+
+    class _FakePystray31:
+        def Menu(self, *items):
+            _tray_state31["menu_labels"] = [getattr(i, "text", None)
+                                            for i in items]
+            return object()
+
+        def MenuItem(self, text, action, default=False):
+            return _types31.SimpleNamespace(text=text, action=action)
+
+        def Icon(self, *a, **kw):
+            return _FakeIcon31()
+
+    class _FakePIL31:
+        class Image:
+            @staticmethod
+            def open(path):
+                return object()
+
+    _mods31 = {}
+    for _m31, _obj31 in (("pystray", _FakePystray31()),
+                         ("PIL", _FakePIL31())):
+        _mods31[_m31] = sys.modules.get(_m31)
+        sys.modules[_m31] = _obj31
+    try:
+        with _mock_platform("win32"):
+            from ui.tray_icon import start_tray as _st31
+            # первый вызов — web-режим (меню «Открыть в браузере»)
+            ic31 = _st31(None, web_url="http://127.0.0.1:8555")
+            check("tray31: dev-режим + pystray/pillow - иконка создана",
+                  ic31 is not None and _tray_state31["started"] == 1)
+            check("tray31: web-режим - меню «Открыть в браузере»",
+                  any("браузере" in (l or "") for l in _tray_state31["menu_labels"]),
+                  f"{_tray_state31['menu_labels']}")
+            ic31b = _st31(PageStub())
+            check("tray31: повторный вызов возвращает ТОТ ЖЕ объект (singleton)",
+                  ic31b is ic31 and _tray_state31["started"] == 1)
+    finally:
+        for _m31, _obj31 in _mods31.items():
+            if _obj31 is None:
+                sys.modules.pop(_m31, None)
+            else:
+                sys.modules[_m31] = _obj31
+        import ui.tray_icon as _ti31
+        _ti31._ACTIVE_ICON = None  # сброс singleton, чтобы не влиять на другие тесты
     with _mock_platform("win32", frozen=True, blocked=("pystray", "PIL", "winreg")):
         check("tray25: мок-frozen Windows без pystray/PIL - мягкий None",
               _tray23(PageStub()) is None)
@@ -4333,6 +4482,41 @@ def main():
           n26 is False and ok26c["v"] == 1)
     check("auth26: main.py - ворота вызываются ДО сборки UI (_main_impl)",
           "show_admin_password_gate" in src_main23 and "_main_impl" in src_main23)
+
+    # ── Раунд 31, задача 1: dev-режим — env верховная над appdata-паролем ──
+    from core.edition import (admin_password_required as _apr31,
+                              check_admin_password as _cap31)
+    _edp31 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
+    os.makedirs(os.path.dirname(_edp31), exist_ok=True)
+    _chash31 = _ph26("чужой-пароль")
+    with open(_edp31, "w", encoding="utf-8") as _f31:
+        json.dump({"role": "admin", "password_hash": _chash31}, _f31,
+                  ensure_ascii=False)
+    try:
+        # env admin БЕЗ env-пароля: чужой hash из appdata НЕ подтягивается
+        os.environ["PORAYONKA_EDITION"] = "admin"
+        os.environ.pop("PORAYONKA_ADMIN_PASSWORD", None)
+        _le23(force=True)
+        _ed31 = _le23(force=True)
+        check("auth31: dev env admin БЕЗ env-пароля - вход без пароля (чужой hash из appdata НЕ тянется)",
+              _apr31(_ed31) is False and not (_ed31.get("password_hash") or ""),
+              f"hash={bool(_ed31.get('password_hash'))}")
+        # env admin + PORAYONKA_ADMIN_PASSWORD=1: пароль «1» принимается
+        os.environ["PORAYONKA_ADMIN_PASSWORD"] = "1"
+        _le23(force=True)
+        _ed31b = _le23(force=True)
+        check("auth31: env-пароль PORAYONKA_ADMIN_PASSWORD=1 - ворота требуются",
+              _apr31(_ed31b) is True)
+        check("auth31: пароль «1» из env принимается",
+              _cap31(_ed31b, "1") is True and _cap31(_ed31b, "2") is False)
+    finally:
+        os.environ.pop("PORAYONKA_EDITION", None)
+        os.environ.pop("PORAYONKA_ADMIN_PASSWORD", None)
+        _le23(force=True)
+        try:
+            os.remove(_edp31)
+        except OSError:
+            pass
 
     # задача 6: «Настройка формы» только на «Зональных»; задача 7: «О программе»
     from ui.header import create_compact_header as _hdr26
@@ -4741,8 +4925,14 @@ def main():
     with open(_sf29, "w", encoding="utf-8") as _f29:
         json.dump({"network_shared_path": "D:\\\\tmp\\\\custom"}, _f29,
                   ensure_ascii=False)
-    check("net29: явный путь пользователя НЕ перекрывается дефолтом",
-          _ls29().get("network_shared_path") == "D:\\\\tmp\\\\custom")
+    check("net31: ЛОКАЛЬНЫЙ путь (D:\\...) мигрирует в дефолтный UNC",
+          _ls29().get("network_shared_path") == _DNP29,
+          f"{_ls29().get('network_shared_path')!r}")
+    with open(_sf29, "w", encoding="utf-8") as _f29:
+        json.dump({"network_shared_path": "\\\\server\\\\share\\\\custom"}, _f29,
+                  ensure_ascii=False)
+    check("net31: ЯВНЫЙ UNC-путь пользователя НЕ перекрывается дефолтом",
+          _ls29().get("network_shared_path") == "\\\\server\\\\share\\\\custom")
 
     # ── 80. Раунд 29, задача 7 + раунд 30, задача 5: контроль рассинхрона ──
     # Раунд 30: сравнение mtime vs last_saved (не «возраст файла»!) —
@@ -5034,6 +5224,27 @@ def main():
           f"color={getattr(_ro_txt29[0], 'color', None) if _ro_txt29 else None}")
     check("user29: подсказка «задан при установке»",
           any("Пользователь задан при установке" in t for t in _utxts29))
+    # Раунд 31 (задача 4): у user-редакции ЗВУК нельзя выключить
+    _snd_cb31 = [c for c in walk(dlgu29) if isinstance(c, ft.Checkbox)
+                 and getattr(c, "label", None) == "Звук уведомлений"]
+    _snd_ro31 = [t for t in walk(dlgu29) if isinstance(t, ft.Text)
+                 and t.value == "Звук уведомлений включён"]
+    check("sound31: в настройках user-редакции НЕТ чекбокса звука",
+          not _snd_cb31, f"{len(_snd_cb31)}")
+    check("sound31: вместо него read-only строка «Звук уведомлений включён»",
+          len(_snd_ro31) >= 1
+          and getattr(_snd_ro31[0], "color", None) == _COLORS29["text"])
+    # сохранение форсирует notify_sound=True
+    _cap31s = {}
+    dlgu31s = _csm29(pgu29, dict(_stg29u, notify_sound=False),
+                     lambda m: _cap31s.update(m))
+    _svb31s = [b for b in getattr(dlgu31s, "actions", [])
+               if isinstance(b, ft.ElevatedButton)
+               and getattr(b, "text", None) == "Сохранить"]
+    if _svb31s:
+        _svb31s[0].on_click(None)
+    check("sound31: сохранение форсирует notify_sound=True (user)",
+          _cap31s.get("notify_sound") is True)
     # сохранение: фиксированное ФИО не переопределяется
     _cap29 = {}
     dlgu29b = _csm29(pgu29, dict(_stg29u), lambda m: _cap29.update(m))

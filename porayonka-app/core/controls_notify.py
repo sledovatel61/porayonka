@@ -12,7 +12,9 @@
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
-from .controls_models import OVERDUE, TODAY, deadline_status, name_matches
+from .controls_models import (
+    OVERDUE, TODAY, deadline_status, user_deadline_status, name_matches,
+)
 
 ALARM_INTERVAL_USER_HOURS = 2
 ALARM_INTERVAL_ADMIN_HOURS = 24
@@ -42,11 +44,15 @@ def control_belongs_to(control, person: str) -> bool:
 def collect_alarm_controls(controls, soon_days: int,
                            user_name: str = "") -> list:
     """Контроли с наступившим сроком (просрочен/сегодня), активные.
-    `user_name` задан (user-редакция) — только контроли этого человека."""
+    `user_name` задан (user-редакция) — только контроли этого человека, и
+    статус считается по ЕГО пунктам (user_deadline_status, раунд 31 задача 5):
+    чужой просроченный пункт в том же контроле не будит аларм пользователя."""
     base = [c for c in controls or []
             if not getattr(c, "done", False) and not getattr(c, "archived", False)]
     if (user_name or "").strip():
         base = [c for c in base if control_belongs_to(c, user_name)]
+        return [c for c in base
+                if user_deadline_status(c, user_name, soon_days) in ALARM_STATUSES]
     return [c for c in base
             if deadline_status(c, soon_days) in ALARM_STATUSES]
 

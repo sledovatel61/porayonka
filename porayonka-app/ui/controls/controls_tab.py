@@ -15,6 +15,7 @@ from core.controls_models import (
     Control, ControlTask, ControlMilestone, PERIODIC, ONE_TIME,
     effective_due_date, deadline_status, parse_date, short_name,
     name_matches, sync_due_after_tasks,
+    user_effective_due_date, user_deadline_status,
     STATUS_LABELS,
     OVERDUE, TODAY, SOON, IN_PROGRESS, DONE, COMPLETED, NO_DATE,
     ARCHIVE_DONE, ARCHIVE_DELETED,
@@ -678,7 +679,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             state["controls"] = load_controls()
         # снимки для персональных уведомлений (задача 2): текущие контроли считаем «известными»
         state["known_ids"] = {c.id for c in state["controls"]}
-        state["my_status_map"] = {c.id: deadline_status(c, soon_days) for c in state["controls"]}
+        # Раунд 31 (задача 5): карта статусов — по user-статусу в user-режиме
+        state["my_status_map"] = {c.id: _status_of(c) for c in state["controls"]}
         _update_sync_ui()
         _refresh_filter_options()
 
@@ -736,6 +738,22 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             lst = [c for c in lst if not c.archived]
         return lst
 
+    # Раунд 31 (задача 5): персонализация сроков. Пользователь с сетевой
+    # ролью/ФИО видит статусы и сроки ПО СВОИМ пунктам (assignees), а не по
+    # общему сроку контроля (чужой просроченный пункт не «краснеет» у него).
+    def _user_mode() -> bool:
+        return bool(network_role == "user" and (network_user or "").strip())
+
+    def _status_of(ctl: Control) -> str:
+        if _user_mode():
+            return user_deadline_status(ctl, network_user, soon_days)
+        return deadline_status(ctl, soon_days)
+
+    def _due_of(ctl: Control) -> Optional[date]:
+        if _user_mode():
+            return user_effective_due_date(ctl, network_user)
+        return effective_due_date(ctl)
+
     def _norm(s: str) -> str:
         return (s or "").strip().casefold()
 
@@ -743,7 +761,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         base = _visible_base()
         q = state["search"].lower().strip()
         def _match(ctl: Control) -> bool:
-            if state["f_status"] != "all" and deadline_status(ctl, soon_days) != state["f_status"]:
+            # Раунд 31 (задача 5): фильтр статуса — по user-статусу (свои пункты)
+            if state["f_status"] != "all" and _status_of(ctl) != state["f_status"]:
                 return False
             if state["f_type"] != "all" and ctl.control_type != state["f_type"]:
                 return False
@@ -773,13 +792,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 elif not any(name_matches(state["f_executor"], nm) for nm in names):
                     return False
             if state["f_from"]:
-                dd = effective_due_date(ctl)
+                dd = _due_of(ctl)  # раунд 31: user-срок в user-режиме
                 if dd is not None:
                     fd = parse_date(state["f_from"])
                     if fd and dd < fd:
                         return False
             if state["f_to"]:
-                dd = effective_due_date(ctl)
+                dd = _due_of(ctl)  # раунд 31: user-срок в user-режиме
                 if dd is not None:
                     td = parse_date(state["f_to"])
                     if td and dd > td:
@@ -808,8 +827,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 return (ctl.control_type,)
             if k == "status":
                 order = {OVERDUE:0, TODAY:1, SOON:2, IN_PROGRESS:3, NO_DATE:4, DONE:5, COMPLETED:6}
-                return (order.get(deadline_status(ctl, soon_days),9),)
-            d = effective_due_date(ctl)
+                return (order.get(_status_of(ctl), 9),)  # раунд 31: user-статус
+            d = _due_of(ctl)  # раунд 31: user-срок в user-режиме
             return (d.toordinal() if d else 999999,)
         result.sort(key=_sort_val, reverse=state["sort_reverse"])
         # Bug 2.5: исполненные вниз — стабильное разбиение: сначала не исполненные, потом исполненные
@@ -1038,7 +1057,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     # Row building — Bug 2: плашки, Bug 3: hover, Bug 4: 2 кнопки
     def _build_row(ctl: Control, num: int, index: int) -> ft.Container:
-        status = deadline_status(ctl, soon_days)
+        # Раунд 31 (задача 5): статус строки — user-статус (свои пункты)
+        status = _status_of(ctl)
         color = {
             OVERDUE: GLASS["overdue"],
             TODAY: GLASS["today"],
@@ -1102,11 +1122,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # действия (редактирование, удаление в архив, исполнение; для архивных —
         # «Восстановить»/«Удалить навсегда» в футере карточки).
 
-        eff_due = effective_due_date(ctl)
+        eff_due = _due_of(ctl)  # раунд 31: user-срок в user-режиме
         due_str = _display_date(eff_due.isoformat() if eff_due else ctl.due_date)
         due_color = color if status in (OVERDUE, TODAY, SOON) else GLASS["text"]
         # Раунд 6: под основной датой — ближайшие неисполненные промежуточные точки (до 2)
         due_tooltip = due_str
+        # Раунд 31 (задача 5): в user-режиме, если общий срок контроля
+        # отличается от срока пользователя, подсказка показывает оба
+        if _user_mode():
+            _common_due = effective_due_date(ctl)
+            if _common_due is not None and (_common_due != eff_due):
+                due_tooltip += (f"\nОбщий срок контроля: "
+                                f"{_display_date(_common_due.isoformat())}")
         due_controls = [ft.Text(due_str, size=12, color=due_color, weight=ft.FontWeight.W_700, no_wrap=True)]
         if ctl.milestones:
             try:
@@ -1235,7 +1262,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         res = {"all":0, OVERDUE:0, TODAY:0, SOON:0, IN_PROGRESS:0, DONE:0, COMPLETED:0}
         for ctl in _visible_base():
             res["all"]+=1
-            st = deadline_status(ctl, soon_days)
+            st = _status_of(ctl)  # раунд 31: user-статус в user-режиме
             res[st]=res.get(st,0)+1
         return res
 
@@ -4867,12 +4894,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     changed = True
                     _notify_user(f"Новый контроль для вас: вх.№ {c.incoming_number or c.id}")
             # (b) срок по моему контролю (статус изменился + антиспам-журнал)
+            # Раунд 31 (задача 5): статус — ПО СВОИМ ПУНКТАМ пользователя
             status_map = dict(state["my_status_map"] or {})
             for c in state["controls"]:
                 if not _mine(c) or c.done:
                     status_map.pop(c.id, None)
                     continue
-                st = deadline_status(c, soon_days)
+                st = user_deadline_status(c, network_user, soon_days)
                 prev = status_map.get(c.id)
                 if prev != st and st in (OVERDUE, TODAY, SOON):
                     if _should_notify(log, c.id, st, today):
@@ -4891,9 +4919,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _poll_notifications():
         base = [c for c in _visible_base() if not c.done]
-        overdue = [c for c in base if deadline_status(c, soon_days) == OVERDUE]
-        today_n = [c for c in base if deadline_status(c, soon_days) == TODAY]
-        soon = [c for c in base if deadline_status(c, soon_days) == SOON]
+        # Раунд 31 (задача 5): статусы — user-статусы в user-режиме
+        overdue = [c for c in base if _status_of(c) == OVERDUE]
+        today_n = [c for c in base if _status_of(c) == TODAY]
+        soon = [c for c in base if _status_of(c) == SOON]
         if not overdue and not today_n and not soon:
             return
         if len(overdue) > state["last_overdue"]:
@@ -4932,8 +4961,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         rows = []
         for c in alarms[:10]:
-            st = deadline_status(c, soon_days)
-            dd = effective_due_date(c)
+            st = _status_of(c)  # раунд 31: user-статус (иконка)
+            dd = _due_of(c)     # раунд 31: user-срок
             rows.append(ft.Row(controls=[
                 ft.Icon(ft.icons.WARNING_AMBER, size=16,
                         color=GLASS["today"] if st == TODAY else GLASS["overdue"]),
@@ -5228,9 +5257,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     try:
         base = [c for c in _visible_base() if not c.done]
-        overdue0 = [c for c in base if deadline_status(c, soon_days) == OVERDUE]
-        today0 = [c for c in base if deadline_status(c, soon_days) == TODAY]
-        soon0 = [c for c in base if deadline_status(c, soon_days) == SOON]
+        overdue0 = [c for c in base if _status_of(c) == OVERDUE]
+        today0 = [c for c in base if _status_of(c) == TODAY]
+        soon0 = [c for c in base if _status_of(c) == SOON]
         if overdue0 or today0 or soon0:
             from ui.toast import show_toast
             parts = []

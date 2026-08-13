@@ -107,6 +107,16 @@ def load_edition(force: bool = False) -> dict:
     Раунд 26 (задача 5): поля "password" (plain, от установщика) и/или
     "password_hash" (base64 sha256) прокидываются как есть — используются
     парольным входом admin-редакции (ui/admin_gate.py).
+
+    Раунд 31 (задача 1): приоритет env в DEV-режиме (не frozen). Симптом:
+    `set PORAYONKA_EDITION=admin && python main.py` запрашивал пароль, потому
+    что password_hash подтягивался из %APPDATA%\\porayonka\\edition.json
+    (остался от прошлых тестов). Теперь: если env задаёт роль и приложение
+    запущено НЕ из сборки — редакция берётся ТОЛЬКО из env (role / user_name /
+    PORAYONKA_ADMIN_PASSWORD / PORAYONKA_ADMIN_PASSWORD_HASH), файлы для
+    пароля НЕ читаются; env-роль admin без env-пароля = вход без пароля
+    (как в dev было до раунда 26). В frozen-сборке приоритет по-прежнему у
+    edition.json рядом с exe (установщик определяет дистрибутив).
     """
     global _cache
     if _cache is not None and not force:
@@ -124,6 +134,24 @@ def load_edition(force: bool = False) -> dict:
         user_name = (os.getenv("PORAYONKA_USER") or "").strip()
         password = (os.getenv("PORAYONKA_ADMIN_PASSWORD") or "").strip()
         password_hash = (os.getenv("PORAYONKA_ADMIN_PASSWORD_HASH") or "").strip()
+    if env_role in (EDITION_ADMIN, EDITION_USER) and not getattr(sys, "frozen", False):
+        # Раунд 31 (задача 1): DEV-режим — env ВЕРХОВНАЯ для роли и ПАРОЛЯ:
+        # password_hash/password из файлов (в т.ч. %APPDATA% с чужим hash)
+        # НЕ читаются — иначе `set PORAYONKA_EDITION=admin && python main.py`
+        # запрашивал бы чужой пароль. Исключение — user_name: если env его не
+        # задаёт, дополняем из %APPDATA% (выбранное пользователем ФИО при
+        # первом запуске user-редакции — иначе диалог «Кто вы?» спрашивал бы
+        # каждый раз). Файл рядом с программой в dev не читается.
+        if not user_name:
+            try:
+                _apd = _read_edition_file(_appdata_edition_file())
+                if _apd:
+                    user_name = str(_apd.get("user_name") or "").strip()
+            except Exception:
+                pass
+        _cache = {"role": role, "user_name": user_name, "explicit": explicit,
+                  "password": password, "password_hash": password_hash}
+        return _cache
     for path in edition_file_candidates():
         if role is not None and user_name and password and password_hash:
             break

@@ -520,6 +520,75 @@ def deadline_status(control: Control, soon_days: int = 3) -> str:
     return IN_PROGRESS
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# Раунд 31 (задача 5): ПЕРСОНАЛИЗАЦИЯ сроков по пользователю.
+# Пользователь требует: «контроли по пунктам должны распределяться по
+# пользователям в плане просрочек, а не показывать чужие». Сценарий:
+# в контроле просрочен пункт п.6 (Семисенко, Чащин), но у пользователя
+# Миронович в этом контроле свой пункт п.2 (01.05.2026) — ещё не просрочен,
+# поэтому Миронович НЕ должен видеть контроль в «Просрочено».
+# ────────────────────────────────────────────────────────────────────────────
+
+def user_effective_due_date(control: Control,
+                            user_name: str) -> Optional[date]:
+    """Минимальная дата среди НЕисполненных задач (`ControlTask`), где
+    `user_name` есть в assignees. Если таких задач нет — fallback на общий
+    `effective_due_date(control)`, но ТОЛЬКО если пользователь является
+    исполнителем контроля (`executors`) или контролёром (`controller`).
+    Иначе None — у пользователя в этом контроле нет активных пунктов.
+
+    `user_name` пустой — ведёт себя как `effective_due_date` (admin-вид).
+    Сопоставление ФИО — фамильное (name_matches): «Миронович Д.В.» ==
+    «Миронович Дмитрий Владимирович»."""
+    p = (user_name or "").strip()
+    if not p:
+        return effective_due_date(control)
+    dates = []
+    for t in (control.tasks or []):
+        if t.is_done or not t.due_date:
+            continue
+        if any(name_matches(p, a) for a in (t.assignees or [])):
+            d = parse_date(t.due_date)
+            if d is not None:
+                dates.append(d)
+    if dates:
+        return min(dates)
+    # нет своих пунктов: видим общий срок, только если пользователь — общий
+    # исполнитель/контролёр контроля (иначе «чужие» просрочки не показываем)
+    if any(name_matches(p, e) for e in (control.executors or [])):
+        return effective_due_date(control)
+    if name_matches(p, control.controller or ""):
+        return effective_due_date(control)
+    return None
+
+
+def user_deadline_status(control: Control, user_name: str,
+                         soon_days: int = 3) -> str:
+    """Статус срока контроля ДЛЯ ПОЛЬЗОВАТЕЛЯ по `user_effective_due_date`.
+
+    Если у пользователя нет активных пунктов в контроле (None) —
+    возвращается IN_PROGRESS: контроль не попадает в «Просрочено/Сегодня/
+    Скоро» и в алармы этого пользователя. Исполненный контроль — DONE
+    (независимо от пунктов)."""
+    if control.done:
+        return DONE
+    today = date.today()
+    if control.control_type == PERIODIC:
+        ed = parse_date(control.end_date)
+        if ed is not None and ed < today:
+            return COMPLETED
+    dd = user_effective_due_date(control, user_name)
+    if dd is None:
+        return IN_PROGRESS
+    if dd < today:
+        return OVERDUE
+    if dd == today:
+        return TODAY
+    if (dd - today).days <= max(0, soon_days):
+        return SOON
+    return IN_PROGRESS
+
+
 STATUS_LABELS = {
     OVERDUE: "Просрочено",
     TODAY: "Сегодня",

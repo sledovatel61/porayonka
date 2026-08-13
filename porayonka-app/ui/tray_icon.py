@@ -1,10 +1,12 @@
 # ui/tray_icon.py
 # Раунд 23 (задача 2): значок в системном трее — «приложение находится в трее
 # и работает всегда» (пользователи не забывают запустить после включения ПК).
-# Раунд 24 (задача 4): трей запускается ТОЛЬКО в frozen-сборке на Windows.
+# Раунд 24 (задача 4): трей — на Windows.
 # Раунд 26 (задача 2): трей работает и в WEB-режиме (Win7): браузер можно
 # закрыть — сервер остаётся в трее, «Открыть» поднимает вкладку браузера,
 # алармы сроков дублируются balloon-уведомлением (notify()).
+# Раунд 31 (задача 3): frozen-guard снят — трей доступен и в dev-режиме
+# (python main.py) при установленных pystray/pillow (guarded import).
 #
 # pystray — ОПЦИОНАЛЬНАЯ зависимость (только для сборки дистрибутивов):
 #   pip install pystray pillow
@@ -66,9 +68,12 @@ def start_tray(page=None, title: str = "Пораёнка — Контроли",
     Меню: «Открыть» и «Выход».
     """
     global _ACTIVE_ICON
-    # Раунд 24 (задача 4): ТОЛЬКО frozen Windows-сборка (dev-запуски — мимо).
-    if sys.platform != "win32" or not getattr(sys, "frozen", False):
-        print("[TRAY] skip (tray tolko v frozen Windows-sborke)")
+    # Раунд 24 (задача 4) + раунд 31 (задача 3): только Windows. Frozen-guard
+    # СНЯТ: трей работает и в dev-режиме (python main.py), если установлены
+    # опциональные pystray/pillow — удобно проверять дистрибутив без сборки
+    # exe. Без pystray/pillow — мягкий None (guarded import ниже).
+    if sys.platform != "win32":
+        print("[TRAY] skip (tray tolko v Windows)")
         return None
     if _ACTIVE_ICON is not None:
         # Раунд 26 (задача 2): web-режим — main() вызывается на каждую
@@ -77,9 +82,10 @@ def start_tray(page=None, title: str = "Пораёнка — Контроли",
     try:
         import pystray
         from PIL import Image
-    except ImportError:
-        print("[TRAY] pystray/pillow ne ustanovleny — tray otklyuchen "
-              "(pip install pystray pillow)")
+    except Exception as e:
+        # ImportError (нет библиотек) ИЛИ поломка бэкенда на текущей ОС
+        # (напр., pystray._win32 на Linux) — мягкий None
+        print(f"[TRAY] pystray/pillow nedostupny: {e}")
         return None
 
     def _show(icon=None, item=None):

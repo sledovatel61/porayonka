@@ -237,11 +237,20 @@ def load_settings() -> dict:
         # (например, col_widths — иначе ширины колонок терялись при перезапуске)
         for k, v in data.items():
             settings[k] = v
-        # Раунд 29 (задача 4): пустой путь (старая установка) — подставить
-        # дефолтный сетевой путь: пользователю не нужно ничего вводить,
-        # чтобы стартовать синхронизацию (достаточно включить сетевой режим).
-        if not (settings.get("network_shared_path") or "").strip():
+        # Раунд 29 (задача 4) + раунд 31 (задача 2): ПУСТОЙ путь или явно
+        # ЛОКАЛЬНЫЙ Windows-путь (`C:\\...`, `D:\\...` — остались от старых
+        # версий) — подставить дефолтный сетевой путь и СОХРАНИТЬ настройки
+        # (миграция). Явный UNC-путь (`\\\\server\\share\\...`) и абсолютные
+        # POSIX-пути (headless-тесты с temp-каталогами) не трогаем.
+        import re as _re31
+        sp = (settings.get("network_shared_path") or "").strip()
+        _is_local_win = bool(_re31.match(r"^[A-Za-z]:[\\/]", sp))
+        if not sp or _is_local_win:
             settings["network_shared_path"] = DEFAULT_NETWORK_PATH
+            try:
+                save_settings(settings)
+            except Exception:
+                pass
         return settings
     except (json.JSONDecodeError, OSError) as e:
         print(f"[CONTROLS_DATA] Oshibka zagruzki settings: {e}")

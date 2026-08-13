@@ -41,6 +41,18 @@ def create_controls_settings_modal(
         active_color=COLORS["received"],
         label_style=ft.TextStyle(size=12, color=COLORS["text"]),
     )
+    # Раунд 31 (задача 4): у user-редакции звук уведомлений ОБЯЗАТЕЛЕН —
+    # переключатель скрывается, вместо него read-only строка «включён».
+    # (Заполняется позже, когда известна редакция — _is_user_edition29.)
+    sound_user_ro = ft.Container(
+        content=ft.Row(controls=[
+            ft.Icon(ft.icons.NOTIFICATIONS_ACTIVE, size=16,
+                    color=COLORS["text_secondary"]),
+            ft.Text("Звук уведомлений включён", size=12, color=COLORS["text"],
+                    weight=ft.FontWeight.W_600),
+        ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        visible=False,
+    )
 
     net_switch = ft.Switch(
         value=bool(settings.get("network_enabled")),
@@ -135,12 +147,16 @@ def create_controls_settings_modal(
     # Раунд 29 (задача 10, смежно): роль в user-редакции тоже редактируется
     # только редакцией — не даём уйти в «Администратор» и сохранить мусор
     # (apply_edition_to_settings всё равно вернул бы «user» при запуске).
+    # Раунд 31 (задача 4): у user-редакции звук уведомлений нельзя выключить —
+    # переключатель заменяется read-only строкой «включён».
     if _is_user_edition29:
         try:
             role_dd.value = "user"
             role_dd.disabled = True
         except Exception:
             pass
+        sound_check.visible = False
+        sound_user_ro.visible = True
     path_field = ft.TextField(
         value=settings.get("network_shared_path", ""),
         label="Путь к общей папке/файлу (например \\\\SERVER\\share\\porayonka\\controls.json)",
@@ -338,7 +354,9 @@ def create_controls_settings_modal(
             # Раунд 29 (задача 4): пустой путь -> сетевой путь по умолчанию.
             "network_shared_path": (path_field.value or "").strip()
             or _default_net_path29(),
-            "notify_sound": bool(sound_check.value),
+            # Раунд 31 (задача 4): у user-редакции звук принудительно включён
+            "notify_sound": (True if _is_user_edition29
+                             else bool(sound_check.value)),
         })
         on_apply(merged)
         dialog.open = False
@@ -350,7 +368,9 @@ def create_controls_settings_modal(
                 ft.Text("Уведомления", size=12, weight=ft.FontWeight.BOLD,
                         color=COLORS["text"]),
                 soon_field,
-                sound_check,
+                # Раунд 31 (задача 4): user-редакция — read-only «включён»
+                # вместо переключателя звука
+                (sound_user_ro if _is_user_edition29 else sound_check),
             ], spacing=6, tight=True),
             bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
             border_radius=10, padding=ft.padding.all(10),

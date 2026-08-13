@@ -4938,3 +4938,74 @@ python tests/test_network_stress.py    # ALL OK (104 checks, 3+ runs)
 ### 73.3 Процесс
 
 Агент работает в своей ветке `arena/XXXXXXXX-porayonka` от `main`. После приёмки оркестратор внедряет файлы в `main`, обновляет `AGENTS.md` §73 и запускает обязательные проверки из §37.2.
+
+### 73.4 Результаты фиксов раунда 31
+
+**Задача 1 (пароль админа в dev-режиме).** `core/edition.py::load_edition`:
+- причина: `set PORAYONKA_EDITION=admin && python main.py` запрашивал пароль —
+  password_hash подтягивался из `%APPDATA%\porayonka\edition.json` (остался
+  от прошлых тестов), хотя env задаёт только роль;
+- фикс: в dev-режиме (не frozen) при заданной env-роли редакция берётся
+  ТОЛЬКО из env (role / user_name / PORAYONKA_ADMIN_PASSWORD /
+  PORAYONKA_ADMIN_PASSWORD_HASH); пароли из файлов НЕ читаются. user_name
+  дополняется из %APPDATA% (выбор ФИО пользователем), чтобы диалог «Кто вы?»
+  не спрашивал каждый раз. В frozen-сборке приоритет по-прежнему у
+  edition.json рядом с exe. Тест: smoke §75 (auth31).
+
+**Задача 2 (сетевой путь по умолчанию).** `core/controls_data.py::load_settings`:
+- миграция: ПУСТОЙ путь или явно ЛОКАЛЬНЫЙ Windows-путь (`C:\...`, `D:\...`)
+  заменяется на `DEFAULT_NETWORK_PATH` (`\\192.168.0.60\общая\...`) и
+  настройки сохраняются. Явный UNC (`\\server\share\...`) и абсолютные
+  POSIX-пути (headless-тесты) не трогаются. Тест: smoke §79 (net31).
+
+**Задача 3 (трей в dev-режиме).** `ui/tray_icon.py::start_tray`:
+- frozen-guard снят: трей запускается и из `python main.py` (dev) на Windows,
+  если установлены опциональные pystray/pillow (guarded import; поломка
+  бэкенда на текущей ОС — мягкий None). Синглтон `_ACTIVE_ICON` сохранён:
+  повторный вызов (web-сессии) возвращает тот же значок; в web-режиме меню
+  «Открыть в браузере» (web_url), в нативном — показ окна. Тест: smoke §73
+  (tray31, на фейк-pystray/PIL).
+
+**Задача 4 (звук уведомлений у user).**
+`ui/controls/controls_settings_modal.py`:
+- в user-редакции чекбокс «Звук уведомлений» скрыт, вместо него read-only
+  строка «Звук уведомлений включён» (светлым текстом); при сохранении
+  `notify_sound` принудительно True. Admin-редакция — как было (переключатель
+  доступен). Тест: smoke §84 (sound31).
+
+**Задача 5 (персонализация просрочек) — САМОЕ ВАЖНОЕ.**
+- `core/controls_models.py`: `user_effective_due_date(control, user_name)` —
+  минимальная дата НЕисполненных задач, где пользователь в assignees; при
+  отсутствии своих задач — fallback на общий срок, только если пользователь
+  исполнитель/контролёр контроля, иначе None. `user_deadline_status(...)` —
+  статус по user-сроку (None -> IN_PROGRESS — контроль не попадает в
+  «Просрочено/Сегодня/Скоро» пользователя);
+- `core/controls_notify.py::collect_alarm_controls` — при заданном user_name
+  фильтрация по user-статусу: чужой просроченный пункт не будит аларм;
+- `ui/controls/controls_tab.py`: счётчики, фильтры статуса, сортировка,
+  колонка «Срок исполн.» (с tooltip «Общий срок контроля», если отличается),
+  `_check_my_notifications`, `my_status_map`, `_poll_notifications` — по
+  user-статусу/сроку в user-режиме (network_role=user + network_user);
+- `core/controls_exporter.py`: жёлтая заливка «Следующая дата» — только
+  OVERDUE/TODAY (SOON не подсвечивается); «Содержание» и «Исполнители» —
+  wrap_text=True, высота строки по контенту обеих колонок (без обрезания
+  ячеек в Excel).
+  Тесты: smoke §87 (pers31, exp31) + существующие §69/§9 не сломаны.
+
+**Задача 6 (мелкие регрессии).** `tests/test_network_stress.py` — 104
+проверки ALL OK (3 прогона). Ложное предупреждение времени (round 30) —
+по-прежнему отсутствует (mtime vs last_saved, тесты time30 зелёные).
+
+**Проверки (раунд 31):**
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py \
+    ui/controls/controls_tab.py ui/controls/controls_settings_modal.py \
+    ui/controls/control_card_modal.py ui/tray_icon.py \
+    core/controls_data.py core/controls_models.py core/controls_notify.py \
+    core/controls_exporter.py core/edition.py                    # OK
+python -c "import sys; sys.path.insert(0, '.'); \
+    from ui.controls.controls_tab import create_controls_tab; print('OK')"  # OK
+python tests/test_controls_smoke.py    # ALL OK
+python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
+```
