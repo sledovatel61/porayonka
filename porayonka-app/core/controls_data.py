@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import uuid4
@@ -126,18 +126,25 @@ def save_controls(controls: List[Control]) -> str:
         raise
 
 
-def _make_backup(file_path: Path, keep: int = 3) -> None:
-    """Создать .bak копию перед перезаписью (last-write-wins + резерв)."""
+def _make_backup(file_path: Path, keep: int = 3, prefix: Optional[str] = None) -> None:
+    """Создать .bak копию перед перезаписью (last-write-wins + резерв).
+
+    Аудит сети (раунд 30): штемпель с микросекундами (%f) — два клиента,
+    писавшие в shared в одну секунду, больше не «перетирают» бэкап друг друга;
+    перед копированием старые бэкапы подрезаются до `keep` штук (раньше в
+    общей папке они копились бесконечно на каждой записи каждого админа).
+    """
     try:
         if file_path.exists():
-            backups = sorted(file_path.parent.glob("controls.json.bak*"))
+            prefix = prefix or f"{file_path.name}.bak"
+            backups = sorted(file_path.parent.glob(f"{prefix}.*"))
             for old in backups[:max(0, len(backups) - keep + 1)]:
                 try:
                     old.unlink()
                 except OSError:
                     pass
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            shutil.copy2(file_path, file_path.with_name(f"controls.json.bak.{stamp}"))
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            shutil.copy2(file_path, file_path.with_name(f"{prefix}.{stamp}"))
     except OSError as e:
         print(f"[CONTROLS_DATA] Backup error: {e}")
 
@@ -816,6 +823,29 @@ def get_attachment_source_path(control_id: str, rel_path: str) -> Optional[Path]
     return get_attachment_dir(control_id) / safe if safe else None
 
 
+def _copy_atomic(src: Path, target_dir: Path, filename: str) -> bool:
+    """Скопировать файл в target_dir АТОМАРНО: tmp-файл + os.replace.
+
+    Аудит сети (раунд 30): раньше копия шла сразу под финальным именем —
+    оборванная на полпути (сеть упала) копия оставляла БИТЫЙ файл, который
+    resolve_attachment показывал вместо полного локального (shared приоритетнее
+    локального). Теперь при сбое tmp удаляется, битого файла под финальным
+    именем не остаётся. True — файл на месте и цел.
+    """
+    tmp = target_dir / f".{filename}.{uuid4().hex}.tmp"
+    try:
+        shutil.copy2(src, tmp)
+        os.replace(tmp, target_dir / filename)
+        return True
+    except OSError as e:
+        print(f"[CONTROLS_DATA] copy attachment error: {e}")
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return False
+
+
 def copy_attachment_to_local(control_id: str, source_path: str) -> Optional[str]:
     """Скопировать файл в локальную папку вложений контроля.
 
@@ -830,7 +860,8 @@ def copy_attachment_to_local(control_id: str, source_path: str) -> Optional[str]
             return None
         target_dir = get_attachment_dir(control_id)
         filename = _unique_filename(target_dir, src.name)
-        shutil.copy2(src, target_dir / filename)
+        if not _copy_atomic(src, target_dir, filename):
+            return None
         return f"{control_id}/{filename}"
     except OSError as e:
         print(f"[CONTROLS_DATA] copy attachment error: {e}")
@@ -844,6 +875,8 @@ def copy_attachment_to_shared(control_id: str, source_path: str, settings: dict)
     родитель общей папки/файла (shared_dir/controls_attachments/...).
     Раунд 13: пустой control_id или недоступная shared-папка — сразу None,
     вызывающая сторона переходит на локальное копирование (без TypeError).
+    Аудит сети: копирование атомарное (_copy_atomic) — обрыв сети на полпути
+    не оставляет битого файла под финальным именем.
     """
     if not control_id:
         return None
@@ -857,7 +890,8 @@ def copy_attachment_to_shared(control_id: str, source_path: str, settings: dict)
         target_dir = shared_dir / "controls_attachments" / control_id
         target_dir.mkdir(parents=True, exist_ok=True)
         filename = _unique_filename(target_dir, src.name)
-        shutil.copy2(src, target_dir / filename)
+        if not _copy_atomic(src, target_dir, filename):
+            return None
         return f"{control_id}/{filename}"
     except OSError as e:
         print(f"[CONTROLS_DATA] copy attachment to shared error: {e}")
@@ -971,12 +1005,22 @@ def _shared_dir(settings: dict) -> Optional[Path]:
 # ────────────────────────────────────────────────
 
 def _updated_sort_key(control: Control) -> tuple:
-    """Ключ сравнения updated_at: валидная ISO-строка новее пустого/битого значения."""
+    """Ключ сравнения updated_at: валидная ISO-строка новее пустого/битого значения.
+
+    Аудит сети (раунд 30): naive-ISO (datetime.now().isoformat()) трактуется
+    как UTC, а не как ЛОКАЛЬНОЕ время машины. Раньше каждая машина считала
+    epoch по своему часовому поясу: один и тот же файл давал разные результаты
+    merge на разных ПК (недетерминизм при рассинхроне часовых поясов). В одном
+    поясе поведение не изменилось (все сдвиги одинаковы, порядок сохраняется).
+    """
     raw = (control.updated_at or "").strip()
     if not raw:
         return (0, "", "")
     try:
-        return (1, datetime.fromisoformat(raw).timestamp(), raw)
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (1, dt.timestamp(), raw)
     except (ValueError, TypeError):
         return (1, -1, raw)
 
@@ -1045,10 +1089,19 @@ def read_shared_controls(settings: dict) -> List[Control]:
 
 
 def write_shared_controls(controls: List[Control], settings: dict) -> bool:
-    """Записать контроли в общий сетевой файл. Возвращает успех."""
+    """Записать контроли в общий сетевой файл. Возвращает успех.
+
+    Аудит сети (раунд 30): tmp-файл УНИКАЛЕН (uuid) — раньше все клиенты
+    писали в один и тот же `controls.json.tmp`: при одновременной записи двух
+    админов открытие файла вторым усекало данные первого, а os.replace мог
+    переименовать tmp, пока второй ещё писал в него (запись молча уходила в
+    «никуда», хотя функция возвращала True). Атомарность os.replace
+    сохранена. Бэкапы подрезаются до 5 (см. _make_backup).
+    """
     p = _parse_shared_path(settings)
     if not p:
         return False
+    tmp = None
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         data = {
@@ -1057,15 +1110,19 @@ def write_shared_controls(controls: List[Control], settings: dict) -> bool:
             "controls": [c.to_dict() for c in controls],
         }
         if p.exists():
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            shutil.copy2(p, p.with_name(f"controls.json.bak.{stamp}"))
-        tmp = p.with_suffix(".json.tmp")
+            _make_backup(p, keep=5)
+        tmp = p.with_name(f"{p.name}.{uuid4().hex}.tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp, p)  # атомарная замена
         return True
     except OSError as e:
         print(f"[CONTROLS_DATA] Oshibka zapisi v obshiy fayl: {e}")
+        if tmp is not None:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
         return False
 
 
@@ -1081,7 +1138,11 @@ def get_shared_mtime(settings: dict) -> Optional[float]:
 
 
 def sync_attachments_from_shared(control_id: str, rel_paths: List[str], settings: dict) -> None:
-    """Подтянуть недостающие вложения из общей папки локально."""
+    """Подтянуть недостающие вложения из общей папки локально.
+
+    Аудит сети: копирование атомарное (_copy_atomic) — обрыв сети на полпути
+    не оставляет битого локального файла.
+    """
     shared_dir = _shared_dir(settings)
     if shared_dir is None:
         return
@@ -1092,10 +1153,7 @@ def sync_attachments_from_shared(control_id: str, rel_paths: List[str], settings
         local = get_attachment_dir(control_id) / Path(rel).name
         if local.exists():
             continue
-        try:
-            shutil.copy2(shared_file, local)
-        except OSError:
-            pass
+        _copy_atomic(shared_file, get_attachment_dir(control_id), Path(rel).name)
 
 
 def check_time_skew(settings: dict, tolerance_sec: float = 300.0) -> Optional[float]:
