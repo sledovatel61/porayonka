@@ -5161,3 +5161,71 @@ python -c "import sys; sys.path.insert(0, '.'); \
 python tests/test_controls_smoke.py    # ALL OK (tray25/tray31/tray32 зелёные)
 python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
 ```
+
+## 75. Раунд 33 — hotfix: admin-серый экран, трей в нативных exe, «О программе», appdata-наследие
+
+### 75.1 Файловое логирование ошибок (frozen console=False)
+
+- Новый модуль `core/crash_log.py`: `install_crash_hook()` — sys.excepthook
+  пишет необработанные исключения в `%APPDATA%/porayonka/error.log`
+  (UTF-8, ротация 500 КБ), затем делегирует `sys.__excepthook__`.
+- Вызывается первой строкой в `main.py` (при импорте) и явно в `main_web.py`.
+  Тест: smoke crash33.
+
+### 75.2 Admin-серый экран после пароля
+
+- `ui/admin_gate.py`: флаги `_submitted`/`_closed`; `_force_close_dialog()`
+  пробует ВСЕ способы закрытия: `page.close(dlg)` + `dlg.open=False` +
+  снятие из `_Page__offstage.controls` + `page.overlay.remove(dlg)` +
+  `page.update()`. `_call_ok_after_close()`: при наличии `page.run_thread`
+  (реальный Flet) on_ok откладывается на ~0.1 с в фоновом потоке — клиент
+  успевает обработать закрытие ДО построения UI (frozen-сборка больше не
+  рисует «серый экран» под диалогом); в тестовых заглушках — синхронно.
+  Тест: smoke auth33 (run_thread-заглушка: on_ok ровно один раз).
+- `apply_edition_to_settings` (раунды 26-27): явная admin-редакция
+  принудительно сбрасывает `network_role="admin"` и `network_user=""` —
+  наследие user-запуска (`network_role="user"`/`Миронович`) больше не
+  «прилипает» к админской версии.
+
+### 75.3 Трей в нативных exe
+
+- `main.py`: `_on_window_event` и `page.window.on_event` назначаются ДО
+  `start_tray` (frozen-окно не теряет сворачивание); при close с треем —
+  `page.window.visible = False` (сворачивание), без трея — обычный выход;
+  добавлены ASCII-print'ы `[MAIN] window close event` / `window hidden to tray`.
+- `ui/tray_icon.py::_show`: полное восстановление — `visible=True`,
+  `minimized=False`, `maximized=False`, `to_front()`, `focus()`, `update()`,
+  print `[TRAY] window restored`.
+
+### 75.4 «О программе» (текст обрезался справа)
+
+- `ui/header.py::_open_about`: контейнер диалога 520x430 -> **720x520**;
+  все пункты-строки (`Row[Icon, Text]`) получили `Text(expand=True)` —
+  текст переносится и не выходит за границы; внутренний `Column(scroll=AUTO)`
+  сохранён. Помещается на 1280x720. Тесты: smoke about28 (height<=560) +
+  about33 (width=720, expand в строках).
+
+### 75.5 User не спрашивает ФИО (appdata-наследие)
+
+- `ui/controls/controls_tab.py::_maybe_ask_identity`: диалог «Кто вы?»
+  показывается ВСЕГДА, когда в user-редакции нет ВШИТОГО
+  `edition.user_name`, — независимо от сохранённого `network_user` в
+  `controls_settings.json` (раньше проверялся settings.network_user, и
+  наследие от admin/другого user подавляло диалог).
+
+### 75.6 Проверки (раунд 33)
+
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py ui/tray_icon.py \
+    core/edition.py ui/controls/controls_tab.py \
+    ui/controls/controls_settings_modal.py core/crash_log.py   # OK
+python -c "import sys; sys.path.insert(0, '.'); \
+    from ui.controls.controls_tab import create_controls_tab; print('OK')"  # OK
+python tests/test_controls_smoke.py    # ALL OK (auth33, crash33, about33 добавлены)
+python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
+```
+
+Живая проверка (пользователь): admin exe -> пароль -> UI без серого экрана;
+трей в нативных exe («Открыть» восстанавливает окно); «О программе» — текст
+полностью виден; user-версия без вшитого ФИО всегда спрашивает «Кто вы?».

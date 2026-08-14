@@ -4694,6 +4694,77 @@ def main():
         except OSError:
             pass
 
+    # auth33: при наличии page.run_thread (реальный Flet) on_ok вызывается
+    # ОТЛОЖЕННО и ровно один раз (диалог успевает закрыться до построения UI)
+    _edp33 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
+    os.makedirs(os.path.dirname(_edp33), exist_ok=True)
+    with open(_edp33, "w", encoding="utf-8") as _f33:
+        json.dump({"role": "admin", "password_hash": _ph26("1")}, _f33,
+                  ensure_ascii=False)
+    try:
+        os.environ["PORAYONKA_EDITION"] = "admin"
+        os.environ.pop("PORAYONKA_ADMIN_PASSWORD", None)
+        _le23(force=True)
+        ok33 = {"v": 0}
+
+        class _Pg33(PageStub):
+            def run_thread(self, handler, *args, **kw):
+                # имитация Flet: handler выполняется в отдельном потоке
+                import threading as _th33
+                t = _th33.Thread(target=handler, args=args, kwargs=kw)
+                t.start()
+                t.join()
+
+        pg33 = _Pg33()
+        _gate26(pg33, on_ok=lambda: ok33.__setitem__("v", ok33["v"] + 1))
+        tf33 = [c for c in walk(pg33.dialogs[-1]) if isinstance(c, ft.TextField)]
+        btns33 = {getattr(c, "text", None): c for c in walk(pg33.dialogs[-1])
+                  if isinstance(c, (ft.ElevatedButton, ft.TextButton))}
+        tf33[0].value = "1"
+        btns33["Войти"].on_click(None)
+        btns33["Войти"].on_click(None)
+        check("auth33: on_ok через run_thread - ровно один раз, диалог закрыт",
+              ok33["v"] == 1 and not pg33.dialogs, f"v={ok33['v']}")
+    finally:
+        os.environ.pop("PORAYONKA_EDITION", None)
+        _le23(force=True)
+        try:
+            os.remove(_edp33)
+        except OSError:
+            pass
+
+    # crash33: файловый лог необработанных исключений (frozen console=False)
+    from core.crash_log import install_crash_hook as _ich33
+    import traceback as _tb33
+    _logp33 = os.path.join(_TEST_APPDATA, "porayonka", "error.log")
+    try:
+        os.remove(_logp33)
+    except OSError:
+        pass
+    _old_hook33 = sys.excepthook
+    try:
+        _ich33()
+        _hook_a33 = sys.excepthook
+        _ich33()  # повторный вызов — идемпотентен
+        check("crash33: excepthook установлен (идемпотентно)",
+              callable(_hook_a33) and sys.excepthook is _hook_a33)
+        # симулируем НЕОБРАБОТАННОЕ исключение: вызываем hook напрямую
+        try:
+            _hook_a33(ValueError, ValueError("test-crash-33"), None)
+        except Exception:
+            pass
+        check("crash33: исключение записано в %APPDATA%/porayonka/error.log",
+              os.path.exists(_logp33)
+              and "test-crash-33" in open(_logp33, encoding="utf-8").read())
+    finally:
+        sys.excepthook = _old_hook33
+        try:
+            os.remove(_logp33)
+        except OSError:
+            pass
+    check("crash33: main.py вызывает install_crash_hook первой строкой",
+          "install_crash_hook()" in open(main23, encoding="utf-8").read())
+
     # задача 6: «Настройка формы» только на «Зональных»; задача 7: «О программе»
     from ui.header import create_compact_header as _hdr26
     pg26h = PageStub()
@@ -4929,8 +5000,21 @@ def main():
                and getattr(c, "scroll", None) is not None] if dlgA28 is not None else []
     check("about28: контент с явной высотой + внутренний скролл",
           contA28 is not None and getattr(contA28, "height", None) is not None
-          and getattr(contA28, "height", 0) <= 480 and len(colsA28) >= 1,
+          and getattr(contA28, "height", 0) <= 560 and len(colsA28) >= 1,
           f"h={getattr(contA28, 'height', None)} cols={len(colsA28)}")
+    # Раунд 33 (задача 1.3): «О программе» — ширина увеличена (720), текст
+    # пунктов переносится (expand в Row), помещается на 1280x720
+    check("about33: «О программе» - ширина диалога увеличена до 720",
+          contA28 is not None and getattr(contA28, "width", None) == 720,
+          f"w={getattr(contA28, 'width', None)}")
+    _about_rows33 = [r for r in walk(dlgA28) if isinstance(r, ft.Row)
+                     and any(isinstance(i, ft.Icon) and getattr(i, "name", None) == ft.icons.CHECK
+                             for i in walk(r))]
+    check("about33: тексты пунктов переносятся (expand в Row)",
+          len(_about_rows33) >= 6
+          and all(any(isinstance(t, ft.Text) and getattr(t, "expand", None)
+                      for t in walk(r)) for r in _about_rows33),
+          f"rows={len(_about_rows33)}")
 
     # задачи 6-7: настройки без управления справочниками + секция пароля
     from ui.controls.controls_settings_modal import (

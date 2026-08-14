@@ -8,6 +8,15 @@ import flet as ft
 from datetime import datetime
 from typing import List
 
+# Раунд 33 (задача 1.1): файловый лог необработанных исключений —
+# в frozen-сборках console=False падения не видны, пишем в
+# %APPDATA%/porayonka/error.log. ДО всех остальных импортов/вызовов.
+try:
+    from core.crash_log import install_crash_hook
+    install_crash_hook()
+except Exception:
+    pass
+
 # ── Ядро ────────────────────────────────────────────────────────
 from core.data import (
     load_departments,
@@ -398,27 +407,11 @@ def _main_impl(page: ft.Page) -> None:
 
     page.update()
 
-    # Раунд 23 (задача 2): значок в системном трее («Открыть»/«Выход») —
-    # приложение живёт в трее и всегда на слуху (pystray — опциональная
-    # зависимость сборки; без неё — просто работаем без трея).
-    # Раунд 26 (задача 2): в web-режиме трей стартует один раз в _entry()
-    # с URL сервера (main() вызывается на КАЖДУЮ браузерную сессию —
-    # второй значок не нужен); здесь сессии только получают ссылку на иконку
-    # для balloon-уведомлений по срокам.
-    try:
-        import os as _os26
-        if _os26.environ.get("PORAYONKA_WEB"):
-            from ui.tray_icon import get_active_icon
-            page._tray_icon = get_active_icon()
-        else:
-            from ui.tray_icon import start_tray
-            page._tray_icon = start_tray(page)
-    except Exception:
-        pass
-
-    # Сохранение при закрытии окна (страховка в дополнение к autosave)
+    # Раунд 33 (задача 1.2/2.4): обработчик закрытия окна назначается ДО
+    # старта трея — в frozen-сборке иначе окно «теряет» сворачивание в трей.
     def _on_window_event(e):
         if e.data == "close":
+            print("[MAIN] window close event")
             # Сохраняем данные всегда (страховка в дополнение к autosave)
             try:
                 save_departments(departments)
@@ -437,6 +430,7 @@ def _main_impl(page: ft.Page) -> None:
                 try:
                     page.window.visible = False
                     page.update()
+                    print("[MAIN] window hidden to tray")
                 except Exception:
                     pass
             else:
@@ -457,6 +451,24 @@ def _main_impl(page: ft.Page) -> None:
     except Exception:
         # fallback for older API — deprecated path
         page.on_window_event = _on_window_event
+
+    # Раунд 23 (задача 2): значок в системном трее («Открыть»/«Выход») —
+    # приложение живёт в трее и всегда на слуху (pystray — опциональная
+    # зависимость сборки; без неё — просто работаем без трея).
+    # Раунд 26 (задача 2): в web-режиме трей стартует один раз в _entry()
+    # с URL сервера (main() вызывается на КАЖДУЮ браузерную сессию —
+    # второй значок не нужен); здесь сессии только получают ссылку на иконку
+    # для balloon-уведомлений по срокам.
+    try:
+        import os as _os26
+        if _os26.environ.get("PORAYONKA_WEB"):
+            from ui.tray_icon import get_active_icon
+            page._tray_icon = get_active_icon()
+        else:
+            from ui.tray_icon import start_tray
+            page._tray_icon = start_tray(page)
+    except Exception:
+        pass
 
 
 # ────────────────────────────────────────────────────────────────

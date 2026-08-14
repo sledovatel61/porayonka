@@ -99,12 +99,19 @@ def start_tray(page=None, title: str = "Пораёнка — Контроли",
             print(f"[TRAY] open browser error: {e}")
             return
         try:
-            # Раунд 32 (задача 2): окно могло быть скрыто/свёрнуто при
-            # закрытии крестиком — полностью восстанавливаем.
+            # Раунд 32/33: окно могло быть скрыто/свёрнуто при закрытии
+            # крестиком — полностью восстанавливаем (frozen-сборки: пробуем
+            # focus/maximized=False как дополнительные меры).
             page.window.visible = True
             page.window.minimized = False
+            page.window.maximized = False
             page.window.to_front()
             page.update()
+            try:
+                page.window.focus()
+            except Exception:
+                pass
+            print("[TRAY] window restored")
         except Exception as e:
             print(f"[TRAY] show window error: {e}")
 

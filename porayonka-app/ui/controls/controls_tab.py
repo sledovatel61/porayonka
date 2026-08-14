@@ -5101,10 +5101,14 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         контроли («при установке пишем ФИО пользователя»). Отмены нет:
         без ФИО алармы и read-only привязка бессмысленны.
         Раунд 26 (задача 3): on_done вызывается после успешного выбора ФИО
-        (инициализация таблицы откладывается до этого момента)."""
+        (инициализация таблицы откладывается до этого момента).
+        Раунд 33 (задача 1.4): диалог показывается ВСЕГДА, когда в user-
+        редакции нет ВШИТОГО ФИО (edition.user_name) — даже если
+        %APPDATA%\\porayonka\\controls_settings.json помнит network_user
+        от предыдущего запуска (иначе «наследие» admin/другого user)."""
         if not edition_user:
             return
-        if (settings.get("network_user") or "").strip():
+        if (edition.get("user_name") or "").strip():
             return
         names = get_all_people_names(settings)
         ident_dd = ft.Dropdown(label="Ваша фамилия", width=340,

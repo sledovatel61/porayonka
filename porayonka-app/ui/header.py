@@ -163,9 +163,12 @@ def create_compact_header(
             # Раунд 28 (задача 5): текст обрезался при 1280x720 — ограничиваем
             # высоту и даём внутренний скролл (просто Column(scroll=AUTO) внутри
             # фиксированной высоты — легально по AGENTS §15.11).
+            # Раунд 33 (задача 1.3): больше места + внутренний скролл —
+            # текст больше не обрезается справа (скрин «Не помещается текст
+            # в о программе.png»). Помещается на 1280x720.
             content=ft.Container(
-                width=520,
-                height=430,
+                width=720,
+                height=520,
                 content=ft.Column(
                     scroll=ft.ScrollMode.AUTO,
                     controls=[
@@ -187,43 +190,50 @@ def create_compact_header(
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
                             ft.Text("Три вкладки: «Следственные отделы», "
                                     "«Зональные криминалисты», «Контроли»",
-                                    size=12, color=COLORS["text_secondary"]),
+                                    size=12, color=COLORS["text_secondary"],
+                                    expand=True),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
                             ft.Text("Контроли: сроки, пункты, исполнители, "
                                     "вложения, архив, импорт/экспорт Excel",
-                                    size=12, color=COLORS["text_secondary"]),
+                                    size=12, color=COLORS["text_secondary"],
+                                    expand=True),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
                             ft.Text("Две редакции: администраторская (полная, "
                                     "с паролем) и пользовательская (просмотр)",
-                                    size=12, color=COLORS["text_secondary"]),
+                                    size=12, color=COLORS["text_secondary"],
+                                    expand=True),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
                             ft.Text("Сетевая синхронизация контролей через "
                                     "общую папку",
-                                    size=12, color=COLORS["text_secondary"]),
+                                    size=12, color=COLORS["text_secondary"],
+                                    expand=True),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
                             ft.Text("Напоминания о сроках контроля: "
                                     "у пользователей каждые 2 часа, "
                                     "у администраторов — раз в день",
-                                    size=12, color=COLORS["text_secondary"]),
+                                    size=12, color=COLORS["text_secondary"],
+                                    expand=True),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
                             ft.Text("Системный трей и автозапуск; web-режим "
                                     "для Windows 7 (работа в браузере)",
-                                    size=12, color=COLORS["text_secondary"]),
+                                    size=12, color=COLORS["text_secondary"],
+                                    expand=True),
                         ], spacing=6, tight=True),
                         ft.Row(controls=[
                             ft.Icon(ft.icons.CHECK, size=14, color=COLORS["received"]),
                             ft.Text("Экспорт сводки в Excel для руководства",
-                                    size=12, color=COLORS["text_secondary"]),
+                                    size=12, color=COLORS["text_secondary"],
+                                    expand=True),
                         ], spacing=6, tight=True),
                         ft.Container(height=12),
                         ft.Text(

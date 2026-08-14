@@ -33,5 +33,13 @@ from main import _entry, _ensure_console_streams
 # → uvicorn.logging падает ('NoneType'.isatty). Чиним ДО старта сервера.
 _ensure_console_streams()
 
+# Раунд 33 (задача 1.1): файловый лог необработанных исключений (frozen
+# console=False). Явно — на случай, если main.py импортируется иначе.
+try:
+    from core.crash_log import install_crash_hook
+    install_crash_hook()
+except Exception:
+    pass
+
 if __name__ == "__main__":
     _entry()

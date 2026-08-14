@@ -59,16 +59,19 @@ def show_admin_password_gate(page, on_ok, ed=None) -> bool:
     # подряд (как FilePicker-result в раунде 21) — без флага on_ok вызывался
     # бы повторно и _main_impl строил бы таблицу ВТОРОЙ раз («тускло/дважды»,
     # см. design/screenshots/13.08.2026/Пароль не принимается.png).
+    # Раунд 33 (задача 1.1): _closed — то же, отдельным флагом по промпту.
     _submitted = {"v": False}
+    _closed = {"v": False}
 
     def _force_close_dialog():
-        """Раунд 32 (задача 1): ГАРАНТИРОВАННО закрыть модальный диалог.
+        """Раунд 32/33: ГАРАНТИРОВАННО закрыть модальный диалог.
 
         В Flet 0.23.2 page.close(dlg) выставляет dlg.open=False и делает
-        update(), но на живом клиенте диалог может остаться видимым
-        (повторное событие submit/клик «перекрывало» закрытие). Пробуем
-        КОМБИНАЦИЮ: page.close + dlg.open=False + снятие диалога из
-        offstage-списка страницы + page.update()."""
+        update(), но в frozen-сборке (console=False) очередь update может
+        не сброситься — диалог остаётся в overlay и «серый экран» (окно
+        не отрисовывает UI). Пробуем ВСЕ способы: page.close + dlg.open=False
+        + снятие из _Page__offstage.controls + page.overlay.remove +
+        page.update()."""
         try:
             page.close(dlg)
         except Exception:
@@ -84,12 +87,42 @@ def show_admin_password_gate(page, on_ok, ed=None) -> bool:
         except Exception:
             pass
         try:
+            ov = getattr(page, "overlay", None)
+            if ov is not None and dlg in ov:
+                ov.remove(dlg)
+        except Exception:
+            pass
+        try:
             page.update()
         except Exception:
             pass
 
+    def _call_ok_after_close():
+        """on_ok() после гарантированного закрытия диалога.
+
+        Если у страницы есть run_thread (реальный Flet) — откладываем вызов
+        на ~0.1 с в фоновом потоке: клиент успевает обработать закрытие
+        диалога ДО того, как _main_impl начнёт строить UI (иначе в
+        frozen-сборке UI рисовался «серым» под незакрытым диалогом).
+        В тестовых заглушках (PageStub) run_thread нет — on_ok синхронно."""
+        try:
+            rt = getattr(page, "run_thread", None)
+            if callable(rt):
+                def _delayed(_=None):
+                    import time
+                    time.sleep(0.1)
+                    try:
+                        on_ok()
+                    except Exception:
+                        pass
+                rt(_delayed, None)
+                return
+        except Exception:
+            pass
+        on_ok()
+
     def _try(e=None):
-        if _submitted["v"]:
+        if _submitted["v"] or _closed["v"]:
             return
         ok = False
         try:
@@ -98,28 +131,28 @@ def show_admin_password_gate(page, on_ok, ed=None) -> bool:
             ok = False
         if ok:
             _submitted["v"] = True
+            _closed["v"] = True
+            print("[AUTH] parol prinyat - zakryvayu dialog")
             _force_close_dialog()
             # Раунд 30 (задача 1): закрытие уходит на клиент ДО построения
             # UI (иначе _main_impl своими update() «перекрывал» бы закрытие,
             # и таблица рисовалась тусклой под диалогом).
-            on_ok()
+            _call_ok_after_close()
         else:
             # «Если пароль неверный — приложение закрывается» (промпт, задача 5)
             _submitted["v"] = True
+            _closed["v"] = True
             print("[AUTH] nevernyj parol - vyhod")
             _force_close_dialog()
             _close_app(page)
 
     def _quit(e=None):
-        if _submitted["v"]:
+        if _submitted["v"] or _closed["v"]:
             return
         _submitted["v"] = True
+        _closed["v"] = True
         print("[AUTH] otkaza ot vvoda - vyhod")
-        try:
-            page.close(dlg)
-            page.update()
-        except Exception:
-            pass
+        _force_close_dialog()
         _close_app(page)
 
     pw_tf.on_submit = _try
