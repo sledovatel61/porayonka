@@ -5290,3 +5290,41 @@ python tests/test_network_stress.py                                # ALL OK, 104
 2. **`Порайонка_Пользователь.exe`** — при отсутствии вшитого ФИО показывает «Кто вы?», трей работает, роль user.
 3. **`Порайонка_Пользователь_Web.exe`** — web-вход, «Кто вы?» при отсутствии вшитого ФИО, трей с меню «Открыть в браузере».
 4. При переключении admin ↔ user на одной машине: admin exe не подхватывает `network_user` из appdata; user exe всегда спрашивает ФИО, если он не вшит в установщик.
+
+
+---
+
+## 77. Вкладка «Контроли» — раунд 35 (в работе)
+
+**Дата:** 2026-08-14. **Статус:** промпт запушен в `main`, передан агенту.
+**Промпт:** `porayonka-app/PROMPT_контроли_доработка35.md`.
+
+### 77.1 Цели раунда 35
+н1. **Починить user-дистрибутив, открывающийся как admin:** при установке `Порайонка_Пользователь.exe` на ПК пользователя (Авакян) открылась admin-редакция (видны «Импорт Excel», «Удалить все», секция пароля в настройках). Нужна диагностика `load_edition()`/`_app_dir()`, защита user-редакции от appdata-наследия, физическое удаление admin-кнопок из тулбара user.
+2. **Сетевой режим включён по умолчанию:** `DEFAULT_SETTINGS["network_enabled"] = True`, миграция старых настроек, для user-редакции переключатель сети — read-only/disabled.
+3. **Убрать секцию «Пароль администратора» из настроек** (и user, и admin — пароль входа отключён в раунде 34).
+4. **Починить трей в admin-версии:** после закрытия окна крестиком трей должен появляться и «Открыть» восстанавливать окно.
+5. **User без вшитого ФИО всегда спрашивает «Кто вы?»**, игнорируя `network_user` из `%APPDATA%`.
+6. **Аудит экспорта Excel 1:1 с эталоном** `LLM/14.08.2026/Контроли ОКРИМ.xlsx` vs `controls_20260814_135024.xlsx`: заголовки, ширины, высоты, форматы дат, wrap, подсветка, автофильтр. Устранить расхождения, инструмент — `tools/audit_excel.py`.
+
+### 77.2 База для агента
+
+- `main` коммит `7f20c87` (раунд 34).
+- Excel-файлы для аудита: `porayonka-app v2 DARK final/LLM/14.08.2026/Контроли ОКРИМ.xlsx` и `controls_20260814_135024.xlsx`.
+- Ограничения: Flet 0.23.2, без новых зависимостей, ASCII `print()`, русский UI, `#AARRGGBB`, layout-правила §15.11/§22.
+
+### 77.3 Проверки после внедрения
+
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py ui/tray_icon.py \
+  core/edition.py core/controls_data.py ui/controls/controls_tab.py \
+  ui/controls/controls_settings_modal.py core/controls_exporter.py \
+  tools/audit_excel.py
+python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
+python tests/test_controls_smoke.py
+python tests/test_network_stress.py
+python tools/audit_excel.py
+```
+
+Затем `build_all_distributives.bat` → проверка `dist_all/*/edition.json` → живые тесты admin/user/web на разных ПК.
