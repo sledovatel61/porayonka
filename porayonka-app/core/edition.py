@@ -174,7 +174,8 @@ def load_edition(force: bool = False) -> dict:
         return _mk(env_role, user_name, True, password, password_hash, "env")
 
     # 2) edition.json ryadom s exe - ABSOLYuTNYJ prioritet (bez merge s appdata)
-    data = _read_edition_file(app_dir / "edition.json")
+    main_f = app_dir / "edition.json"
+    data = _read_edition_file(main_f)
     if data:
         r = str(data.get("role") or "").strip().lower()
         if r in (EDITION_ADMIN, EDITION_USER):
@@ -184,6 +185,12 @@ def load_edition(force: bool = False) -> dict:
                        str(data.get("password") or "").strip(),
                        str(data.get("password_hash") or "").strip(),
                        "app_dir")
+    elif main_f.exists():
+        # Файл рядом с exe есть, но НЕВАЛИДЕН (например, сборочный bat записал
+        # \n как текст) — не падаем в appdata fallback, чтобы старый user-файл
+        # в %APPDATA% не переопределял дистрибутив. Считаем такой exe admin.
+        print(f"[EDITION] WARN: {main_f} exists but invalid JSON, using default admin")
+        return _mk(EDITION_ADMIN, "", True, "", "", "app_dir.invalid")
     # 3) edition.json.bak ryadom s exe
     data = _read_edition_file(app_dir / "edition.json.bak")
     if data:

@@ -46,7 +46,7 @@ if errorlevel 1 (
     echo [ОШИБКА] Сборка админского дистрибутива не удалась.
     exit /b 1
 )
-python -c "import pathlib; pathlib.Path('dist_admin/edition.json').write_text('{\\n  \"role\": \"admin\"\\n}', encoding='utf-8')"
+python -c "import pathlib, json; pathlib.Path('dist_admin/edition.json').write_text(json.dumps({'role': 'admin'}, ensure_ascii=False, indent=2), encoding='utf-8')"
 echo OK - dist_admin\Порайонка_Админ.exe
 echo.
 
@@ -59,7 +59,7 @@ if errorlevel 1 (
     echo [ОШИБКА] Сборка пользовательского дистрибутива не удалась.
     exit /b 1
 )
-python -c "import pathlib; pathlib.Path('dist_user/edition.json').write_text('{\\n  \"role\": \"user\"\\n}', encoding='utf-8')"
+python -c "import pathlib, json; pathlib.Path('dist_user/edition.json').write_text(json.dumps({'role': 'user'}, ensure_ascii=False, indent=2), encoding='utf-8')"
 echo OK - dist_user\Порайонка_Пользователь.exe
 echo.
 
@@ -72,7 +72,7 @@ if errorlevel 1 (
     echo [ОШИБКА] Сборка web-дистрибутива не удалась.
     exit /b 1
 )
-python -c "import pathlib; pathlib.Path('dist_web/edition.json').write_text('{\\n  \"role\": \"user\"\\n}', encoding='utf-8')"
+python -c "import pathlib, json; pathlib.Path('dist_web/edition.json').write_text(json.dumps({'role': 'user'}, ensure_ascii=False, indent=2), encoding='utf-8')"
 copy /y "start_web_win7.bat" "dist_web\start_web_win7.bat" >nul
 echo OK - dist_web\Порайонка_Пользователь_Web.exe
 echo.
