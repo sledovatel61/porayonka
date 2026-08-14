@@ -75,11 +75,10 @@ if errorlevel 1 (
 )
 
 :: ── Шаг 6: edition.json рядом с exe + проверка ─────────────────
-if "%PORAYONKA_USER_FIO%"=="" (
-    > "dist\edition.json" echo {"role": "user"}
-) else (
-    > "dist\edition.json" echo {"role": "user", "user_name": "%PORAYONKA_USER_FIO%"}
-)
+:: Раунд 36: edition.json пишем через python в UTF-8 (echo в cmd даёт
+:: OEM/ANSI-кодировку, и русское ФИО ломало чтение edition.json).
+set "PYFIO=%PORAYONKA_USER_FIO%"
+python -c "import pathlib,json,os; fio=os.environ.get('PYFIO','').strip(); d={'role':'user'}; d.update({'user_name':fio} if fio else {}); pathlib.Path('dist/edition.json').write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')"
 
 echo.
 if exist "dist\Порайонка_Пользователь.exe" (

@@ -1,0 +1,6 @@
+Excel audit report (2026-08-14T14:15:20.302583)
+etalon: /home/user/porayonka/Контроли ОКРИМ.xlsx
+
+No differences found.
+
+Result: OK (0 significant diffs)

@@ -81,15 +81,17 @@ begin
   if CurStep = ssPostInstall then
   begin
     { edition.json user-редакции; ФИО пустое — приложение спросит само }
+    { Раунд 36: SaveStringToUTF8File (UTF-8) — SaveStringToFile пишет }
+    { в ANSI (CP1251), и русское ФИО ломало чтение edition.json. }
     EditionPath := ExpandConstant('{app}\edition.json');
     FIO := Trim(FIOPage.Values[0]);
     if FIO <> '' then
       Json := '{ "role": "user", "user_name": "' + ReplaceQuotes(FIO) + '" }'
     else
       Json := '{ "role": "user" }';
-    SaveStringToFile(EditionPath, Json, False);
+    SaveStringToUTF8File(EditionPath, Json, False);
     { Раунд 29 (задача 8): запасная копия .bak — защита от случайного
       удаления edition.json (приложение восстановит основной из копии) }
-    SaveStringToFile(ExpandConstant('{app}\edition.json.bak'), Json, False);
+    SaveStringToUTF8File(ExpandConstant('{app}\edition.json.bak'), Json, False);
   end;
 end;

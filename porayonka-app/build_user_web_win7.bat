@@ -72,7 +72,8 @@ if errorlevel 1 (
 )
 
 :: ── Шаг 6: edition.json + start_web_win7.bat рядом с exe ───────
-> "dist\edition.json" echo {"role": "user"}
+:: Раунд 36: edition.json через python в UTF-8 (echo даёт OEM/ANSI)
+python -c "import pathlib,json; pathlib.Path('dist/edition.json').write_text(json.dumps({'role':'user'},ensure_ascii=False,indent=2),encoding='utf-8')"
 copy /y "start_web_win7.bat" "dist\start_web_win7.bat" >nul
 
 echo.
