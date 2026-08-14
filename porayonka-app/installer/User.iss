@@ -81,6 +81,8 @@ begin
   if CurStep = ssPostInstall then
   begin
     { edition.json user-редакции; ФИО пустое — приложение спросит само }
+    { Раунд 36: SaveStringToFile пишет в ANSI (CP1251 на русской Windows); }
+    { Python _read_edition_file имеет fallback на cp1251 (см. core/edition.py). }
     EditionPath := ExpandConstant('{app}\edition.json');
     FIO := Trim(FIOPage.Values[0]);
     if FIO <> '' then

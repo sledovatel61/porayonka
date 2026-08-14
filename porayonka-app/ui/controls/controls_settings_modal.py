@@ -9,7 +9,7 @@ from typing import Callable
 
 from core.constants import COLORS
 from core.controls_data import (
-    DEFAULT_SETTINGS, DEFAULT_NETWORK_PATH, get_criminalist_names,
+    DEFAULT_SETTINGS, DEFAULT_NETWORK_PATH, get_all_people_names,
 )
 from core.controls_models import short_name
 
@@ -82,7 +82,11 @@ def create_controls_settings_modal(
         bgcolor=COLORS["card"], color=COLORS["text"], width=340,
     )
 
-    criminalist_names = get_criminalist_names()
+    # Раунд 36 (задача 2): ПОЛНЫЙ справочник людей (криминалисты + дефолтные
+    # контролёры + extra_people из «Справочников») — иначе добавленный
+    # через справочники сотрудник («Толстолуцкий С.А.») не виден в dropdown
+    # «Пользователь (ФИО)» настроек.
+    criminalist_names = get_all_people_names(settings)
     current_user = settings.get("network_user", "") or ""
     # Раунд 29 (задача 10): user-редакция с ФИО, зафиксированным установщиком
     # (edition.json рядом с exe), не должна позволять смену пользователя из

@@ -5337,3 +5337,56 @@ python tools/audit_excel.py                # 0 significant diffs
 3. `Порайонка_Пользователь_Web.exe` → web, user, «Кто вы?» при первом запуске.
 4. В консоли/логе — `[EDITION] source=... role=...` (диагностика).
 5. Excel-экспорт не теряет данные по сравнению с эталоном.
+
+## 78. Раунд 36 — починка user-установщиков (кодировка edition.json) и списка ФИО в настройках
+
+### 78.1 User-установщик давал admin (кодировка edition.json)
+
+Причина: `installer/User.iss` / `UserWeb.iss` писали `edition.json` через
+Inno Setup `SaveStringToFile` в системной ANSI-кодировке (CP1251 на русской
+Windows). Русское ФИО в JSON ломало чтение как UTF-8 (UnicodeDecodeError) —
+файл считался невалидным, и раунд 35 превращал его в default admin.
+`build_user.bat`/`build_user_web_win7.bat` писали edition.json через `echo`
+cmd (OEM-кодировка) — та же проблема.
+
+Фикс:
+- `core/edition.py::_read_edition_file` — FALLBACK-КОДИРОВКИ:
+  `utf-8-sig` -> `cp1251` -> `cp866` -> `locale.getpreferredencoding()`.
+  edition.json с русским ФИО в CP1251/OEM теперь читается корректно
+  (защита для УЖЕ установленных дистрибутивов).
+- `installer/User.iss`, `installer/UserWeb.iss`: `SaveStringToFile` заменён
+  на `SaveStringToUTF8File` (Inno Setup 6 Unicode) — установщики пишут UTF-8.
+- `build_user.bat`, `build_user_web_win7.bat`: генерация edition.json через
+  `python -c ... write_text(..., encoding='utf-8')` (переменная окружения
+  PYFIO для ФИО) вместо `echo` — portable-сборки тоже UTF-8.
+  Тесты: smoke ed36 (CP1251 с русским ФИО -> user + ФИО; UTF-8-sig -> admin).
+
+### 78.2 Толстолуцкий не виден в настройках (список ФИО)
+
+Причина: `controls_settings_modal.py` использовал `get_criminalist_names()`
+(только криминалисты + дефолтные контролёры) — люди из «Справочников»
+(extra_people) не попадали в dropdown «Пользователь (ФИО)».
+
+Фикс: заменено на `get_all_people_names(settings)` (криминалисты +
+дефолтные контролёры + extra_people). Тест: smoke set36 (extra_people
+«Толстолуцкий Сергей Александрович» есть в dropdown настроек).
+
+### 78.3 Проверки (раунд 36)
+
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py ui/tray_icon.py \
+  core/edition.py core/controls_data.py ui/controls/controls_tab.py \
+  ui/controls/controls_settings_modal.py core/controls_exporter.py \
+  tools/audit_excel.py                       # OK
+python -c "import sys; sys.path.insert(0, '.'); \
+  from ui.controls.controls_tab import create_controls_tab; print('OK')"  # OK
+python tests/test_controls_smoke.py          # ALL OK (ed36, set36 добавлены)
+python tests/test_network_stress.py          # ALL OK (104 checks, 3 runs)
+python tools/audit_excel.py                  # 0 significant diffs
+```
+
+Пересборка установщиков (на Windows, оркестратором):
+`build_all_distributives.bat` -> `installer/build_installers.bat`
+(iscc.exe) — admin не трогаем; проверить
+`dist_all/Порайонка_Пользователь/edition.json` и `_Web` (UTF-8).

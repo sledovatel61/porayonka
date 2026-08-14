@@ -4917,6 +4917,51 @@ def main():
     check("id34: таблица не строится до выбора ФИО",
           len(_visible_rows(tab34)) == 0)
     os.environ.pop("PORAYONKA_EDITION", None)
+
+    # ── 90. Раунд 36: CP1251 edition.json + полный список людей в настройках ──
+    # 90а. edition.json в ANSI/CP1251 с русским ФИО читается корректно
+    import core.edition as _ed36
+    _edf36 = os.path.join(_appdir24, "edition.json")
+    try:
+        with open(_edf36, "w", encoding="cp1251") as _f36:
+            _f36.write('{ "role": "user", "user_name": "Толстолуцкий С.А." }')
+        _le23(force=True)
+        _ed36r = _le23(force=True)
+        check("ed36: edition.json в CP1251 (русское ФИО) читается как user",
+              _ed36r.get("role") == "user"
+              and _ed36r.get("user_name") == "Толстолуцкий С.А.",
+              f"{_ed36r.get('role')}/{_ed36r.get('user_name')!r}")
+        # 90б. UTF-8 (с BOM) тоже читается
+        with open(_edf36, "w", encoding="utf-8-sig") as _f36:
+            _f36.write('{ "role": "admin" }')
+        _le23(force=True)
+        _ed36b = _le23(force=True)
+        check("ed36: edition.json в UTF-8 (BOM) читается как admin",
+              _ed36b.get("role") == "admin", f"{_ed36b.get('role')}")
+    finally:
+        try:
+            os.remove(_edf36)
+        except OSError:
+            pass
+        _le23(force=True)
+    # 90в. Настройки: dropdown «Пользователь (ФИО)» содержит extra_people
+    save_settings({"network_enabled": False, "network_role": "user",
+                   "network_user": "", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True,
+                   "extra_people": ["Толстолуцкий Сергей Александрович"],
+                   "person_roles": {}, "hidden_people": []})
+    from ui.controls.controls_settings_modal import (
+        create_controls_settings_modal as _csm36)
+    _pg36 = PageStub()
+    _dlg36 = _csm36(_pg36, load_settings(), lambda m: None)
+    _opts36 = []
+    for c in walk(_dlg36):
+        if isinstance(c, ft.Dropdown) and getattr(c, "label", None) == "Пользователь (ФИО)":
+            _opts36 = [o.key for o in (c.options or [])]
+            break
+    check("set36: dropdown «Пользователь (ФИО)» содержит extra_people (Толстолуцкий)",
+          "Толстолуцкий Сергей Александрович" in _opts36,
+          f"{len(_opts36)} опций")
     _le23(force=True)
 
     # задача 6: «Настройка формы» только на «Зональных»; задача 7: «О программе»

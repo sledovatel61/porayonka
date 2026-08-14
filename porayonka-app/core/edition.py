@@ -52,14 +52,37 @@ def edition_file_candidates():
 
 
 def _read_edition_file(path: Path) -> Optional[dict]:
+    """Прочитать edition.json. Раунд 36 (задача 1): FALLBACK-КОДИРОВКИ.
+
+    Установщик Inno Setup 6 пишет edition.json через SaveStringToFile в
+    системной ANSI-кодировке (на русской Windows — CP1251). Если в JSON есть
+    русское ФИО, чтение как UTF-8 падало UnicodeDecodeError и файл считался
+    невалидным (раунд 35: -> default admin — «user-установщик даёт admin»).
+    Теперь: utf-8-sig -> cp1251 -> locale.getpreferredencoding().
+    """
+    # cp866 — OEM-кодировка консоли cmd (старые build_user.bat писали
+    # edition.json через echo). cp1251 — ANSI Inno Setup SaveStringToFile.
+    encodings = ["utf-8-sig", "cp1251", "cp866"]
     try:
-        if path.exists():
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return data
-    except (OSError, ValueError) as e:
-        print(f"[EDITION] Oshibka chteniya {path}: {e}")
+        import locale as _loc36
+        _pref = _loc36.getpreferredencoding(False)
+        if _pref and _pref.lower() not in ("utf-8", "utf8", "cp1251"):
+            encodings.append(_pref)
+    except Exception:
+        pass
+    last_err = None
+    for enc in encodings:
+        try:
+            if path.exists():
+                with open(path, "r", encoding=enc) as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except (OSError, ValueError) as e:
+            last_err = e
+            continue
+    if last_err is not None:
+        print(f"[EDITION] Oshibka chteniya {path}: {last_err}")
     return None
 
 
