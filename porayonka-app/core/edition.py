@@ -15,7 +15,13 @@ _cache: Optional[dict] = None
 
 
 def _app_dir() -> Path:
-    """Папка программы (рядом с exe в frozen-сборке / рядом с main.py в dev)."""
+    """Папка программы (рядом с exe в frozen-сборке / рядом с main.py в dev).
+
+    Раунд 34 (задача 2): в frozen onefile PyInstaller sys.executable — путь
+    к РЕАЛЬНОМУ exe, а sys._MEIPASS — временная папка распаковки. edition.json
+    лежит РЯДОМ С EXE, поэтому берём Path(sys.executable).parent, НИКОГДА не
+    _MEIPASS и не sys.argv[0] (может быть относительным/из ярлыка).
+    """
     if getattr(sys, "frozen", False):
         try:
             return Path(sys.executable).resolve().parent
@@ -58,12 +64,13 @@ def _read_edition_file(path: Path) -> Optional[dict]:
 
 
 def _self_heal_edition_files() -> None:
-    """Раунд 29 (задача 8): самовосстановление edition.json рядом с программой.
+    """Раунд 29 (задача 8) + раунд 34: самовосстановление edition.json
+    рядом с программой — ТОЛЬКО из .bak в ТОЙ ЖЕ папке.
 
     - основного файла нет, а запасная копия .bak есть -> восстановить из .bak;
-    - основной есть, а .bak нет -> создать .bak (страховка от удаления).
-    Запись может быть запрещена (Program Files) — мягко пропускаем; в
-    установщиках .bak кладётся инсталлятором.
+    НИКОГДА не копировать edition.json из %APPDATA% в папку exe (иначе
+    appdata-наследие «прилипало» бы к дистрибутиву). Запись может быть
+    запрещена (Program Files) — мягко пропускаем.
     """
     main_f = _app_dir() / "edition.json"
     bak_f = _app_dir() / "edition.json.bak"
@@ -72,9 +79,6 @@ def _self_heal_edition_files() -> None:
             import shutil
             shutil.copy2(bak_f, main_f)
             print("[EDITION] edition.json vosstanovlen iz edition.json.bak")
-        elif main_f.exists() and not bak_f.exists():
-            import shutil
-            shutil.copy2(main_f, bak_f)
     except OSError:
         pass
 
@@ -108,41 +112,55 @@ def load_edition(force: bool = False) -> dict:
     "password_hash" (base64 sha256) прокидываются как есть — используются
     парольным входом admin-редакции (ui/admin_gate.py).
 
-    Раунд 31 (задача 1): приоритет env в DEV-режиме (не frozen). Симптом:
-    `set PORAYONKA_EDITION=admin && python main.py` запрашивал пароль, потому
-    что password_hash подтягивался из %APPDATA%\\porayonka\\edition.json
-    (остался от прошлых тестов). Теперь: если env задаёт роль и приложение
-    запущено НЕ из сборки — редакция берётся ТОЛЬКО из env (role / user_name /
-    PORAYONKA_ADMIN_PASSWORD / PORAYONKA_ADMIN_PASSWORD_HASH), файлы для
-    пароля НЕ читаются; env-роль admin без env-пароля = вход без пароля
-    (как в dev было до раунда 26). В frozen-сборке приоритет по-прежнему у
-    edition.json рядом с exe (установщик определяет дистрибутив).
+    Раунд 31/32 (задача 1): в DEV-режиме (не frozen) env задаёт роль, а
+    пароль/ФИО дополняются из %APPDATA%\porayonka\edition.json, если env
+    их не задал.
+    Раунд 34 (задача 2): ПРИОРИТЕТЫ переработаны:
+      1) env (role/user_name/пароль) — ТОЛЬКО для dev/тестов (не frozen);
+      2) edition.json РЯДОМ С РЕАЛЬНЫМ exe (_app_dir) — АБСОЛЮТНЫЙ приоритет:
+         если файл существует, читается ТОЛЬКО он (appdata НЕ мержится) —
+         «Порайонка_Админ.exe» всегда admin, «Порайонка_Пользователь*.exe»
+         всегда user, независимо от %APPDATA%;
+      3) edition.json.bak рядом с exe;
+      4) edition.json в %APPDATA% — только fallback;
+      5) умолчание — admin.
+    Диагностика (ASCII): путь к exe, _MEIPASS, выбранный app_dir, источник,
+    итоговая роль/ФИО — печатаются в load_edition() для отладки на ПК.
     """
     global _cache
     if _cache is not None and not force:
         return _cache
     _self_heal_edition_files()
-    role: Optional[str] = None
-    user_name = ""
-    explicit = False
-    password = ""
-    password_hash = ""
+
+    # Раунд 34: ASCII-диагностика (frozen onefile: exe vs _MEI)
+    try:
+        print(f"[EDITION] frozen={bool(getattr(sys, 'frozen', False))} "
+              f"exe={getattr(sys, 'executable', '?')}")
+        print(f"[EDITION] MEIPASS={getattr(sys, '_MEIPASS', None)}")
+    except Exception:
+        pass
+    app_dir = _app_dir()
+    try:
+        print(f"[EDITION] app_dir={app_dir}")
+    except Exception:
+        pass
+
+    def _mk(role_, user_, expl_, pw_, pwh_, src_):
+        _cache = {"role": role_, "user_name": user_, "explicit": expl_,
+                  "password": pw_, "password_hash": pwh_}
+        try:
+            print(f"[EDITION] source={src_} role={role_} "
+                  f"user={user_ or '-'} explicit={expl_}")
+        except Exception:
+            pass
+        return _cache
+
     env_role = (os.getenv("PORAYONKA_EDITION") or "").strip().lower()
-    if env_role in (EDITION_ADMIN, EDITION_USER):
-        role = env_role
-        explicit = True
+    # 1) env - tolko dev/testy
+    if env_role in (EDITION_ADMIN, EDITION_USER) and not getattr(sys, "frozen", False):
         user_name = (os.getenv("PORAYONKA_USER") or "").strip()
         password = (os.getenv("PORAYONKA_ADMIN_PASSWORD") or "").strip()
         password_hash = (os.getenv("PORAYONKA_ADMIN_PASSWORD_HASH") or "").strip()
-    if env_role in (EDITION_ADMIN, EDITION_USER) and not getattr(sys, "frozen", False):
-        # Раунд 31 (задача 1) + раунд 32 (задача 1): DEV-режим — env задаёт
-        # РОЛЬ, но пароль берётся так: если env задаёт пароль
-        # (PORAYONKA_ADMIN_PASSWORD / PORAYONKA_ADMIN_PASSWORD_HASH) — он
-        # приоритетен (для тестов); иначе пароль читается из
-        # %APPDATA%\porayonka\edition.json (пароль, установленный через
-        # настройки приложения) — иначе `set PORAYONKA_EDITION=admin &&
-        # python main.py` не мог бы протестировать установленный пароль.
-        # user_name дополняется из appdata (выбор ФИО пользователем).
         try:
             _apd = _read_edition_file(_appdata_edition_file())
             if _apd:
@@ -153,30 +171,54 @@ def load_edition(force: bool = False) -> dict:
                     password_hash = str(_apd.get("password_hash") or "").strip()
         except Exception:
             pass
-        _cache = {"role": role, "user_name": user_name, "explicit": explicit,
-                  "password": password, "password_hash": password_hash}
-        return _cache
-    for path in edition_file_candidates():
-        if role is not None and user_name and password and password_hash:
-            break
-        data = _read_edition_file(path)
-        if not data:
-            continue
-        if role is None:
-            r = str(data.get("role") or "").strip().lower()
-            if r in (EDITION_ADMIN, EDITION_USER):
-                role = r
-                explicit = True
-        if not user_name:
-            user_name = str(data.get("user_name") or "").strip()
-        if not password:
-            password = str(data.get("password") or "").strip()
-        if not password_hash:
-            password_hash = str(data.get("password_hash") or "").strip()
-    if role is None:
-        role = EDITION_ADMIN
-    _cache = {"role": role, "user_name": user_name, "explicit": explicit,
-              "password": password, "password_hash": password_hash}
+        return _mk(env_role, user_name, True, password, password_hash, "env")
+
+    # 2) edition.json ryadom s exe - ABSOLYuTNYJ prioritet (bez merge s appdata)
+    data = _read_edition_file(app_dir / "edition.json")
+    if data:
+        r = str(data.get("role") or "").strip().lower()
+        if r in (EDITION_ADMIN, EDITION_USER):
+            return _mk(r,
+                       str(data.get("user_name") or "").strip(),
+                       True,
+                       str(data.get("password") or "").strip(),
+                       str(data.get("password_hash") or "").strip(),
+                       "app_dir")
+    # 3) edition.json.bak ryadom s exe
+    data = _read_edition_file(app_dir / "edition.json.bak")
+    if data:
+        r = str(data.get("role") or "").strip().lower()
+        if r in (EDITION_ADMIN, EDITION_USER):
+            return _mk(r,
+                       str(data.get("user_name") or "").strip(),
+                       True,
+                       str(data.get("password") or "").strip(),
+                       str(data.get("password_hash") or "").strip(),
+                       "app_dir.bak")
+    # 4) appdata - tolko fallback
+    data = _read_edition_file(_appdata_edition_file())
+    if data:
+        r = str(data.get("role") or "").strip().lower()
+        if r in (EDITION_ADMIN, EDITION_USER):
+            return _mk(r,
+                       str(data.get("user_name") or "").strip(),
+                       True,
+                       str(data.get("password") or "").strip(),
+                       str(data.get("password_hash") or "").strip(),
+                       "appdata")
+        # Файл без role, но с паролем (save_appdata_password_hash из настроек)
+        # - admin по умолчанию, пароль подхватывается (UI настроек пароля).
+        if (str(data.get("password") or "").strip()
+                or str(data.get("password_hash") or "").strip()):
+            return _mk(EDITION_ADMIN,
+                       str(data.get("user_name") or "").strip(),
+                       False,
+                       str(data.get("password") or "").strip(),
+                       str(data.get("password_hash") or "").strip(),
+                       "appdata")
+    # 5) umolchanie - admin (obratnaya sovmestimost')
+    return _mk(EDITION_ADMIN, "", False, "", "", "default")
+
     return _cache
 
 

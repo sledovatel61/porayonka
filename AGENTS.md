@@ -5229,3 +5229,64 @@ python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
 Живая проверка (пользователь): admin exe -> пароль -> UI без серого экрана;
 трей в нативных exe («Открыть» восстанавливает окно); «О программе» — текст
 полностью виден; user-версия без вшитого ФИО всегда спрашивает «Кто вы?».
+
+## 76. Раунд 34 — убран пароль admin, починен detection admin/user exe, диалог «Кто вы?»
+
+**Дата:** 2026-08-14. **Статус:** выполнен и влит в `main`. **Коммит:** `eeaaa2c` (ветка `arena/019ffa1e-porayonka`, после `main` `f5932fa`).
+
+### 76.1 Проблемы после раунда 33 (живой тест трёх exe)
+
+1. **Пароль admin не пускал.** Ввод пароля в `Порайонка_Админ.exe` не принимался, диалог не закрывался, «Выход» не работал. **Решение:** вызов `show_admin_password_gate` убран из `main.py` — admin-редакция открывает UI сразу. Код ворот (`ui/admin_gate.py`) и crash-log (`core/crash_log.py`) оставлены на будущее.
+2. **Admin exe загружался как user «Миронович».** После удаления appdata-`edition.json` admin exe всё равно открывал user-режим. **Решение:** переписан `core/edition.py` — в frozen-режиме `edition.json` рядом с **реальным exe** имеет абсолютный приоритет; appdata-файлы не мержатся и не копируются в папку exe; `_self_heal_edition_files` только восстанавливает `.bak` в той же папке.
+3. **User/web не спрашивали «Кто вы?».** Наследие `network_user` из `controls_settings.json` подавляло диалог. **Решение:** в user-редакции без вшитого `edition.user_name` диалог показывается всегда, независимо от `network_user`; таблица строится только после выбора ФИО.
+4. **Трей в нативных exe работал** — оставлен без изменений.
+5. **«О программе» помещалось** — оставлено.
+
+### 76.2 Изменения
+
+**`porayonka-app/main.py`**
+- `main()` больше не вызывает `show_admin_password_gate` — поток сразу идёт в `apply_edition_to_settings(page)` → `_main_impl(page)`.
+- Старый код ворот закомментирован как «отключено раунд 34».
+
+**`porayonka-app/core/edition.py`**
+- `_app_dir()` в frozen-режиме возвращает `Path(sys.executable).resolve().parent` (папка реального exe), не `_MEIPASS`, не `sys.argv[0]`.
+- `load_edition()`:
+  1. env (`PORAYONKA_EDITION`, `PORAYONKA_USER_NAME`) — только dev/тесты;
+  2. `edition.json` рядом с реальным exe — абсолютный приоритет (если есть, appdata не мержится);
+  3. `edition.json.bak` в той же папке;
+  4. `%APPDATA%/porayonka/edition.json` — fallback (без role, но с паролем → admin по умолчанию; для dev-режима без env-пароля читается hash из appdata);
+  5. default admin.
+- `_self_heal_edition_files()` — только восстановление `edition.json` из `.bak` в той же папке; копирование из appdata в папку exe убрано.
+- ASCII-диагностика `load_edition`: `frozen=... exe=... MEIPASS=... app_dir=... source=... role=... user=... explicit=...`.
+
+**`porayonka-app/ui/controls/controls_tab.py`**
+- `apply_edition_to_settings`: explicit admin → `network_role="admin"`, `network_user=""`; explicit user без вшитого ФИО → `network_role="user"`, `network_user=""`.
+- `_maybe_ask_identity`: диалог «Кто вы?» показывается ВСЕГДА, когда user-редакция не имеет вшитого `edition.user_name`, игнорируя `network_user` из `controls_settings.json`. Таблица строится после выбора.
+
+**`porayonka-app/tests/test_controls_smoke.py`**
+- Добавлены секции `edition34`, `edit34`, `auth34`, `id34`.
+- Правка оркестратора: `edition34: frozen _app_dir` — сравнение по `.name`/`.parent.name`, а не по строке пути (Windows `Path.resolve()` возвращает `C:\...`).
+
+**`porayonka-app/AGENTS.md`** — данный раздел.
+
+### 76.3 Проверка
+
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py \
+    ui/controls/controls_tab.py ui/controls/controls_settings_modal.py \
+    core/edition.py core/controls_data.py core/controls_models.py \
+    core/controls_notify.py core/controls_exporter.py core/crash_log.py \
+    ui/header.py ui/tray_icon.py                                  # OK
+python -c "import sys; sys.path.insert(0, '.'); \
+    from ui.controls.controls_tab import create_controls_tab; print('OK')"  # OK
+python tests/test_controls_smoke.py                                # ALL OK
+python tests/test_network_stress.py                                # ALL OK, 104 проверки, 3 прогона подряд
+```
+
+### 76.4 Живой чек-лист (три exe)
+
+1. **`Порайонка_Админ.exe`** — открывается без пароля, роль admin, без наследия user.
+2. **`Порайонка_Пользователь.exe`** — при отсутствии вшитого ФИО показывает «Кто вы?», трей работает, роль user.
+3. **`Порайонка_Пользователь_Web.exe`** — web-вход, «Кто вы?» при отсутствии вшитого ФИО, трей с меню «Открыть в браузере».
+4. При переключении admin ↔ user на одной машине: admin exe не подхватывает `network_user` из appdata; user exe всегда спрашивает ФИО, если он не вшит в установщик.

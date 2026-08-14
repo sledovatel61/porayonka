@@ -49,23 +49,29 @@ from ui.toast import show_save_toast, show_reset_toast, show_error_toast
 def main(page: ft.Page) -> None:
     """Точка входа Flet-приложения (обёртка-ворота).
 
-    Раунд 26 (задача 5): если в edition.json admin-редакции задан пароль
-    ("password_hash"/"password") — модальное окно ввода ДО построения
-    вкладок; верный пароль → обычная сборка UI (_main_impl), неверный —
-    приложение закрывается. Без пароля — сразу _main_impl.
+    Раунд 34: ввод пароля администратора ОТКЛЮЧЁН ПОЛНОСТЬЮ — живой тест
+    раунда 33 показал, что диалог не пускал в admin-приложение. Admin-
+    редакция открывается сразу. Код ворот сохранён в ui/admin_gate.py
+    (не удалять) для возможного будущего возврата.
+    Поток: main() -> _main_impl(page); применение редакции к настройкам
+    (admin сбрасывает user-наследие) — внутри create_controls_tab.
     """
     try:
         from ui.update_lock import install_update_serialization
         install_update_serialization(page)   # идемпотентно (см. раунд 20)
     except Exception:
         pass
-    try:
-        from ui.admin_gate import show_admin_password_gate
-        show_admin_password_gate(page, on_ok=lambda: _main_impl(page))
-    except Exception as ex:
-        # Ворота сломались — не блокируем запуск навсегда (fail-open).
-        print(f"[MAIN] auth gate error: {ex}")
-        _main_impl(page)
+    # Раунд 34: пароль admin отключён — сразу строим UI.
+    #
+    # Было (раунды 26-33):
+    #   try:
+    #       from ui.admin_gate import show_admin_password_gate
+    #       show_admin_password_gate(page, on_ok=lambda: _main_impl(page))
+    #   except Exception as ex:
+    #       # Ворота сломались — не блокируем запуск навсегда (fail-open).
+    #       print(f"[MAIN] auth gate error: {ex}")
+    #       _main_impl(page)
+    _main_impl(page)
 
 
 def _main_impl(page: ft.Page) -> None:

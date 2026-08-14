@@ -4624,8 +4624,13 @@ def main():
                   ed={"role": "admin"})
     check("auth26: без пароля ворот нет - on_ok синхронно (совместимость)",
           n26 is False and ok26c["v"] == 1)
-    check("auth26: main.py - ворота вызываются ДО сборки UI (_main_impl)",
-          "show_admin_password_gate" in src_main23 and "_main_impl" in src_main23)
+    # Раунд 34: пароль admin ОТКЛЮЧЁН — main.py строит UI сразу, без ворот
+    # (код ворот остался только в комментарии, ui/admin_gate.py сохранён)
+    _active34 = [ln for ln in src_main23.split("\n")
+                 if ln.strip() and not ln.strip().startswith("#")]
+    check("auth34: main.py НЕ вызывает ворота пароля - admin открывается сразу",
+          "_main_impl(page)" in src_main23
+          and not any("show_admin_password_gate" in ln for ln in _active34))
 
     # ── Раунд 32, задача 1: dev-режим — env задаёт роль, пароль из appdata ──
     from core.edition import (admin_password_required as _apr31,
@@ -4749,8 +4754,13 @@ def main():
         check("crash33: excepthook установлен (идемпотентно)",
               callable(_hook_a33) and sys.excepthook is _hook_a33)
         # симулируем НЕОБРАБОТАННОЕ исключение: вызываем hook напрямую
+        # (stderr перехватываем: штатный __excepthook__ печатает ValueError)
+        import io as _io33
+        import contextlib as _ctx33
+        _buf33 = _io33.StringIO()
         try:
-            _hook_a33(ValueError, ValueError("test-crash-33"), None)
+            with _ctx33.redirect_stderr(_buf33):
+                _hook_a33(ValueError, ValueError("test-crash-33"), None)
         except Exception:
             pass
         check("crash33: исключение записано в %APPDATA%/porayonka/error.log",
@@ -4764,6 +4774,136 @@ def main():
             pass
     check("crash33: main.py вызывает install_crash_hook первой строкой",
           "install_crash_hook()" in open(main23, encoding="utf-8").read())
+
+    # ── 89. Раунд 34: приоритеты edition (frozen exe vs appdata), сброс user ──
+    import core.edition as _ed34
+    _appdir34 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _edf34 = os.path.join(_appdir34, "edition.json")
+    _edbak34 = os.path.join(_appdir34, "edition.json.bak")
+    _edap34 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
+    _saved_exec34 = getattr(sys, "executable", None)
+    _saved_frozen34 = getattr(sys, "frozen", False)
+    try:
+        # frozen onefile: _app_dir() = папка РЕАЛЬНОГО exe, не _MEI
+        sys.frozen = True
+        sys.executable = "/fake/dist/Порайонка_Админ.exe"
+        sys._MEIPASS = "/fake/_MEI12345"
+        _ad34 = _ed34._app_dir()
+        check("edition34: frozen _app_dir = папка реального exe (не _MEI)",
+              _ad34.name == "dist" and _ad34.parent.name == "fake"
+              and "_MEI" not in str(_ad34),
+              f"{_ad34}")
+    finally:
+        if _saved_exec34 is not None:
+            sys.executable = _saved_exec34
+        else:
+            try:
+                del sys.executable
+            except AttributeError:
+                pass
+        if _saved_frozen34:
+            sys.frozen = _saved_frozen34
+        else:
+            try:
+                del sys.frozen
+            except AttributeError:
+                pass
+        try:
+            del sys._MEIPASS
+        except AttributeError:
+            pass
+    # app_dir/edition.json имеет АБСОЛЮТНЫЙ приоритет над appdata (без merge)
+    try:
+        with open(_edf34, "w", encoding="utf-8") as _f34:
+            json.dump({"role": "user", "user_name": "Миронович Д.В."}, _f34,
+                      ensure_ascii=False)
+        os.makedirs(os.path.dirname(_edap34), exist_ok=True)
+        with open(_edap34, "w", encoding="utf-8") as _f34:
+            json.dump({"role": "admin", "user_name": ""}, _f34,
+                      ensure_ascii=False)
+        _le23(force=True)
+        _ed34r = _le23(force=True)
+        check("edition34: app_dir/edition.json приоритетнее appdata",
+              _ed34r.get("role") == "user"
+              and _ed34r.get("user_name") == "Миронович Д.В."
+              and _ed34r.get("explicit") is True,
+              f"{_ed34r.get('role')}")
+    finally:
+        for _p34 in (_edf34, _edap34):
+            try:
+                os.remove(_p34)
+            except OSError:
+                pass
+        _le23(force=True)
+    # appdata-файл — fallback, если рядом с exe ничего нет
+    try:
+        os.makedirs(os.path.dirname(_edap34), exist_ok=True)
+        with open(_edap34, "w", encoding="utf-8") as _f34:
+            json.dump({"role": "user", "user_name": ""}, _f34,
+                      ensure_ascii=False)
+        _le23(force=True)
+        _ed34r = _le23(force=True)
+        check("edition34: appdata - fallback при отсутствии app_dir-файла",
+              _ed34r.get("role") == "user", f"{_ed34r.get('role')}")
+    finally:
+        try:
+            os.remove(_edap34)
+        except OSError:
+            pass
+        _le23(force=True)
+    # self-heal: из appdata в папку exe НЕ копирует (файл рядом не создаётся)
+    try:
+        os.makedirs(os.path.dirname(_edap34), exist_ok=True)
+        with open(_edap34, "w", encoding="utf-8") as _f34:
+            json.dump({"role": "user"}, _f34, ensure_ascii=False)
+        _ed34._self_heal_edition_files()
+        check("edition34: self-heal НЕ копирует appdata в папку exe",
+              not os.path.exists(_edf34))
+    finally:
+        try:
+            os.remove(_edap34)
+        except OSError:
+            pass
+    # admin (explicit) сбрасывает user-наследие в настройках
+    _st34 = {"network_role": "user", "network_user": "Миронович Д.В."}
+    os.environ["PORAYONKA_EDITION"] = "admin"
+    _le23(force=True)
+    _ch34 = _ed34.apply_edition_to_settings(_st34)
+    check("edition34: explicit admin сбрасывает network_role/user",
+          _ch34 is True and _st34.get("network_role") == "admin"
+          and not (_st34.get("network_user") or ""), f"{_st34}")
+    # user без вшитого ФИО сбрасывает network_user (диалог «Кто вы?»)
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+    _st34b = {"network_role": "admin", "network_user": "Потемкин С.А."}
+    _ch34b = _ed34.apply_edition_to_settings(_st34b)
+    check("edition34: user без ФИО сбрасывает network_user (всегда «Кто вы?»)",
+          _ch34b is True and _st34b.get("network_role") == "user"
+          and not (_st34b.get("network_user") or ""), f"{_st34b}")
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+
+    # id34: user-редакция без вшитого ФИО показывает «Кто вы?», даже если
+    # controls_settings.json помнит старого пользователя (наследие)
+    save_settings({"network_enabled": False, "network_role": "admin",
+                   "network_user": "Миронович Д.В.", "network_shared_path": "",
+                   "notify_log": {}, "notify_sound": True, "extra_people": [],
+                   "person_roles": {}, "hidden_people": []})
+    _seed_raw([_ctrl("id34a", "ИД-34", executors=["Миронович Д.В."])])
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
+    page34, tab34, _ = build(1280)
+    check("id34: user без вшитого ФИО - диалог «Кто вы?» показан (наследие игнорируется)",
+          bool(page34.dialogs)
+          and any(isinstance(t, ft.Text) and t.value == "Кто вы?"
+                  for t in walk(page34.dialogs[-1])))
+    check("id34: таблица не строится до выбора ФИО",
+          len(_visible_rows(tab34)) == 0)
+    os.environ.pop("PORAYONKA_EDITION", None)
+    _le23(force=True)
 
     # задача 6: «Настройка формы» только на «Зональных»; задача 7: «О программе»
     from ui.header import create_compact_header as _hdr26
@@ -5300,12 +5440,13 @@ def main():
             os.remove(_edfile68)
         except OSError:
             pass
-        # 5) self-heal: есть основной, нет .bak -> .bak создаётся
+        # 5) self-heal (раунд 34): ТОЛЬКО восстановление из .bak; создание
+        #    .bak из основного убрано (appdata-наследие не копируется в exe)
         with open(_edp29, "w", encoding="utf-8") as _f29:
             _f29.write('{ "role": "user" }')
         _le23(force=True)
-        check("edit29: self-heal - отсутствующий .bak создан из основного",
-              os.path.exists(_edp29 + ".bak"))
+        check("edit34: self-heal НЕ создаёт .bak из основного (раунд 34)",
+              not os.path.exists(_edp29 + ".bak"))
     finally:
         for _p29 in (_edp29, _edp29 + ".bak"):
             try:
