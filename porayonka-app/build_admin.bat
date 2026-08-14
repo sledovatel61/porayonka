@@ -53,7 +53,7 @@ echo.
 :: ── Шаг 4: Иконка exe (icon.png → icon.ico, необязательно) ─────
 echo [Шаг 4/6] Иконка из assets\icon.png (если получится)...
 python -c "from PIL import Image; Image.open('assets/icon.png').save('assets/icon.ico', sizes=[(64,64),(32,32),(16,16)])" >nul 2>&1
-if exist assets\icon.ico (echo  OK — assets\icon.ico) else (echo  .. пропуск (будет стандартная иконка))
+if exist assets\icon.ico (echo  OK — assets\icon.ico) else (echo  .. пропуск, будет стандартная иконка)
 echo.
 
 :: ── Шаг 5: Сборка exe ──────────────────────────────────────────
