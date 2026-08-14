@@ -5098,12 +5098,22 @@ def main():
         json.dump({"network_shared_path": ""}, _f29, ensure_ascii=False)
     check("net29: пустой network_shared_path - подставлен дефолт",
           _ls29().get("network_shared_path") == _DNP29)
+    # Раунд 31 hotfix: мигрируем только пути внутри локального хранилища
+    # приложения (appdata/porayonka), а не любой `C:\\...` — иначе тестовые
+    # temp-папки и намеренные локальные пути перезаписывались дефолтом.
+    _appdatapath29 = os.path.join(_TEST_APPDATA, "porayonka", "controls.json")
+    with open(_sf29, "w", encoding="utf-8") as _f29:
+        json.dump({"network_shared_path": _appdatapath29}, _f29,
+                  ensure_ascii=False)
+    check("net31: локальный appdata-путь мигрирует в дефолтный UNC",
+          _ls29().get("network_shared_path") == _DNP29,
+          f"{_ls29().get('network_shared_path')!r}")
+    # произвольный локальный путь (`D:\\...`) не трогаем
     with open(_sf29, "w", encoding="utf-8") as _f29:
         json.dump({"network_shared_path": "D:\\\\tmp\\\\custom"}, _f29,
                   ensure_ascii=False)
-    check("net31: ЛОКАЛЬНЫЙ путь (D:\\...) мигрирует в дефолтный UNC",
-          _ls29().get("network_shared_path") == _DNP29,
-          f"{_ls29().get('network_shared_path')!r}")
+    check("net31: произвольный локальный путь (D:\\...) НЕ мигрирует",
+          _ls29().get("network_shared_path") == "D:\\\\tmp\\\\custom")
     with open(_sf29, "w", encoding="utf-8") as _f29:
         json.dump({"network_shared_path": "\\\\server\\\\share\\\\custom"}, _f29,
                   ensure_ascii=False)

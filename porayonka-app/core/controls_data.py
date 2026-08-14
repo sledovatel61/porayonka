@@ -237,15 +237,17 @@ def load_settings() -> dict:
         # (например, col_widths — иначе ширины колонок терялись при перезапуске)
         for k, v in data.items():
             settings[k] = v
-        # Раунд 29 (задача 4) + раунд 31 (задача 2): ПУСТОЙ путь или явно
-        # ЛОКАЛЬНЫЙ Windows-путь (`C:\\...`, `D:\\...` — остались от старых
-        # версий) — подставить дефолтный сетевой путь и СОХРАНИТЬ настройки
-        # (миграция). Явный UNC-путь (`\\\\server\\share\\...`) и абсолютные
-        # POSIX-пути (headless-тесты с temp-каталогами) не трогаем.
-        import re as _re31
+        # Раунд 29 (задача 4) + раунд 31 (задача 2): ПУСТОЙ путь или путь
+        # внутри локального хранилища приложения (%APPDATA%\porayonka) —
+        # подставить дефолтный сетевой путь и СОХРАНИТЬ настройки (миграция).
+        # Произвольные локальные пути (`C:\\SomeFolder\\share`) НЕ трогаем:
+        # они могут быть тестовыми temp-каталогами или намеренным выбором
+        # пользователя. Явный UNC-путь (`\\\\server\\share\\...`) сохраняем.
         sp = (settings.get("network_shared_path") or "").strip()
-        _is_local_win = bool(_re31.match(r"^[A-Za-z]:[\\/]", sp))
-        if not sp or _is_local_win:
+        _data_dir = str(get_data_path()).lower().rstrip("\\/") + os.sep
+        _sp_lower = sp.lower()
+        _is_appdata_local = bool(sp and _sp_lower.startswith(_data_dir))
+        if not sp or _is_appdata_local:
             settings["network_shared_path"] = DEFAULT_NETWORK_PATH
             try:
                 save_settings(settings)

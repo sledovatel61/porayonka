@@ -5122,3 +5122,42 @@ python -c "import sys; sys.path.insert(0, '.'); \
 python tests/test_controls_smoke.py    # ALL OK (auth32, tray32, exp32 добавлены)
 python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
 ```
+
+### 74.5 Раунд 32 — доделка: починка smoke-тестов tray25/tray31
+
+**Дата:** 2026-08-13. **Статус:** выполнено, влито в `main`.  
+**Промпт:** `PROMPT_контроли_доработка32_тесты.md`.  
+**Ветка агента:** `arena/019ffa1e-porayonka`, коммит `6755c27`.  
+**Diff для переноса:** только `porayonka-app/tests/test_controls_smoke.py`, +77/−55.
+
+#### Проблема
+После раунда 32 smoke-тест падал в конце:
+```
+FAILED: tray25: мок-Windows dev-run (без frozen) - трей None,
+          tray31: dev-режим + pystray/pillow - иконка создана,
+          tray31: web-режим - меню «Открыть в браузере»,
+          tray31: повторный вызов возвращает ТОТ ЖЕ объект (singleton)
+```
+
+**Причина:** в раунде 32 трей стал работать и в dev-режиме Windows (frozen-guard снят), а тесты `tray25`/`tray31` были написаны под старое поведение «dev → None». На живой Windows-машине тесты реально запускали настоящий значок; `_ACTIVE_ICON` протекал между проверками, и фейк-модули не применялись к уже импортированному `ui.tray_icon`.
+
+#### Решение
+- Все tray-проверки изолированы через `importlib.reload(ui.tray_icon)` **внутри** мок-контекста — сбрасывается `_ACTIVE_ICON` и module-level состояние.
+- `pystray`/`PIL` подменяются фейками или блокируются (`sys.modules[...]=None`) на каждую проверку — на живом Windows тесты не стартуют настоящий значок и не зависят от установленных библиотек.
+- `tray25` актуализирован: dev-run Windows **без** `pystray`/`pillow` → мягкий `None`.
+- `tray31` актуализирован: dev-run Windows **с** фейк-библиотеками → иконка создаётся, web-меню «Открыть в браузере», singleton работает.
+- `tray32` и frozen-без-библиотек переведены на те же reload-хелперы.
+
+#### Результаты проверок
+```bash
+cd porayonka-app
+python -m py_compile main.py main_web.py ui/admin_gate.py \
+    ui/controls/controls_tab.py ui/controls/controls_settings_modal.py \
+    ui/controls/control_card_modal.py ui/tray_icon.py \
+    core/controls_data.py core/controls_models.py core/controls_notify.py \
+    core/controls_exporter.py core/edition.py                    # OK
+python -c "import sys; sys.path.insert(0, '.'); \
+    from ui.controls.controls_tab import create_controls_tab; print('OK')"  # OK
+python tests/test_controls_smoke.py    # ALL OK (tray25/tray31/tray32 зелёные)
+python tests/test_network_stress.py    # ALL OK (104 checks, 3 runs)
+```
