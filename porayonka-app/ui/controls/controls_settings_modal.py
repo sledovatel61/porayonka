@@ -58,6 +58,17 @@ def create_controls_settings_modal(
         value=bool(settings.get("network_enabled")),
         active_color=COLORS["received"], label="Сетевой режим",
     )
+    # Раунд 35 (задача 1.2): у user-редакции сеть read-only (иконка замка +
+    # текст «включён») — пользователь не может отключить синхронизацию.
+    net_switch_ro = ft.Container(
+        content=ft.Row(controls=[
+            ft.Icon(ft.icons.LOCK_OUTLINE, size=16,
+                    color=COLORS["text_secondary"]),
+            ft.Text("Сетевой режим включён", size=12, color=COLORS["text"],
+                    weight=ft.FontWeight.W_600),
+        ], spacing=8, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        visible=False,
+    )
     role_dd = ft.Dropdown(
         label="Роль",
         value=settings.get("network_role", "admin"),
@@ -157,6 +168,9 @@ def create_controls_settings_modal(
             pass
         sound_check.visible = False
         sound_user_ro.visible = True
+        # Раунд 35: сеть у user — read-only (переключатель скрыт)
+        net_switch.visible = False
+        net_switch_ro.visible = True
     path_field = ft.TextField(
         value=settings.get("network_shared_path", ""),
         label="Путь к общей папке/файлу (например \\\\SERVER\\share\\porayonka\\controls.json)",
@@ -177,158 +191,6 @@ def create_controls_settings_modal(
         size=10, color=COLORS["text_muted"],
     )
 
-    # ── Раунд 28 (задача 7): пароль администратора (только admin-редакция) ──
-    # Хранится в %APPDATA%/porayonka/edition.json как password_hash
-    # (base64 sha256 + соль) — переживает переустановку/обновление exe.
-    from core.edition import (  # noqa: E402  (локальный импорт — как в других местах)
-        load_edition, admin_password_hash, admin_password_required,
-        check_admin_password, save_appdata_password_hash,
-    )
-
-    def _pw_has() -> bool:
-        try:
-            return admin_password_required(load_edition(force=True))
-        except Exception:
-            return False
-
-    pw_status = ft.Text("", size=12, color=COLORS["text_secondary"])
-    pw_err = ft.Text("", size=11, color="#ef4444")
-    pw_old = ft.TextField(
-        label="Текущий пароль", password=True, width=260, height=40,
-        label_style=ft.TextStyle(color=COLORS["text_secondary"], size=11),
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-    )
-    pw_new = ft.TextField(
-        label="Новый пароль", password=True, width=260, height=40,
-        label_style=ft.TextStyle(color=COLORS["text_secondary"], size=11),
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-    )
-    pw_new2 = ft.TextField(
-        label="Повторите новый пароль", password=True, width=260, height=40,
-        label_style=ft.TextStyle(color=COLORS["text_secondary"], size=11),
-        border_radius=8, border_color=COLORS["border"],
-        focused_border_color=COLORS["btn_save"],
-        bgcolor=COLORS["card"], color=COLORS["text"],
-    )
-    pw_save_btn = ft.ElevatedButton(
-        "Установить пароль", height=34,
-        bgcolor=COLORS["btn_save"], color=COLORS["text_light"],
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-    )
-    pw_del_btn = ft.TextButton("Удалить пароль")
-
-    def _pw_update(ctl):
-        try:
-            ctl.update()
-        except Exception:
-            pass
-
-    def _pw_refresh():
-        has = _pw_has()
-        pw_status.value = ("Пароль установлен (запрашивается при входе)"
-                           if has else "Пароль не установлен")
-        pw_save_btn.text = "Сменить пароль" if has else "Установить пароль"
-        pw_old.visible = has
-        pw_del_btn.visible = has
-        for c in (pw_status, pw_save_btn, pw_old, pw_del_btn):
-            _pw_update(c)
-
-    def _pw_toast(msg):
-        try:
-            from ui.toast import show_toast
-            show_toast(page, msg, icon=ft.icons.CHECK_CIRCLE_OUTLINE)
-        except Exception:
-            pass
-
-    def _pw_err(msg):
-        pw_err.value = msg
-        _pw_update(pw_err)
-
-    def _pw_save(e=None):
-        has = _pw_has()
-        if has and not check_admin_password(load_edition(), pw_old.value or ""):
-            _pw_err("Неверный текущий пароль")
-            return
-        if (pw_new.value or "") != (pw_new2.value or ""):
-            _pw_err("Новый пароль и повтор не совпадают")
-            return
-        if not (pw_new.value or "").strip():
-            _pw_err("Пароль не может быть пустым (для отключения — «Удалить пароль»)")
-            return
-        if save_appdata_password_hash(admin_password_hash(pw_new.value or "")):
-            pw_err.value = ""
-            for f in (pw_old, pw_new, pw_new2):
-                f.value = ""
-                _pw_update(f)
-            _pw_refresh()
-            _pw_toast("Пароль администратора обновлён")
-        else:
-            _pw_err("Не удалось сохранить пароль (appdata недоступен)")
-
-    def _pw_delete(e=None):
-        def _yes(ev=None):
-            save_appdata_password_hash("")
-            for f in (pw_old, pw_new, pw_new2):
-                f.value = ""
-                _pw_update(f)
-            _pw_refresh()
-            _pw_toast("Пароль администратора удалён")
-            try:
-                page.close(confirm)
-            except Exception:
-                pass
-
-        def _no(ev=None):
-            try:
-                page.close(confirm)
-            except Exception:
-                pass
-
-        confirm = ft.AlertDialog(
-            modal=True,
-            bgcolor=COLORS["primary_light"],
-            title=ft.Text("Удалить пароль?", size=15, weight=ft.FontWeight.BOLD,
-                          color=COLORS["text"]),
-            content=ft.Text("Вход в администраторскую версию перестанет "
-                            "запрашивать пароль.", size=12,
-                            color=COLORS["text_secondary"]),
-            actions=[
-                ft.TextButton("Отмена", on_click=_no),
-                ft.ElevatedButton("Удалить", on_click=_yes,
-                                  bgcolor="#ef4444", color="#ffffff"),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            shape=ft.RoundedRectangleBorder(radius=12),
-        )
-        try:
-            page.open(confirm)
-        except Exception:
-            pass
-
-    pw_save_btn.on_click = _pw_save
-    pw_del_btn.on_click = _pw_delete
-    _pw_refresh()
-
-    # секция пароля — только в admin-редакции (в user её вообще нет в дереве)
-    _is_admin_edition = False
-    try:
-        _is_admin_edition = (load_edition().get("role") == "admin")
-    except Exception:
-        _is_admin_edition = False
-    # Раунд 29 (задача 3): диагностика «не вижу пароль в настройках» —
-    # фиксируем в консоли, по какой редакции принято решение (force-перечитку
-    # не делаем: load_edition уже инициализирован при старте вкладки).
-    try:
-        if not _is_admin_edition:
-            print("[SETTINGS] Parol' admin skryt: redakcija ne admin "
-                  "(load_edition role != admin)")
-    except Exception:
-        pass
-
     def _close(e=None):
         dialog.open = False
         page.update()
@@ -345,7 +207,9 @@ def create_controls_settings_modal(
         merged.update(settings or {})
         merged.update({
             "soon_days": soon,
-            "network_enabled": bool(net_switch.value),
+            # Раунд 35: у user-редакции сеть принудительно включена
+            "network_enabled": (True if _is_user_edition29
+                                else bool(net_switch.value)),
             "network_role": role_dd.value or "admin",
             # Раунд 29 (задача 10): фиксированное установщиком ФИО не подменяем
             # выбором из отключённого dropdown (оно всё равно вернулось бы
@@ -379,7 +243,8 @@ def create_controls_settings_modal(
             content=ft.Column(controls=[
                 ft.Text("Сетевой режим (локальная сеть)", size=12,
                         weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-                net_switch,
+                # Раунд 35: user — read-only «включён» вместо переключателя
+                (net_switch_ro if _is_user_edition29 else net_switch),
                 role_dd,
                 (user_dd_ro if user_dd_ro is not None else user_dd),
                 user_hint,
@@ -390,24 +255,6 @@ def create_controls_settings_modal(
             border_radius=10, padding=ft.padding.all(10),
         ),
     ]
-    if _is_admin_edition:
-        _sections.append(ft.Container(
-            content=ft.Column(controls=[
-                ft.Text("Пароль администратора", size=12,
-                        weight=ft.FontWeight.BOLD, color=COLORS["text"]),
-                pw_status,
-                pw_old,
-                pw_new,
-                pw_new2,
-                ft.Row(controls=[pw_save_btn, pw_del_btn], spacing=8,
-                       tight=True,
-                       vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                pw_err,
-            ], spacing=8, tight=True),
-            bgcolor=COLORS["card"], border=ft.border.all(1, COLORS["border"]),
-            border_radius=10, padding=ft.padding.all(10),
-        ))
-
     dialog = ft.AlertDialog(
         modal=True,
         bgcolor=COLORS["primary_light"],

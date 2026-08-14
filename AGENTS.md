@@ -5294,26 +5294,29 @@ python tests/test_network_stress.py                                # ALL OK, 104
 
 ---
 
-## 77. Вкладка «Контроли» — раунд 35 (в работе)
+## 77. Вкладка «Контроли» — раунд 35 (user-дистрибутив, сеть по умолчанию, удалён пароль, аудит Excel)
 
-**Дата:** 2026-08-14. **Статус:** промпт запушен в `main`, передан агенту.
-**Промпт:** `porayonka-app/PROMPT_контроли_доработка35.md`.
+**Дата:** 2026-08-14. **Статус:** выполнен, запушено в `arena/019ffa1e-porayonka`, коммит `8cead5a`.
 
-### 77.1 Цели раунда 35
+### 77.1 Что сделано
 
-н1. **Починить user-дистрибутив, открывающийся как admin:** при установке `Порайонка_Пользователь.exe` на ПК пользователя (Авакян) открылась admin-редакция (видны «Импорт Excel», «Удалить все», секция пароля в настройках). Нужна диагностика `load_edition()`/`_app_dir()`, защита user-редакции от appdata-наследия, физическое удаление admin-кнопок из тулбара user.
-2. **Сетевой режим включён по умолчанию:** `DEFAULT_SETTINGS["network_enabled"] = True`, миграция старых настроек, для user-редакции переключатель сети — read-only/disabled.
-3. **Убрать секцию «Пароль администратора» из настроек** (и user, и admin — пароль входа отключён в раунде 34).
-4. **User без вшитого ФИО всегда спрашивает «Кто вы?»**, игнорируя `network_user` из `%APPDATA%`.
-5. **Аудит экспорта Excel 1:1 с эталоном** `LLM/14.08.2026/Контроли ОКРИМ.xlsx` vs `controls_20260814_135024.xlsx`: заголовки, ширины, высоты, форматы дат, wrap, подсветка, автофильтр. Устранить расхождения, инструмент — `tools/audit_excel.py`.
+1. **User-дистрибутив открывался как admin.**
+   - Причина: на ПК пользователя `edition.json` рядом с exe мог отсутствовать/быть битым, а в `%APPDATA%` лежал admin-файл; `load_edition` не защищал user-редакцию от appdata-наследия.
+   - Решение: в `core/edition.py` frozen-режим использует `Path(sys.executable).resolve().parent` как app_dir; `edition.json` рядом с exe имеет абсолютный приоритет, appdata не мержится, если есть файл рядом с exe; ASCII-диагностика `[EDITION] source=... role=...` при старте. `apply_edition_to_settings`: explicit user → `network_role="user"`, `network_user=""`; admin-кнопки в user-режиме физически удалены из тулбара.
 
-### 77.2 База для агента
+2. **Сетевой режим включён по умолчанию, у user — read-only.**
+   - `DEFAULT_SETTINGS["network_enabled"] = True`; `load_settings` включает сеть, только если ключ **отсутствует** (старая установка), но не перезаписывает явный `False`.
+   - В настройках user-редакции переключатель сети скрыт, вместо него read-only строка «Сетевой режим включён»; при сохранении `network_enabled=True` форсируется. Admin переключает как раньше.
 
-- `main` коммит `7f20c87` (раунд 34).
-- Excel-файлы для аудита: `porayonka-app v2 DARK final/LLM/14.08.2026/Контроли ОКРИМ.xlsx` и `controls_20260814_135024.xlsx`.
-- Ограничения: Flet 0.23.2, без новых зависимостей, ASCII `print()`, русский UI, `#AARRGGBB`, layout-правила §15.11/§22.
+3. **Секция «Пароль администратора» удалена** из настроек (вход без пароля с раунда 34).
 
-### 77.3 Проверки после внедрения
+4. **User без вшитого ФИО всегда спрашивает «Кто вы?»**, игнорируя `network_user` из `%APPDATA%`; таблица строится только после выбора ФИО.
+
+5. **Аудит экспорта Excel.**
+   - Новый `tools/audit_excel.py`: импорт эталона `LLM/14.08.2026/Контроли ОКРИМ.xlsx` → экспорт приложения → повторный импорт (round-trip) + проверка формата (шапка, ширины, высоты, даты DD.MM.YYYY, wrap, жёлтая I только OVERDUE/TODAY, зелёная J = исполнено, автофильтр).
+   - Отчёт `tools/excel_audit_report.txt`: **0 значимых расхождений**. Незначительный нюанс round-trip — «все зональные» → «все З.» в колонке F (short_name), данные не теряются.
+
+### 77.2 Проверки
 
 ```bash
 cd porayonka-app
@@ -5322,9 +5325,15 @@ python -m py_compile main.py main_web.py ui/admin_gate.py ui/tray_icon.py \
   ui/controls/controls_settings_modal.py core/controls_exporter.py \
   tools/audit_excel.py
 python -c "import sys; sys.path.insert(0, '.'); from ui.controls.controls_tab import create_controls_tab; print('OK')"
-python tests/test_controls_smoke.py
-python tests/test_network_stress.py
-python tools/audit_excel.py
+python tests/test_controls_smoke.py        # ALL OK
+python tests/test_network_stress.py        # ALL OK, 104 проверки, 3 прогона
+python tools/audit_excel.py                # 0 significant diffs
 ```
 
-Затем `build_all_distributives.bat` → проверка `dist_all/*/edition.json` → живые тесты admin/user/web на разных ПК.
+### 77.3 Живой чек-лист перед сборкой
+
+1. `Порайонка_Админ.exe` → открывается сразу, admin, полный UI.
+2. `Порайонка_Пользователь.exe` → user, сеть включена (read-only), диалог «Кто вы?» при первом запуске, трей работает.
+3. `Порайонка_Пользователь_Web.exe` → web, user, «Кто вы?» при первом запуске.
+4. В консоли/логе — `[EDITION] source=... role=...` (диагностика).
+5. Excel-экспорт не теряет данные по сравнению с эталоном.

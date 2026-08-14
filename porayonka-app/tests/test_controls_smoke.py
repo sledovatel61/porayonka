@@ -203,6 +203,7 @@ from core.controls_data import (  # noqa: E402
     get_controller_names, get_executor_names,
     get_all_people_names, get_person_roles, set_person_roles,
     canonical_initiator_group, initiator_filter_options,
+    DEFAULT_SETTINGS,
 )
 from core.controls_models import (  # noqa: E402
     Control, OVERDUE, TODAY, SOON, IN_PROGRESS, deadline_status, name_matches,
@@ -297,6 +298,15 @@ def _seed_controls():
     data = {"schema_version": 2, "last_saved": "2026-08-05T12:00:00", "controls": controls}
     with open(get_controls_file(), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _save_off(settings_dict):
+    """Раунд 35: сохранение настроек с выключенной сетью для изолированных
+    тестов (default network_enabled=True — миграция включила бы сеть)."""
+    d = dict(settings_dict)
+    d["network_enabled"] = False
+    save_settings(d)
+    return d
 
 
 def build(width=1280, height=860):
@@ -497,6 +507,10 @@ def _header_texts19(tab):
 
 def main():
     _seed_controls()
+    # Раунд 35: сеть включена по умолчанию — первые тесты (карточка/таблица)
+    # требуют изоляции, выключаем сеть ДО первого build().
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
+               "network_shared_path": "", "notify_log": {}, "notify_sound": True})
 
     # ── 1. py_compile всех файлов вкладки ──
     files = [
@@ -774,7 +788,7 @@ def main():
     check("notify: overdue - в тот же день нет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is False)
     check("notify: overdue - на следующий день уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-06") is True)
     # round-trip журнала через настройки
-    save_settings({"notify_log": {"c1:new": "2026-08-05"}, "notify_sound": False})
+    _save_off({"notify_log": {"c1:new": "2026-08-05"}, "notify_sound": False})
     loaded = load_settings()
     check("settings: notify_log сохраняется в controls_settings.json",
           (loaded.get("notify_log") or {}).get("c1:new") == "2026-08-05")
@@ -827,7 +841,7 @@ def main():
 
     # ── 15. канонические фильтры исполнителей/контролёров (PROMPT_контроли_фильтр_исполнителей.md) ──
     # сбросить сеть, чтобы вкладка читала локальный controls.json
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True})
 
     # 15а. name_matches
@@ -993,7 +1007,7 @@ def main():
     # больше НЕ влияют на фильтры (только на списки выбора в карточке) —
     # иначе человек со снятым чипом терялся из фильтра, а его контроли падали
     # в «Прочие» (сырьё пользователя: Авакян/Агеев/Чащин в «Прочих»).
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True})
     _seed_raw([
         _ctrl("p1", "П-1", executors=["Потемкин С.А."]),
@@ -1133,7 +1147,7 @@ def main():
               f"imported={stats_e['imported']}")
 
     # ── 19. Раунд 7, задача 5: resize колонок (drag → сохранение в настройки) ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True})
     _seed_raw([_ctrl("r1", "Р-1", executors=["Семисенко И.Ю."])])
     page, tab, _ = build()
@@ -1156,7 +1170,7 @@ def main():
 
     # ── 20. Раунд 7, задача 3: «Удалить все» ──
     _seed_raw([_ctrl("d1", "Д-1", executors=["Семисенко И.Ю."])])
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {"d1:new": "2026-08-05"},
                    "notify_sound": True})
     page, tab, _ = build()
@@ -1185,7 +1199,7 @@ def main():
     check("delete_all: controls.json пуст", load_controls() == [])
     check("delete_all: notify_log очищен", not (load_settings().get("notify_log") or {}))
     # для роли user кнопка скрыта
-    save_settings({"network_enabled": False, "network_role": "user", "network_user": "Семисенко Иван Юрьевич",
+    _save_off({"network_enabled": False, "network_role": "user", "network_user": "Семисенко Иван Юрьевич",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True})
     _seed_raw([_ctrl("d2", "Д-2", executors=["Семисенко И.Ю."])])
     page, tab, _ = build()
@@ -1235,7 +1249,7 @@ def main():
           canonical_initiator_group("ГУК СК, ГУК ЮФО") == "гук,гук юфо")
 
     # ── 23. Раунд 8, задача 3: resize на ВСЕХ границах + видимые разделители ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("r8", "Р-8", executors=["Семисенко И.Ю."])])
@@ -1283,7 +1297,7 @@ def main():
           f"{len(cal_cells)} ячеек")
 
     # ── 25. Раунд 9, задача 3: редактор справочников ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "custom_initiators": []})
     _seed_raw([_ctrl("ref1", "РФ-1", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")])
@@ -1325,7 +1339,7 @@ def main():
                   idd is not None and "МВД" in [o.key for o in (idd.options or [])])
 
     # ── 26. Раунд 9, задача 4: resize карточки (размеры сохраняются) ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "card_width": 920, "card_height": 780})
     _seed_raw([_ctrl("cr1", "КР-1", executors=["Семисенко И.Ю."])])
@@ -1381,7 +1395,7 @@ def main():
                   f" saved={saved_w}x{saved_h}")
 
     # ── 27. Раунд 9, БАГ 2: разделители заголовка и строк выровнены ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("sp1", "СП-1", executors=["Семисенко И.Ю."])])
@@ -1435,7 +1449,7 @@ def main():
                           if getattr(c, "bgcolor", None) == "#e604070f"))
 
     # ── 29. Раунд 15, задача 1: ни на строке, ни на вложенных — Python-hover нет ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("h1", "Х-1", executors=["Семисенко И.Ю."])])
@@ -1470,7 +1484,7 @@ def main():
           _open_card(tab, via_add=False))
 
     # ── 31. Раунд 10, задача 3: редактирование записи в справочнике ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": ["Макаренко Роман Андреевич"], "custom_initiators": ["МВД"]})
     _seed_raw([_ctrl("r10", "Р-10", executors=["Макаренко Р.А."], controller="Потемкин С.А.")])
@@ -1511,7 +1525,7 @@ def main():
                   f"{st10.get('extra_people')}")
 
     # ── 32. Раунд 10, задача 4: уголки карточки (clip_behavior) ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("c10", "К-10", executors=["Семисенко И.Ю."])])
@@ -1558,7 +1572,7 @@ def main():
                   bodies[0].width >= 1000, f"w={bodies[0].width}")
 
     # ── 34. Раунд 13, задача 2: таблица помещается при 1280 (сумма <= 1240) ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("w1", "Ш-1", executors=["Семисенко И.Ю."])])
@@ -1673,7 +1687,7 @@ def main():
               f"w={getattr(panel15[0], 'width', None) if panel15 else None}")
 
     # ── 35. Раунд 13, задача 3: редактирование БАЗОВОЙ записи справочника сохраняется ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "custom_initiators": [],
                    "hidden_people": [], "hidden_initiators": []})
@@ -1788,7 +1802,7 @@ def main():
 
     # ── 36. Раунд 13, задача 5: прикрепление к НОВОЙ карточке без TypeError ──
     from core.controls_data import copy_attachment_to_local, copy_attachment_to_shared
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("a13", "А-13", executors=["Семисенко И.Ю."])])
@@ -1886,7 +1900,7 @@ def main():
     check("attach13: локальный фолбэк скопировал файл", rel_loc is not None)
 
     # ── 38. Раунд 14, задача 3: справочники — overlay с resize и построчным скроллом ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "custom_initiators": [],
                    "hidden_people": [], "hidden_init_groups": [], "init_renames": {}})
@@ -1997,7 +2011,7 @@ def main():
     # ── 39. Раунд 16, задача 1: левая статусная полоса — строго 4 px ──
     # В settings cобран «битый» col_widths с bar=40 — причина «больших цветных
     # блоков» на приёмке: общий кламп max(40, v) раздувал сохранённые 4 px.
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [],
                    "col_widths": {"bar": 40, "num": 50, "incoming": 200}})
@@ -2061,7 +2075,7 @@ def main():
     # Раунд 18 (задача 1): заголовок «Фильтры» слева (шрифт как «Контроли»),
     # нормальная кнопка «Сбросить фильтры», панель на всю ширину окна; даты и
     # режимы прибиты справа и не прокручиваются.
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("b17", "Б-17", executors=["Семисенко И.Ю."])])
@@ -2260,7 +2274,7 @@ def main():
           len(pr18b) == 3)
 
     # ── 43. Раунд 18, задача 3: заголовки колонок — точно как в исходной Excel ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("h18", "Ж-18", executors=["Семисенко И.Ю."])])
@@ -2285,7 +2299,7 @@ def main():
 
     # ── 44. Раунд 18, задача 4: роли person_roles + чипы «И»/«К» в справочнике ──
     from core.controls_data import (add_extra_person, rename_person, remove_person)
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     st44 = load_settings()
@@ -2328,7 +2342,7 @@ def main():
           "Тестов Т.Т." not in get_person_roles(st44b)
           and not any("Тестов" in k for k in (st44b.get("person_roles") or {})))
     # UI: чипы «И»/«К» в строке справочника
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "hidden_people": []})
     _seed_raw([_ctrl("r18", "Р-18", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")])
@@ -2412,7 +2426,7 @@ def main():
     # Регресс: extra_people по умолчанию получали ОБЕ роли, и импортированные
     # исполнители попадали в dropdown контролёров новой карточки (скрин
     # «Новая карточка, за кем контроль эти фамилии.png»).
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "", "network_shared_path": "",
                    "notify_log": {}, "notify_sound": True,
                    "extra_people": ["Авакян Арсен Артурович"],
@@ -2449,7 +2463,7 @@ def main():
               and "Чашин Эдуард Александрович" in opts86b,
               f"{opts86b}")
     # текущее значение контроля (даже вне списка контролёров) не теряется
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "", "network_shared_path": "",
                    "notify_log": {}, "notify_sound": True,
                    "extra_people": ["Авакян Арсен Артурович"],
@@ -2506,7 +2520,7 @@ def main():
     check("pers31: алармы админа содержат контроль (общий статус)",
           [c.id for c in _cac87([_c87], 3)] == ["p87"])
     # UI user-режим: счётчики/фильтры по user-статусу
-    save_settings({"network_enabled": False, "network_role": "user",
+    _save_off({"network_enabled": False, "network_role": "user",
                    "network_user": "Миронович Д.В.", "network_shared_path": "",
                    "notify_log": {}, "notify_sound": True, "extra_people": [],
                    "person_roles": {}, "hidden_people": [], "alarm_enabled": False})
@@ -2524,7 +2538,7 @@ def main():
     check("pers31: после фильтра «Скоро» контроль виден",
           "ПЕРС-87" in _visible_texts(tab87))
     # admin: фильтр «Просрочено» показывает контроль
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "", "network_shared_path": "",
                    "notify_log": {}, "notify_sound": True, "extra_people": [],
                    "person_roles": {}, "hidden_people": [], "alarm_enabled": False})
@@ -2619,7 +2633,7 @@ def main():
                 self.n += 100
             return type("R", (), {"results": lines})()
 
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": False,
                    "extra_people": []})
     _seed_raw([_ctrl("rl1", "РЛ-1", executors=["Семисенко Иван Юрьевич"], controller="Потемкин С.А."),
@@ -2718,12 +2732,12 @@ def main():
             pass
         # вернуть чистый сид для следующих секций
         _seed_controls()
-        save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+        _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                        "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                        "extra_people": []})
 
     # ── 46. Раунд 19, задача 1: действия архива переехали в карточку ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _arch46 = _ctrl("ar46", "АРХ-1", executors=["Семисенко И.Ю."], controller="Потемкин С.А.")
@@ -2792,7 +2806,7 @@ def main():
                       for c in load_controls()))
 
     # ── 47. Раунд 19, задача 2: resize в ОБЕ стороны + сохранение после «перезапуска» ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("rs19", "РС-1", executors=["Семисенко И.Ю."])])
@@ -2870,7 +2884,7 @@ def main():
           f"{sum(st.width for st in stacks47d)} vs {sum_before}")
 
     # ── 48. Раунд 19, задача 3: «Контроль исполнен» и «Исполнен пункт» ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([
@@ -3008,7 +3022,7 @@ def main():
                       "Контроль исполнен" not in btns48c and "Исполнен пункт" not in btns48c)
 
     # ── 49. Раунд 19, задача 4: скролл списков карточки + списки строго по ролям ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": []})
     _seed_raw([_ctrl("sc19", "СК-1", executors=["Семисенко И.Ю."], controller="Потемкин С.А.",
@@ -3055,7 +3069,7 @@ def main():
         check("scroll19: текущий контролёр выбран и не потерян",
               cdd49.value == "Потемкин С.А.", f"{cdd49.value}")
     # fallback ролей: если контролёров никто не отметил — DEFAULT_CONTROLLERS
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [],
                    "person_roles": {"Потемкин С.А.": [], "Чашин Э.А.": []},
@@ -3165,7 +3179,7 @@ def main():
 
     # ── 52. Раунд 20, задача 4: повторное добавление снимает hidden_people ──
     from core.controls_data import add_extra_person as _aep20
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "hidden_people": ["Гайнутдинов Станислав Игоревич"]})
     st52 = load_settings()
@@ -3180,7 +3194,7 @@ def main():
           f"{len(names52)} имён")
 
     # ── 53. Раунд 20, задача 2: перекомпоновка карточки ──────────────────────
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("c20", "ТЕСТ-20", executors=["Семисенко Иван Юрьевич"],
@@ -3221,7 +3235,7 @@ def main():
                       "scrollbar_theme", None) is not None)
 
     # ── 54. Раунд 20, задачи 1–2: автоподтягивание исполнителей, удаление пункта ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": ["Кудрявцев Василий Александрович"],
                    "person_roles": {}, "hidden_people": []})
@@ -3292,13 +3306,13 @@ def main():
         check("del20+sync20: сохранение - исполнители объединены, пункт удалён",
               bool(ok54), f"{hit54[0].executors if hit54 else 'не найден'}")
     # нейтральные настройки/данные после раунда 20
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
 
     # ── 55. Раунд 21, задача 1: восстановление скрытого («Гайнутдинов») ──────
     from core.controls_data import add_extra_person as _aep21b
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     # ловушка, сложившаяся у пользователя: ФИО одновременно в extra И в hidden
@@ -3397,7 +3411,7 @@ def main():
         check("import21: сквозной импорт .xlsx без исключений", False)
 
     # ── 58. Раунд 21, задача 3: пересборка пунктов не затирает черновик ─────
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("c21", "ТЕСТ-21")])
@@ -3461,7 +3475,7 @@ def main():
         for i, (a, d) in enumerate([("Гайнутдинов С.И.", "2026-08-31"),
                                     ("Бережной К.Н.", "2026-08-31"),
                                     ("Грубников Г.Г.", "2026-08-28")], 1)])])
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     page, tab, _ = build(1280)
@@ -3674,7 +3688,7 @@ def main():
           _s22h.due_date == "2026-08-31")
 
     # ── 64. Раунд 22, задачи 1/2 (UI): жёлтая кнопка мульти-выбор + сдвиг ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("u22", "Ю-22", executors=["Миронович Д.В."], tasks=[
@@ -3750,7 +3764,7 @@ def main():
     # ── 65. Раунд 22, задача 2 (UI): импорт присваивает id сразу ───────────
     try:
         from openpyxl import Workbook as _Wb22
-        save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+        _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                        "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                        "extra_people": [], "person_roles": {}, "hidden_people": []})
         _seed_raw([])   # пустая база — «удалил и заново импортировал»
@@ -3807,7 +3821,7 @@ def main():
     # ── 66. Раунд 22, задача 4: «Прочие» — человек вне справочника ─────────
     # Кейс пользователя: в справочнике 16 криминалистов, чип «И» снят → человек
     # пропадал из фильтра, контроли уезжали в «Прочие».
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": ["Авакян Арсен Артурович"],
                    "person_roles": {"Авакян Арсен Артурович": ["controller"]},
@@ -3842,7 +3856,7 @@ def main():
     # ══════════════════════════════════════════════════════════════════
 
     # ── 67. Раунд 23, задача 1: вложения — мгновенно видно, крупнее, бейдж ──
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("v23", "ВЛ-23", executors=["Семисенко И.Ю."])])
@@ -3980,7 +3994,7 @@ def main():
           "x" not in pruned69 and "bad" not in pruned69 and "y" in pruned69)
 
     # ── 70. Раунд 23, задача 2: user-редакция — READ-ONLY карточка ─────────
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("ro23", "РО-23", executors=["Семисенко И.Ю."], tasks=[
@@ -4040,7 +4054,7 @@ def main():
 
     # ── 71. Раунд 23, задача 2: user — обязательный выбор ФИО ──────────────
     _seed_raw([_ctrl("id23", "ФИО-23", executors=["Семисенко И.Ю."])])
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     os.environ["PORAYONKA_EDITION"] = "user"   # ФИО не задано → спросит
@@ -4073,7 +4087,7 @@ def main():
     _le23(force=True)
 
     # ── 72. Раунд 23, задача 2: «злой» аларм срока (диалог + журнал) ───────
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": False,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([
@@ -4887,7 +4901,7 @@ def main():
 
     # id34: user-редакция без вшитого ФИО показывает «Кто вы?», даже если
     # controls_settings.json помнит старого пользователя (наследие)
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "Миронович Д.В.", "network_shared_path": "",
                    "notify_log": {}, "notify_sound": True, "extra_people": [],
                    "person_roles": {}, "hidden_people": []})
@@ -4939,7 +4953,7 @@ def main():
           _ntf26("test") is False)
 
     # ── 76. Раунд 26, задача 3: «Кто вы?» ДО отрисовки таблицы ────────────
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("s26a", "СВОЙ-26", executors=["Семисенко И.Ю."]),
@@ -5002,7 +5016,7 @@ def main():
           and '{ "role": "user" }' in usr_iss and '{ "role": "user" }' in web_iss)
 
     # задача 2: user-редакция поверх устаревших admin-настроек
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "Потемкин Сергей Анатольевич",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
@@ -5026,7 +5040,7 @@ def main():
     _le23(force=True)
 
     # задача 2: user-редакция БЕЗ ФИО - чужой network_user сбрасывается до диалога
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "Потемкин Сергей Анатольевич",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
@@ -5054,7 +5068,7 @@ def main():
     _le23(force=True)
 
     # задача 2: явная admin-редакция после user-настроек - полный функционал
-    save_settings({"network_enabled": False, "network_role": "user",
+    _save_off({"network_enabled": False, "network_role": "user",
                    "network_user": "Семисенко Иван Юрьевич",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
@@ -5071,7 +5085,7 @@ def main():
     _le23(force=True)
 
     # задача 3: web-установщик уже записал ФИО в {app}/edition.json - не спрашивать
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("w28", "ВЕБ-28", executors=["Семисенко И.Ю."])])
@@ -5105,7 +5119,7 @@ def main():
           any("ВЕБ-28" in t for t in rows28), f"{rows28[:6]}")
 
     # задача 4: вложение - content секции ПОЛНОСТЬЮ заменяется (forced rebuild)
-    save_settings({"network_enabled": False, "network_role": "admin", "network_user": "",
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [], "person_roles": {}, "hidden_people": []})
     _seed_raw([_ctrl("a28", "АТТ-28", executors=["Семисенко И.Ю."])])
@@ -5179,59 +5193,33 @@ def main():
     check("set28: уведомления и сетевой режим на месте",
           any(t == "Уведомления" for t in mtexts28)
           and any("Сетевой режим (локальная сеть)" in t for t in mtexts28))
-    check("set28: секция «Пароль администратора» (admin-редакция)",
-          any("Пароль администратора" in t for t in mtexts28)
-          and any("Пароль не установлен" in t for t in mtexts28))
-    # установка пароля из настроек
-    flds28 = {getattr(f, "label", None): f for f in walk(dlgm28)
-              if isinstance(f, ft.TextField) and getattr(f, "label", None)}
-    flds28["Новый пароль"].value = "секрет28"
-    flds28["Повторите новый пароль"].value = "секрет28"
-    setb28 = [b for b in walk(dlgm28) if isinstance(b, ft.ElevatedButton)
-              and getattr(b, "text", None) == "Установить пароль"]
-    setb28[0].on_click(None)
-    ed28f = _le23(force=True)
-    check("set28: пароль установлен (appdata edition.json -> password_hash)",
-          _apr28(ed28f) is True and bool(ed28f.get("password_hash")))
-    check("set28: статус сменился на «Пароль установлен»",
-          any("Пароль установлен" in str(getattr(t, "value", ""))
-              for t in walk(dlgm28) if isinstance(t, ft.Text)))
-    # смена с неверным текущим - отказ
-    chgb28 = [b for b in walk(dlgm28) if isinstance(b, ft.ElevatedButton)
-              and getattr(b, "text", None) == "Сменить пароль"]
-    flds28["Текущий пароль"].value = "неверно"
-    flds28["Новый пароль"].value = "новый28"
-    flds28["Повторите новый пароль"].value = "новый28"
-    chgb28[0].on_click(None)
-    check("set28: смена с неверным текущим отклонена",
-          _le23(force=True).get("password_hash") == ed28f.get("password_hash"))
-    # верная смена
-    flds28["Текущий пароль"].value = "секрет28"
-    chgb28[0].on_click(None)
-    ed28h = _le23(force=True)
-    check("set28: смена пароля работает",
-          ed28h.get("password_hash") != ed28f.get("password_hash")
-          and _apr28(ed28h) is True)
-    # удаление - через подтверждение
-    delb28 = [b for b in walk(dlgm28) if isinstance(b, ft.TextButton)
-              and getattr(b, "text", None) == "Удалить пароль"]
-    delb28[0].on_click(None)
-    conf28 = pgm28.dialogs[-1] if pgm28.dialogs else None
-    yes28 = [b for b in walk(conf28) if isinstance(b, ft.ElevatedButton)
-             and getattr(b, "text", None) == "Удалить"] if conf28 is not None else []
-    check("set28: удаление пароля - через подтверждающий диалог",
-          conf28 is not None and bool(yes28))
-    if yes28:
-        yes28[0].on_click(None)
-    check("set28: пароль удалён", _apr28(_le23(force=True)) is False)
-    # merge не затирает role/user_name
-    _sae23("user", "Тестовый Тест Тестович")
-    _sph28("HASH28")
-    ed28m = _le23(force=True)
-    check("set28: appdata merge - role/user_name/password_hash сосуществуют",
-          ed28m.get("role") == "user"
-          and ed28m.get("user_name") == "Тестовый Тест Тестович"
-          and ed28m.get("password_hash") == "HASH28", f"{ed28m}")
+    # Раунд 35: секция «Пароль администратора» УДАЛЕНА из настроек (и для
+    # admin, и для user — пароль входа отключён в раунде 34)
+    check("set35: в настройках НЕТ секции «Пароль администратора»",
+          not any("Пароль администратора" in t for t in mtexts28)
+          and not any("Установить пароль" in t for t in mtexts28))
+    # Раунд 35: сетевой режим по умолчанию ВКЛЮЧЁН; у user — read-only
+    _st35d = dict(DEFAULT_SETTINGS)
+    check("net35: DEFAULT_SETTINGS network_enabled=True",
+          _st35d.get("network_enabled") is True)
+    # у user-редакции переключатель сети скрыт, read-only «включён»
+    _sw35 = [c for c in walk(dlgm28) if isinstance(c, ft.Switch)
+             and getattr(c, "label", None) == "Сетевой режим"]
+    check("net35: admin - переключатель сети на месте",
+          len(_sw35) == 1)
+    os.environ["PORAYONKA_EDITION"] = "user"
+    os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
+    _le23(force=True)
+    _dlgu35 = _csm28(pgm28, dict(stm28), lambda m: None)
+    _sw35u = [c for c in walk(_dlgu35) if isinstance(c, ft.Switch)
+              and getattr(c, "label", None) == "Сетевой режим"]
+    _netro35 = [t for t in walk(_dlgu35) if isinstance(t, ft.Text)
+                and t.value == "Сетевой режим включён"]
+    check("net35: user - переключатель сети скрыт, read-only «включён»",
+          not _sw35u and len(_netro35) >= 1)
+    os.environ.pop("PORAYONKA_EDITION", None)
+    os.environ.pop("PORAYONKA_USER", None)
+    _le23(force=True)
     try:
         if os.path.exists(_edfile68):
             os.remove(_edfile68)
@@ -5307,7 +5295,7 @@ def main():
                                     load_settings as _ls29)
     check("net29: дефолтный UNC-путь задан",
           _DNP29 == r"\\192.168.0.60\общая\Гайнутдинов\Porayonka workspace")
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "", "network_shared_path": "",
                    "notify_log": {}, "notify_sound": True, "extra_people": [],
                    "person_roles": {}})
@@ -5690,7 +5678,7 @@ def main():
 
     # ── 85. Раунд 29, задачи 1-3: PDF-предпросмотр/настройки/секция пароля ──
     # задача 1: PDF в предпросмотре - явная кнопка «Открыть»
-    save_settings({"network_enabled": False, "network_role": "admin",
+    _save_off({"network_enabled": False, "network_role": "admin",
                    "network_user": "", "network_shared_path": "",
                    "notify_log": {}, "notify_sound": True, "extra_people": [],
                    "person_roles": {}, "alarm_enabled": False})
@@ -5720,10 +5708,12 @@ def main():
                                 network_user=""), lambda m: None)
     _mtxts29 = {str(getattr(t, "value", "")) for t in walk(dlgm29)
                 if isinstance(t, ft.Text)}
-    check("set29: настройки - только Уведомления/Сеть/Пароль (без справочников)",
+    # Раунд 35: секция пароля удалена полностью — в настройках только
+    # «Уведомления» и «Сетевой режим» (без справочников и без пароля)
+    check("set35: настройки - только Уведомления/Сеть (без справочников и пароля)",
           any(t == "Уведомления" for t in _mtxts29)
           and any("Сетевой режим" in t for t in _mtxts29)
-          and any("Пароль администратора" in t for t in _mtxts29)
+          and not any("Пароль администратора" in t for t in _mtxts29)
           and not any("Справочник" in t for t in _mtxts29)
           and not any("Инициаторы" in t for t in _mtxts29))
     # задача 3: user-редакция - секции пароля НЕТ в дереве
