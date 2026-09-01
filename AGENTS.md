@@ -5386,6 +5386,56 @@ python tests/test_network_stress.py          # ALL OK (104 checks, 3 runs)
 python tools/audit_excel.py                  # 0 significant diffs
 ```
 
+---
+
+## 79. Проблема: user-сборка открывается с admin-интерфейсом
+
+**Дата:** 2026-08-15. **Статус:** открыта, передано агенту.
+
+### 79.1 Симптом
+
+`Порайонка_Пользователь.exe` (user-сборка, `build_user.bat` + `Porayonka_User.spec`) запускается с полным админским интерфейсом:
+- Видны кнопки «Добавить контроль», «Импорт Excel», «Удалить все», «Справочники»
+- Карточка контроля редактируется (должна быть read-only)
+- Редакция определяется как `admin` вместо `user`
+
+### 79.2 Текущая логика определения редакции
+
+`core/edition.py::load_edition()` — порядок приоритета:
+1. env `PORAYONKA_EDITION`/`PORAYONKA_USER` (только dev/тесты)
+2. `edition.json` рядом с exe — **абсолютный приоритет** (раунд 34)
+3. `edition.json.bak` рядом с exe
+4. `%APPDATA%/porayonka/edition.json` — fallback
+5. Умолчание — `admin`
+
+`apply_edition_to_settings()` в `ui/controls/controls_tab.py` принудительно ставит `network_role` и скрывает/показывает UI.
+
+### 79.3 Гипотезы причин
+
+1. **`_app_dir()` возвращает не ту папку в frozen onefile** — `Path(sys.executable).resolve().parent` может указывать на `_MEIPASS` вместо папки с exe
+2. **`edition.json` не попадает рядом с exe** — `build_user.bat` кладёт его в `dist/`, но при копировании дистрибутива пользователю файл теряется
+3. **`%APPDATA%/porayonka/edition.json` побеждает** — приоритет appdata выше ожидаемого, перезаписывает user-редакцию
+4. **Кодировка/формат `edition.json`** — файл читается как невалидный, срабатывает fallback на admin
+
+### 79.4 Что нужно сделать (промпт агенту)
+
+См. `PROMPT_fix_user_installer.md` в корне репозитория.
+
+Обязательные задачи:
+1. Диагностика в `load_edition()` и `create_controls_tab`: пути, наличие файлов, итоговая роль
+2. Проверка `_app_dir()` в frozen-сборке
+3. Гарантированное размещение `edition.json` рядом с exe при копировании
+4. Приоритет явного `edition.json` с `role: "user"` над appdata
+
+### 79.5 Ограничения
+
+- Flet 0.23.2
+- Не ломать admin-сборку
+- print() — только ASCII
+- UI-текст — русский
+
+---
+
 Пересборка установщиков (на Windows, оркестратором):
 `build_all_distributives.bat` -> `installer/build_installers.bat`
 (iscc.exe) — admin не трогаем; проверить
