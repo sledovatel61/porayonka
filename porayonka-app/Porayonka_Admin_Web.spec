@@ -1,16 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Раунд 24 (задача 2): PyInstaller spec — WEB-обёртка для Windows 7
-# (пользовательская редакция).
+# Раунд 37 (задача 3): PyInstaller spec — WEB-обёртка для Windows 7,
+# АДМИНСКАЯ редакция (импорт/редактирование контролей через браузер).
 #
-# Сборка:  build_user_web_win7.bat
-#          (pyinstaller Porayonka_User_Web.spec --noconfirm --clean)
-# Результат: dist\Порайонка_Пользователь_Web.exe + dist\edition.json
-# {"role": "user"} + dist\start_web_win7.bat
+# Сборка:  build_admin_web_win7.bat
+#          (pyinstaller Porayonka_Admin_Web.spec --noconfirm --clean)
+# Результат: dist\Порайонка_Админ_Web.exe + dist\edition.json
+# {"role": "admin"} + dist\start_web_win7.bat
 #
 # Вход — main_web.py: ставит PORAYONKA_WEB=1 (без трея/автозапуска) и
-# PORAYONKA_EDITION=user, затем запускает main.py --web --host 0.0.0.0
-# --port 8555 → локальный web-сервер + автооткрытие браузера (Win7:
-# Chrome/Firefox; нативный клиент Flet на Win7 не работает).
+# запускает main.py --web --host 0.0.0.0 --port 8555 → локальный web-сервер
+# + автооткрытие браузера (Win7: Chrome/Firefox; нативный клиент Flet на
+# Win7 не работает). Роль НЕ задаётся env с раунда 37 — берётся из
+# edition.json рядом с exe / встроенного в бандл (build_edition).
 import os
 
 _flet_hooks = []
@@ -36,9 +37,9 @@ except Exception:
 _icon = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
 
 # Раунд 37: ВСТРОЕННЫЙ edition.json — build-скрипт заранее пишет
-# build_edition/edition.json (роль дистрибутива: user); файл попадает в
+# build_edition/edition.json (роль дистрибутива: admin); файл попадает в
 # корень папки распаковки _MEIPASS — идентичность сборки не теряется, даже
-# если рядом лежащий edition.json не доехал до машины пользователя.
+# если рядом лежащий edition.json не доехал до машины администратора.
 _edition_datas = []
 if os.path.exists("build_edition/edition.json"):
     _edition_datas = [("build_edition/edition.json", ".")]
@@ -79,7 +80,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="Порайонка_Пользователь_Web",
+    name="Порайонка_Админ_Web",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

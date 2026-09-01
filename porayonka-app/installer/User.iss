@@ -56,6 +56,15 @@ Filename: "{app}\Порайонка_Пользователь.exe"; Description: 
 var
   FIOPage: TInputQueryWizardPage;
 
+procedure SaveStringToUTF8File(const FileName, Value: String; Append: Boolean);
+var
+  Lines: TArrayOfString;
+begin
+  SetArrayLength(Lines, 1);
+  Lines[0] := Value;
+  SaveStringsToUTF8File(FileName, Lines, Append);
+end;
+
 procedure InitializeWizard();
 begin
   FIOPage := CreateInputQueryPage(wpSelectTasks,
@@ -65,11 +74,36 @@ begin
   FIOPage.Add('ФИО:', False);
 end;
 
-function ReplaceQuotes(const S: String): String;
+function Hex4(Value: Integer): String;
 begin
-  StringChangeEx(S, '\', '\\', True);
-  StringChangeEx(S, '"', '\"', True);
-  Result := S;
+  Result := Copy('0123456789abcdef', (Value div 4096) mod 16 + 1, 1) +
+            Copy('0123456789abcdef', (Value div 256) mod 16 + 1, 1) +
+            Copy('0123456789abcdef', (Value div 16) mod 16 + 1, 1) +
+            Copy('0123456789abcdef', Value mod 16 + 1, 1);
+end;
+
+function JsonEscape(const S: String): String;
+{ Раунд 37, приёмка: ФИО превращаем в ЧИСТЫЙ ASCII-JSON: кириллица и прочие
+  не-ASCII символы -> \uXXXX (IntToHex, 4 знака). Так edition.json валиден
+  при ЛЮБОЙ кодировке записи (UTF-8/ANSI/OEM) — проблема русского ФИО из
+  раунда 36 закрыта окончательно и не зависит от функции записи Inno. }
+var
+  I: Integer;
+  C: Integer;
+begin
+  Result := '';
+  for I := 1 to Length(S) do
+  begin
+    C := Ord(S[I]);
+    if C = 92 then
+      Result := Result + '\\'
+    else if C = 34 then
+      Result := Result + '\"'
+    else if (C >= 32) and (C <= 126) then
+      Result := Result + Chr(C)
+    else
+      Result := Result + '\u' + Hex4(C);
+  end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -81,17 +115,17 @@ begin
   if CurStep = ssPostInstall then
   begin
     { edition.json user-редакции; ФИО пустое — приложение спросит само }
-    { Раунд 36: SaveStringToFile пишет в ANSI (CP1251 на русской Windows); }
-    { Python _read_edition_file имеет fallback на cp1251 (см. core/edition.py). }
+    { Раунд 37: запись СТРОГО в UTF-8 (SaveStringToUTF8File, Inno 6.1+); }
+    { содержимое к тому же чистый ASCII благодаря JsonEscape (см. выше). }
     EditionPath := ExpandConstant('{app}\edition.json');
     FIO := Trim(FIOPage.Values[0]);
     if FIO <> '' then
-      Json := '{ "role": "user", "user_name": "' + ReplaceQuotes(FIO) + '" }'
+      Json := '{ "role": "user", "user_name": "' + JsonEscape(FIO) + '" }'
     else
       Json := '{ "role": "user" }';
-    SaveStringToFile(EditionPath, Json, False);
+    SaveStringToUTF8File(EditionPath, Json, False);
     { Раунд 29 (задача 8): запасная копия .bak — защита от случайного
       удаления edition.json (приложение восстановит основной из копии) }
-    SaveStringToFile(ExpandConstant('{app}\edition.json.bak'), Json, False);
+    SaveStringToUTF8File(ExpandConstant('{app}\edition.json.bak'), Json, False);
   end;
 end;

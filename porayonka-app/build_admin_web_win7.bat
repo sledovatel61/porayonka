@@ -5,14 +5,14 @@ cls
 
 echo.
 echo ╔══════════════════════════════════════════════════════════════════╗
-echo ║  СБОРКА — ПОРАЙОНКА: ПОЛЬЗОВАТЕЛЬ WEB (для Windows 7)            ║
+echo ║  СБОРКА — ПОРАЙОНКА: АДМИН WEB (для Windows 7)                   ║
 echo ╚══════════════════════════════════════════════════════════════════╝
 echo.
-echo  Раунд 24 (задача 2): нативный клиент Flet на Win7 не работает
+echo  Раунд 37 (задача 3): нативный клиент Flet на Win7 не работает
 echo  (нужен Win10+), поэтому собирается exe-обёртка, которая поднимает
 echo  web-сервер (main_web.py → main.py --web --host 0.0.0.0 --port 8555)
-echo  и открывает браузер. Редакция фиксируется: user (PORAYONKA_EDITION +
-echo  edition.json рядом с exe).
+echo  и открывает браузер. Редакция: АДМИН (полная, edition.json
+echo  {"role": "admin"} рядом с exe + встроенный внутрь exe).
 echo.
 
 :: ── Шаг 1: Проверить Python ────────────────────────────────────
@@ -61,10 +61,10 @@ if exist assets\icon.ico (echo  OK — assets\icon.ico) else (echo  .. проп�
 echo.
 
 :: ── Шаг 5: Сборка exe ──────────────────────────────────────────
-:: Раунд 37: ВСТРОЕННЫЙ edition.json (роль user запечатается ВНУТРИ exe) —
+:: Раунд 37: ВСТРОЕННЫЙ edition.json (роль admin запечатается ВНУТРИ exe) —
 :: перенос portable-сборки без рядом лежащих файлов редакцию не теряет.
 if exist build_edition rmdir /s /q build_edition
-python -c "import pathlib,json; pathlib.Path('build_edition').mkdir(exist_ok=True); pathlib.Path('build_edition/edition.json').write_text(json.dumps({'role':'user'},ensure_ascii=False,indent=2),encoding='utf-8')"
+python -c "import pathlib,json; pathlib.Path('build_edition').mkdir(exist_ok=True); pathlib.Path('build_edition/edition.json').write_text(json.dumps({'role':'admin'},ensure_ascii=False,indent=2),encoding='utf-8')"
 if errorlevel 1 (
     echo.
     echo  [ОШИБКА] Не удалось записать build_edition\edition.json!
@@ -103,8 +103,8 @@ if errorlevel 1 (
 )
 echo  OK — api-ms-win-core-path-l1-1-0.dll (x64, SHA256 проверен) будет в бандле
 echo.
-echo [Шаг 5/6] PyInstaller Porayonka_User_Web.spec (3-7 минут)...
-pyinstaller Porayonka_User_Web.spec --noconfirm --clean --log-level WARN
+echo [Шаг 5/6] PyInstaller Porayonka_Admin_Web.spec (3-7 минут)...
+pyinstaller Porayonka_Admin_Web.spec --noconfirm --clean --log-level WARN
 if errorlevel 1 (
     echo.
     echo  [ОШИБКА] Сборка завершилась с ошибкой! См. вывод выше.
@@ -114,11 +114,10 @@ if errorlevel 1 (
 )
 
 :: ── Шаг 6: edition.json + start_web_win7.bat + DLL рядом с exe ─
-:: Раунд 36: edition.json через python в UTF-8 (echo даёт OEM/ANSI)
-:: Раунд 37: + запасная копия .bak (self-heal) + DLL-стаб рядом с exe
-:: (папка exe — первое место поиска зависимостей python311.dll);
-:: build_edition чистим.
-python -c "import pathlib,json; pathlib.Path('dist/edition.json').write_text(json.dumps({'role':'user'},ensure_ascii=False,indent=2),encoding='utf-8')"
+:: Раунд 37: edition.json через python в UTF-8 + запасная копия .bak
+:: (self-heal core/edition.py) + DLL-стаб рядом с exe (папка exe — первое
+:: место поиска зависимостей python311.dll); build_edition чистим.
+python -c "import pathlib,json; pathlib.Path('dist/edition.json').write_text(json.dumps({'role':'admin'},ensure_ascii=False,indent=2),encoding='utf-8')"
 copy /y "dist\edition.json" "dist\edition.json.bak" >nul
 copy /y "start_web_win7.bat" "dist\start_web_win7.bat" >nul
 if exist "assets\win7\api-ms-win-core-path-l1-1-0.dll" (
@@ -127,21 +126,21 @@ if exist "assets\win7\api-ms-win-core-path-l1-1-0.dll" (
 if exist build_edition rmdir /s /q build_edition
 
 echo.
-if exist "dist\Порайонка_Пользователь_Web.exe" (
+if exist "dist\Порайонка_Админ_Web.exe" (
     echo ╔══════════════════════════════════════════════════════════════╗
     echo ║                   OK — СБОРКА УСПЕШНА!                       ║
     echo ╚══════════════════════════════════════════════════════════════╝
     echo.
-    echo  Файл:      dist\Порайонка_Пользователь_Web.exe
-    echo  Редакция:  dist\edition.json  {"role": "user"}
+    echo  Файл:      dist\Порайонка_Админ_Web.exe
+    echo  Редакция:  dist\edition.json  {"role": "admin"} (+ встроенная)
     echo  Запуск:    dist\start_web_win7.bat  (или сам exe)
     echo.
     echo  Установка на Win7: скопируйте ВСЮ папку dist на машину
-    echo  пользователя и запускайте start_web_win7.bat — откроется
+    echo  администратора и запускайте start_web_win7.bat — откроется
     echo  браузер (Chrome/Firefox) с приложением.
     explorer dist
 ) else (
-    echo  [ОШИБКА] Файл dist\Порайонка_Пользователь_Web.exe не найден!
+    echo  [ОШИБКА] Файл dist\Порайонка_Админ_Web.exe не найден!
 )
 echo.
 pause

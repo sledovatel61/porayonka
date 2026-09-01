@@ -57,6 +57,19 @@ if exist assets\icon.ico (echo  OK — assets\icon.ico) else (echo  .. проп�
 echo.
 
 :: ── Шаг 5: Сборка exe ──────────────────────────────────────────
+:: Раунд 37: ВСТРОЕННЫЙ edition.json — spec кладёт его внутрь exe
+:: (_MEIPASS). Идентичность сборки больше не теряется при переносе:
+:: даже если рядом лежащий edition.json забудут скопировать, роль
+:: известна из самого exe (см. core/edition.py, источник "embedded").
+if exist build_edition rmdir /s /q build_edition
+python -c "import pathlib,json; pathlib.Path('build_edition').mkdir(exist_ok=True); pathlib.Path('build_edition/edition.json').write_text(json.dumps({'role':'admin'},ensure_ascii=False,indent=2),encoding='utf-8')"
+if errorlevel 1 (
+    echo.
+    echo  [ОШИБКА] Не удалось записать build_edition\edition.json!
+    echo.
+    pause
+    exit /b 1
+)
 echo [Шаг 5/6] PyInstaller Porayonka_Admin.spec (3-7 минут)...
 pyinstaller Porayonka_Admin.spec --noconfirm --clean --log-level WARN
 if errorlevel 1 (
@@ -68,7 +81,11 @@ if errorlevel 1 (
 )
 
 :: ── Шаг 6: edition.json рядом с exe + проверка ─────────────────
-> "dist\edition.json" echo {"role": "admin"}
+:: Раунд 37: edition.json + запасная копия .bak пишем через python в UTF-8
+:: (echo в cmd даёт OEM/ANSI-кодировку — раунд 36). build_edition чистим.
+python -c "import pathlib,json; pathlib.Path('dist/edition.json').write_text(json.dumps({'role':'admin'},ensure_ascii=False,indent=2),encoding='utf-8')"
+copy /y "dist\edition.json" "dist\edition.json.bak" >nul
+if exist build_edition rmdir /s /q build_edition
 
 echo.
 if exist "dist\Порайонка_Админ.exe" (

@@ -9,8 +9,9 @@
 # Перед запуском фиксируются:
 #   PORAYONKA_WEB=1        — web-режим (трей/автозапуск пропускаются);
 #   PORAYONKA_EDITION=user — read-only пользовательская редакция (setdefault:
-#                            явное переопределение окружением допустимо для
-#                            диагностики).
+#                            ТОЛЬКО dev-запуск; в frozen exe роль задаёт
+#                            edition.json рядом/встроенный — раунд 37, чтобы
+#                            общий вход работал и для admin web-сборки Win7).
 # Дальше управление — общему входу main.py (`_entry()`), чтобы и dev-запуск,
 # и frozen-бандл (Porayonka_User_Web.spec) работали одинаково: в frozen
 # физического main.py на диске нет, поэтому НЕ runpy, а обычный импорт.
@@ -18,7 +19,12 @@ import os
 import sys
 
 os.environ["PORAYONKA_WEB"] = "1"
-os.environ.setdefault("PORAYONKA_EDITION", "user")
+# Раунд 37: env PORAYONKA_EDITION — только для dev-запуска `python
+# main_web.py`. В frozen-сборках env игнорируется (раунд 34), а роль берётся
+# из edition.json рядом/встроенного — иначе web-сборка АДМИНА для Win7
+# тоже становилась бы «user» по этому setdefault.
+if not getattr(sys, "frozen", False):
+    os.environ.setdefault("PORAYONKA_EDITION", "user")
 
 if "--web" not in sys.argv:
     sys.argv.insert(1, "--web")

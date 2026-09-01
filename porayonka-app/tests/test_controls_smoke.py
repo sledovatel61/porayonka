@@ -2015,7 +2015,13 @@ def main():
                    "network_shared_path": "", "notify_log": {}, "notify_sound": True,
                    "extra_people": [],
                    "col_widths": {"bar": 40, "num": 50, "incoming": 200}})
-    _seed_raw([_ctrl("b16", "Б-16", executors=["Семисенко И.Ю."])])
+    # Раунд 37 (задача 1): ДАТО-НЕЗАВИСИМЫЙ сид — дефолтный _ctrl с
+    # due_date=2026-09-01 ломал проверку цвета полосы, когда «сегодня»
+    # достигало/перешагивало эту дату (статус TODAY/OVERDUE вместо ожидаемого
+    # IN_PROGRESS). Ставим далёкое будущее — in_progress на любой дате.
+    _c16s = _ctrl("b16", "Б-16", executors=["Семисенко И.Ю."])
+    _c16s["due_date"] = "2099-12-31"
+    _seed_raw([_c16s])
     page, tab, _ = build()
     st16 = load_settings()
     check("bar16: устаревший ключ bar вычищен из col_widths при старте",
@@ -5776,6 +5782,304 @@ def main():
                  if isinstance(t, ft.TextField)}
     check("set29: placeholder пути - дефолтный UNC \\\\192.168.0.60",
           any("192.168.0.60" in h for h in _mhints29))
+
+    # ── 91. Раунд 37: редакция переживает перенос дистрибутива ──────────────
+    # Кейс жалобы «Порайонка_Пользователь.exe открывает admin-интерфейс» —
+    # edition.json терялся при копировании portable-сборки, а умолчание было
+    # admin. Теперь: ВСТРОЕННЫЙ edition.json внутри exe + правило имени exe +
+    # identity-mismatch против appdata-наследия (см. core/edition.py).
+    import core.edition as _ed91
+    _t91 = tempfile.mkdtemp(prefix="porayonka_ed91_")
+    _dist91 = os.path.join(_t91, "dist")
+    _mei91 = os.path.join(_t91, "_MEI91")
+    os.makedirs(_dist91)
+    os.makedirs(_mei91)
+    _ap91 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
+    _sv_exe91 = sys.executable
+    _sv_fr91 = getattr(sys, "frozen", None)
+
+    def _frozen91(name):
+        sys.frozen = True
+        sys.executable = os.path.join(_dist91, name)
+        sys._MEIPASS = _mei91
+
+    def _unfrozen91():
+        sys.executable = _sv_exe91
+        if _sv_fr91 is None:
+            try:
+                del sys.frozen
+            except AttributeError:
+                pass
+        else:
+            sys.frozen = _sv_fr91
+        try:
+            del sys._MEIPASS
+        except AttributeError:
+            pass
+
+    def _clean91():
+        for _pp in (os.path.join(_dist91, "edition.json"),
+                    os.path.join(_dist91, "edition.json.bak"),
+                    os.path.join(_mei91, "edition.json"),
+                    _ap91):
+            try:
+                os.remove(_pp)
+            except OSError:
+                pass
+
+    def _json91(path, d):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as _f91:
+            json.dump(d, _f91, ensure_ascii=False)
+
+    try:
+        _clean91()
+        # 1) перенос без edition.json: embedded внутри exe спасает, appdata=admin
+        _json91(os.path.join(_mei91, "edition.json"), {"role": "user"})
+        _json91(_ap91, {"role": "admin", "user_name": "Начальников Н.Н."})
+        _frozen91("Порайонка_Пользователь.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: перенос без edition.json - роль user из ВСТРОЕННОЙ копии",
+              _r91.get("role") == "user" and _r91.get("explicit") is True,
+              f"{_r91.get('source')}:{_r91.get('role')}")
+        check("ed37: self-heal восстановил edition.json рядом с exe из embedded",
+              os.path.isfile(os.path.join(_dist91, "edition.json")))
+        check("ed37: appdata=admin НЕ перебил встроенную user-редакцию",
+              _r91.get("role") == "user")
+        # 2) потеряны ВСЕ файлы: имя exe vs appdata (mismatch) - имя побеждает
+        _clean91()
+        _ed91.load_edition(force=True)
+        _json91(_ap91, {"role": "admin"})
+        _frozen91("Порайонка_Пользователь.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: exe «Пользователь» + appdata=admin - имя exe победило (user)",
+              _r91.get("role") == "user" and _r91.get("user_name") == "",
+              f"{_r91.get('source')}:{_r91.get('role')}:{_r91.get('user_name')!r}")
+        _json91(_ap91, {"role": "user", "user_name": "Иванов И.И."})
+        _frozen91("Порайонка_Админ.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: exe «Админ» + appdata=user - имя exe победило (admin), чужое ФИО не унаследовано",
+              _r91.get("role") == "admin" and _r91.get("user_name") == "")
+        # 3) нейтральное имя: appdata-fallback полностью (старое поведение)
+        _frozen91("Porayonka.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: нейтральное имя exe - appdata-fallback с ФИО (совместимость)",
+              _r91.get("role") == "user" and _r91.get("user_name") == "Иванов И.И.")
+        # 4) имя совпадает с appdata-rолью: ФИО из appdata подхватывается
+        _frozen91("Порайонка_Пользователь.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: совпадающие имя/appdata - ФИО из appdata подхватывается",
+              _r91.get("role") == "user" and _r91.get("user_name") == "Иванов И.И.")
+        # 5) нет файлов вообще + нейтральное имя -> умолчание admin non-explicit
+        _clean91()
+        _ed91.load_edition(force=True)
+        _frozen91("Porayonka.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: нет файлов + нейтральное имя - умолчание admin (non-explicit)",
+              _r91.get("role") == "admin" and _r91.get("explicit") is False)
+        # 6) нет файлов + exe «Пользователь» -> user explicit (правило имени)
+        _frozen91("Порайонка_Пользователь.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: нет файлов + exe «Пользователь» - user по имени (explicit)",
+              _r91.get("role") == "user" and _r91.get("explicit") is True)
+        # 7) БИТЫЙ edition.json + exe «Пользователь» -> user (не падаем в admin)
+        with open(os.path.join(_dist91, "edition.json"), "w",
+                  encoding="utf-8") as _f91w:
+            _f91w.write("{не json")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: БИТЫЙ edition.json у «Пользователя» - роль user (имя exe), не admin",
+              _r91.get("role") == "user", f"{_r91.get('source')}:{_r91.get('role')}")
+        # 8) БИТЫЙ edition.json + нейтральное имя -> admin explicit (совместимость)
+        _frozen91("Porayonka.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: БИТЫЙ edition.json + нейтральное имя - admin explicit (совместимость)",
+              _r91.get("role") == "admin" and _r91.get("explicit") is True)
+        # 9) валидный файл рядом с exe важнее ИМЕНИ exe (абсолютный приоритет)
+        _clean91()
+        _json91(os.path.join(_dist91, "edition.json"),
+                {"role": "user", "user_name": "Петров П.П."})
+        _frozen91("Порайонка_Админ.exe")
+        _r91 = _ed91.load_edition(force=True)
+        check("ed37: edition.json рядом с exe - АБСОЛЮТНЫЙ приоритет (важнее имени exe)",
+              _r91.get("role") == "user" and _r91.get("user_name") == "Петров П.П.")
+        # 10) файловый debug-лог диагностики (frozen GUI: stdout невидим)
+        _log91 = os.path.join(_TEST_APPDATA, "porayonka", "edition_debug.log")
+        _l91 = ""
+        if os.path.isfile(_log91):
+            with open(_log91, encoding="utf-8") as _fl91:
+                _l91 = _fl91.read()
+        check("ed37: edition_debug.log записан (source/role/пути)",
+              "source=" in _l91 and "role=" in _l91 and "app_dir=" in _l91)
+    finally:
+        _clean91()
+        _unfrozen91()
+        _ed91.load_edition(force=True)
+
+    # ── 92. Раунд 37: сборочные файлы — 4 дистрибутива + Win7 DLL + 4 .iss ──
+    _ad92 = _appdir24
+    specA92 = ""
+    _sp92 = os.path.join(_ad92, "Porayonka_Admin_Web.spec")
+    if os.path.isfile(_sp92):
+        specA92 = open(_sp92, encoding="utf-8").read()
+    check("build37: Porayonka_Admin_Web.spec - exe «Порайонка_Админ_Web», вход main_web.py",
+          bool(specA92) and 'name="Порайонка_Админ_Web"' in specA92
+          and '"main_web.py"' in specA92)
+    check("build37: ВСЕ spec встраивают edition.json ВНУТРЬ exe (datas build_edition)",
+          "build_edition/edition.json" in adm24 and "build_edition/edition.json" in usr24
+          and "build_edition/edition.json" in web24 and "build_edition/edition.json" in specA92)
+    check("build37: web-specs несут Win7 DLL-стаб условно в бандл (_MEIPASS)",
+          "assets/win7/api-ms-win-core-path-l1-1-0.dll" in web24
+          and "assets/win7/api-ms-win-core-path-l1-1-0.dll" in specA92)
+    batA92 = ""
+    _bta92 = os.path.join(_ad92, "build_admin_web_win7.bat")
+    if os.path.isfile(_bta92):
+        batA92 = open(_bta92, encoding="utf-8").read()
+    check("build37: build_admin_web_win7.bat - admin web-spec + launcher + DLL-стаб",
+          bool(batA92) and "Porayonka_Admin_Web.spec" in batA92
+          and "start_web_win7.bat" in batA92 and '"role": "admin"' in batA92
+          and "api-ms-win-core-path-l1-1-0.dll" in batA92)
+    check("build37: build-баты пишут build_edition ДО pyinstaller",
+          "build_edition/edition.json" in bat_adm24 and "build_edition/edition.json" in bat_usr24
+          and "build_edition/edition.json" in bat_web24 and "build_edition/edition.json" in batA92)
+    check("build37: build-баты кладут edition.json.bak рядом (self-heal)",
+          "edition.json.bak" in bat_adm24 and "edition.json.bak" in bat_usr24
+          and "edition.json.bak" in bat_web24 and "edition.json.bak" in batA92)
+    all92 = ""
+    _alp92 = os.path.join(_ad92, "build_all_distributives.bat")
+    if os.path.isfile(_alp92):
+        all92 = open(_alp92, encoding="utf-8").read()
+    check("build37: build_all_distributives - 4-я ступень «Админ Web» (dist_admin_web)",
+          "Порайонка_Админ_Web" in all92 and "Porayonka_Admin_Web.spec" in all92
+          and "dist_admin_web" in all92)
+    check("build37: build_all_distributives - DLL в web-дистрибутивы + build_edition на ступень",
+          "api-ms-win-core-path-l1-1-0.dll" in all92
+          and "build_edition/edition.json" in all92)
+    issA92 = ""
+    _isa92 = os.path.join(_ad92, "installer", "AdminWeb.iss")
+    if os.path.isfile(_isa92):
+        issA92 = open(_isa92, encoding="utf-8").read()
+    check("build37: AdminWeb.iss - Setup «Порайонка_Админ_Web_Setup», role admin, иконка admin_web",
+          bool(issA92) and "OutputBaseFilename=Порайонка_Админ_Web_Setup" in issA92
+          and '{ "role": "admin" }' in issA92 and "icon_admin_web.ico" in issA92)
+    check("build37: AdminWeb.iss - обязательная DLL рядом, БЕЗ страницы ФИО",
+          "api-ms-win-core-path-l1-1-0.dll" in issA92
+          and "skipifsourcedoesntexist" not in issA92
+          and "FIOPage" not in issA92)
+    uweb92 = ""
+    _isu92 = os.path.join(_ad92, "installer", "UserWeb.iss")
+    if os.path.isfile(_isu92):
+        uweb92 = open(_isu92, encoding="utf-8").read()
+    check("build37: UserWeb.iss - обязательная DLL рядом с exe",
+          "api-ms-win-core-path-l1-1-0.dll" in uweb92
+          and "skipifsourcedoesntexist" not in uweb92)
+    biis92 = ""
+    _bis92 = os.path.join(_ad92, "installer", "build_installers.bat")
+    if os.path.isfile(_bis92):
+        biis92 = open(_bis92, encoding="utf-8").read()
+    check("build37: build_installers.bat собирает ВСЕ 4 установщика",
+          all(x in biis92 for x in ("Admin.iss", "User.iss", "UserWeb.iss", "AdminWeb.iss")))
+    check("build37: README для Админ Web + иконка admin_web на месте",
+          os.path.isfile(os.path.join(_ad92, "installer", "readme", "README_AdminWeb.txt"))
+          and os.path.isfile(os.path.join(_ad92, "installer", "images", "icon_admin_web.ico")))
+    w7r92 = ""
+    _w7p92 = os.path.join(_ad92, "assets", "win7", "README.txt")
+    if os.path.isfile(_w7p92):
+        w7r92 = open(_w7p92, encoding="utf-8").read()
+    check("build37: assets/win7/README - источник DLL-стаба (релиз 0.3.1)",
+          "api-ms-win-core-path-blender-0.3.1.zip" in w7r92)
+    st92 = open(os.path.join(_ad92, "start_web_win7.bat"), encoding="utf-8").read()
+    check("build37: start_web_win7.bat запускает и «Пользователь», и «Админ» exe",
+          "Порайонка_Пользователь_Web.exe" in st92 and "Порайонка_Админ_Web.exe" in st92)
+    mweb37 = open(os.path.join(_ad92, "main_web.py"), encoding="utf-8").read()
+    check("build37: main_web.py - env EDITION только для не-frozen (admin web не ломается)",
+          'if not getattr(sys, "frozen", False):' in mweb37 and "PORAYONKA_EDITION" in mweb37)
+    egen92 = open(os.path.join(_ad92, "core", "edition.py"), encoding="utf-8").read()
+    check("build37: core/edition.py - embedded + правило имени exe + debug-лог",
+          "_embedded_edition_file" in egen92 and "_role_from_exe_name" in egen92
+          and "edition_debug.log" in egen92 and "name.mismatch" in egen92)
+    eig92 = open(os.path.join(_ad92, "installer", "images", "generate_icons.py"),
+                 encoding="utf-8").read()
+    check("build37: generate_icons.py генерирует иконку admin_web",
+          "admin_web" in eig92)
+    check("build37: в репо нет артефактов сборки (edition.json / build_edition)",
+          not os.path.exists(os.path.join(_ad92, "edition.json"))
+          and not os.path.exists(os.path.join(_ad92, "edition.json.bak"))
+          and not os.path.exists(os.path.join(_ad92, "build_edition")))
+
+    # ── 92b. Раунд 37 (приёмка оркестратора): DLL-путь/хэши/жёсткий стоп ──
+    # Дефект: zip 0.3.1 распаковывается во ВЛОЖЕННУЮ папку
+    # api-ms-win-core-path-blender\x64\, скрипты копировали из \x64\ — DLL не
+    # находилась, а сборка продолжалась с предупреждением. Теперь: оба пути,
+    # контроль SHA256 архива/DLL, жёсткий exit /b 1 без валидной DLL.
+    _bats37 = {"user_web": bat_web24, "admin_web": batA92, "all": all92}
+    _sha_zip37 = "2CFF5E3DC3B0A5E9241C1091230959CDED50E3D2FF543308B68C6FBA653A3BB6"
+    _sha_dll37 = "A1F02F8F2B90F89D0BFAE554D2EBD61D07C7454EABBC53236738143180E030CE"
+    check("fix37: DLL - путь с вложенной папкой api-ms-win-core-path-blender\\x64 во всех web-bat",
+          all("api-ms-win-core-path-blender\\x64" in b for b in _bats37.values()))
+    check("fix37: DLL - SHA256 архива и x64-DLL зафиксированы во всех web-bat",
+          all(_sha_zip37 in b and _sha_dll37 in b for b in _bats37.values()))
+    check("fix37: DLL - сборка ОСТАНАВЛИВАЕТСЯ без валидной DLL ([ОШИБКА] + exit /b 1)",
+          all("[ОШИБКА] api-ms-win-core-path-l1-1-0.dll не получен" in b
+              and "exit /b 1" in b for b in _bats37.values()))
+    check("fix37: DLL - кэш assets\\win7 проверяется по SHA256 (Get-FileHash)",
+          all("Get-FileHash" in b for b in _bats37.values()))
+    # Замечание 3: edition.json из установщиков - СТРОГО UTF-8 (SaveStringToUTF8File)
+    # + ФИО в чистый ASCII-JSON (JsonEscape \uXXXX) - не зависит от кодировки.
+    issU37 = open(os.path.join(_ad92, "installer", "User.iss"), encoding="utf-8").read()
+    check("fix37: User.iss/UserWeb.iss - edition.json СТРОГО в UTF-8 (SaveStringToUTF8File)",
+          "SaveStringToUTF8File" in issU37 and "SaveStringToUTF8File" in uweb92
+          and "SaveStringToFile(" not in issU37 and "SaveStringToFile(" not in uweb92)
+    check("fix37: User.iss/UserWeb.iss - ФИО в ASCII-JSON (JsonEscape \\uXXXX)",
+          "JsonEscape" in issU37 and "JsonEscape" in uweb92
+          and "IntToHex" in issU37 and "IntToHex" in uweb92)
+    issAdm37 = open(os.path.join(_ad92, "installer", "Admin.iss"), encoding="utf-8").read()
+    check("fix37: Admin.iss/AdminWeb.iss - edition.json СТРОГО в UTF-8",
+          "SaveStringToUTF8File" in issAdm37 and "SaveStringToUTF8File" in issA92
+          and "SaveStringToFile(" not in issAdm37 and "SaveStringToFile(" not in issA92)
+
+    # Паритет алгоритма JsonEscape (Inno Pascal) с Python-эталоном:
+    # кириллица ФИО экранируется в \uXXXX, итоговый JSON читается обратно.
+    def _iesc37(s):
+        out = []
+        for ch in s:
+            o = ord(ch)
+            if o == 92:
+                out.append("\\\\")
+            elif o == 34:
+                out.append("\\\"")
+            elif 32 <= o <= 126:
+                out.append(ch)
+            else:
+                out.append("\\u%04x" % o)
+        return "".join(out)
+    _jr37 = '{ "role": "user", "user_name": "' \
+            + _iesc37("Гайнутдинов Станислав Игоревич") + '" }'
+    check("fix37: ASCII-экранирование ФИО - чистый ASCII на выходе",
+          all(ord(c) < 128 for c in _jr37))
+    _f37 = json.loads(_jr37)
+    check("fix37: ASCII-JSON с \\u-эскейпом ФИО читается обратно (json roundtrip)",
+          _f37.get("role") == "user"
+          and _f37.get("user_name") == "Гайнутдинов Станислав Игоревич")
+    # и core/edition.py такой JSON читает (utf-8/любая кодировка - везде ASCII)
+    _ep37 = os.path.join(_TEST_APPDATA, "porayonka", "edition.json")
+    os.makedirs(os.path.dirname(_ep37), exist_ok=True)
+    try:
+        with open(_ep37, "w", encoding="utf-8") as _fj37:
+            _fj37.write(_jr37)
+        _le23(force=True)
+        _er37 = _le23(force=True)
+        check("fix37: load_edition читает ASCII-JSON установщика (user + ФИО)",
+              _er37.get("role") == "user"
+              and _er37.get("user_name") == "Гайнутдинов Станислав Игоревич")
+    finally:
+        try:
+            os.remove(_ep37)
+        except OSError:
+            pass
+        _le23(force=True)
+    check("fix37: assets/win7/README - вложенный путь архива + обе SHA256",
+          "api-ms-win-core-path-blender" in w7r92 and _sha_zip37 in w7r92
+          and _sha_dll37 in w7r92)
 
     print()
     if FAILURES:

@@ -390,6 +390,39 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     )
     edition = load_edition()
     edition_user = is_user_edition()
+    # Раунд 37 (PROMPT_fix_user_installer): ДИАГНОСТИКА определения редакции
+    # в начале create_controls_tab — ASCII-print пути exe, app_dir,
+    # наличие/содержимое edition.json рядом с exe и в %APPDATA%, итоговая
+    # роль. Полный трейс с теми же данными — %APPDATA%/porayonka/
+    # edition_debug.log (пишется core.edition.load_edition).
+    try:
+        from core import edition as _ed37
+        import sys as _sys37
+
+        def _jstate37(p):
+            d37 = _ed37._read_edition_file(p)
+            if isinstance(d37, dict):
+                _pw37 = bool(str(d37.get("password") or "").strip()
+                             or str(d37.get("password_hash") or "").strip())
+                return (f"role={d37.get('role')!r} user={d37.get('user_name')!r} "
+                        f"password={'set' if _pw37 else '-'}")
+            return "INVALID" if p.exists() else "absent"
+
+        _appdir37 = _ed37._app_dir()
+        print(_ed37._ascii(
+            f"[CONTROLS_TAB] edition diag: frozen="
+            f"{bool(getattr(_sys37, 'frozen', False))} "
+            f"exe={getattr(_sys37, 'executable', '?')} app_dir={_appdir37}"))
+        print(_ed37._ascii(
+            f"[CONTROLS_TAB] edition diag: exe_json="
+            f"{_jstate37(_appdir37 / 'edition.json')}; appdata_json="
+            f"{_jstate37(_ed37._appdata_edition_file())}"))
+        print(_ed37._ascii(
+            f"[CONTROLS_TAB] edition itog: role={edition.get('role')} "
+            f"user={(edition.get('user_name') or '-')!r} "
+            f"explicit={edition.get('explicit')}"))
+    except Exception:
+        traceback.print_exc()
     # Раунд 27: apply_edition_to_settings вызывается всегда, чтобы явная
     # admin-редакция сбросила старый network_user после user-сборки.
     if apply_edition_to_settings(settings):

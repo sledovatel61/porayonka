@@ -215,6 +215,16 @@ def _draw_web_badge(image: Image.Image) -> None:
     image.alpha_composite(badge)
 
 
+def _draw_admin_web_badge(image: Image.Image) -> None:
+    """Раунд 37 (задача 3): значок АДМИНСКОЙ web-редакции для Win7 —
+    фиолетовый щит админа справа + бирюзовый глобус web ЗЕРКАЛЬНО слева,
+    чтобы все четыре установщика различались с первого взгляда."""
+    _draw_admin_badge(image)
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    _draw_web_badge(layer)
+    image.alpha_composite(layer.transpose(Image.Transpose.FLIP_LEFT_RIGHT))
+
+
 def build_icon(badge: str | None = None) -> Image.Image:
     image = _tile_background()
     _draw_main_mark(image)
@@ -224,6 +234,8 @@ def build_icon(badge: str | None = None) -> Image.Image:
         _draw_user_badge(image)
     elif badge == "web":
         _draw_web_badge(image)
+    elif badge == "admin_web":
+        _draw_admin_web_badge(image)
     return image
 
 
@@ -312,8 +324,8 @@ def _make_wizard_small_image(icon: Image.Image) -> Image.Image:
 
 
 def _make_preview(icons: dict[str, Image.Image]) -> Image.Image:
-    preview = Image.new("RGBA", (1800, 780), (*NAVY_950, 255))
-    preview.alpha_composite(_radial_glow(preview.size, (900, 80), 780, BLUE, 70))
+    preview = Image.new("RGBA", (2300, 780), (*NAVY_950, 255))
+    preview.alpha_composite(_radial_glow(preview.size, (1150, 80), 780, BLUE, 70))
     draw = ImageDraw.Draw(preview, "RGBA")
     draw.text((88, 56), "Порайонка", font=_font(45, True), fill=WHITE + (255,))
     draw.text((88, 116), "Иконки установщиков · DARK", font=_font(22), fill=(148, 163, 184, 255))
@@ -322,6 +334,7 @@ def _make_preview(icons: dict[str, Image.Image]) -> Image.Image:
         ("admin", "Администратор", "Полная редакция", VIOLET),
         ("user", "Пользователь", "Windows 10/11", TEAL),
         ("web", "User Web", "Windows 7", CYAN),
+        ("admin_web", "Админ Web", "Windows 7", VIOLET),
     )
     x = 88
     for key, title, subtitle, accent in cards:
@@ -351,7 +364,7 @@ def _make_installer_preview(
     wizard_small: Image.Image,
 ) -> Image.Image:
     """Combine the icon sheet and wizard artwork into one review image."""
-    preview = Image.new("RGBA", (1800, 1400), (*NAVY_950, 255))
+    preview = Image.new("RGBA", (2300, 1400), (*NAVY_950, 255))
     preview.alpha_composite(icon_preview)
     preview.alpha_composite(_radial_glow(preview.size, (1450, 1160), 620, VIOLET, 42))
     draw = ImageDraw.Draw(preview, "RGBA")
@@ -404,6 +417,7 @@ def main() -> None:
         "icon_admin": build_icon("admin"),
         "icon_user": build_icon("user"),
         "icon_user_web": build_icon("web"),
+        "icon_admin_web": build_icon("admin_web"),
     }
     for stem, image in variants.items():
         image.save(HERE / f"{stem}.png", optimize=True)
@@ -413,6 +427,7 @@ def main() -> None:
         "admin": variants["icon_admin"],
         "user": variants["icon_user"],
         "web": variants["icon_user_web"],
+        "admin_web": variants["icon_admin_web"],
     }
     icon_preview = _make_preview(preview_icons)
     icon_preview.save(HERE / "icons_preview.png", optimize=True)

@@ -35,24 +35,31 @@ echo.
 
 if not exist output mkdir output
 
-echo [1/3] Сборка администраторского установщика...
+echo [1/4] Сборка администраторского установщика...
 "%ISCC%" Admin.iss
 if errorlevel 1 (
     echo [ОШИБКА] Admin.iss
     exit /b 1
 )
 
-echo [2/3] Сборка пользовательского установщика...
+echo [2/4] Сборка пользовательского установщика...
 "%ISCC%" User.iss
 if errorlevel 1 (
     echo [ОШИБКА] User.iss
     exit /b 1
 )
 
-echo [3/3] Сборка web-установщика для Windows 7...
+echo [3/4] Сборка web-установщика пользователя для Windows 7...
 "%ISCC%" UserWeb.iss
 if errorlevel 1 (
     echo [ОШИБКА] UserWeb.iss
+    exit /b 1
+)
+
+echo [4/4] Сборка web-установщика администратора для Windows 7...
+"%ISCC%" AdminWeb.iss
+if errorlevel 1 (
+    echo [ОШИБКА] AdminWeb.iss
     exit /b 1
 )
 

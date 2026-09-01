@@ -2,6 +2,9 @@
 # Раунд 23 (задача 2): редакция дистрибутива — «admin» (полная) / «user»
 # (просмотр + уведомления). Редакция задаётся при сборке/установке, а не в
 # настройках пользователя: её нельзя переопределить изнутри приложения.
+# Раунд 37: ИДЕНТИЧНОСТЬ сборки сделана живучей к переносу файлов —
+# встроенный edition.json ВНУТРИ exe (datas PyInstaller -> _MEIPASS) и
+# правило имени exe («пользователь»/«админ») как запасной определитель.
 import json
 import os
 import sys
@@ -35,6 +38,125 @@ def _appdata_edition_file() -> Path:
     return Path(appdata) / "porayonka" / "edition.json"
 
 
+def _embedded_edition_file() -> Optional[Path]:
+    """Раунд 37: ВСТРОЕННЫЙ (запечённый при сборке) edition.json ВНУТРИ exe.
+
+    Build-скрипты перед PyInstaller пишут `build_edition/edition.json`, а
+    .spec добавляет его в datas с назначением «.» — в корень папки
+    распаковки _MEIPASS. Перенос portable-сборки без рядом лежащих файлов
+    редакцию больше НЕ теряет: идентичность живёт в самом exe.
+    """
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        try:
+            return Path(meipass) / "edition.json"
+        except Exception:
+            return None
+    return None
+
+
+def _role_from_exe_name() -> Optional[str]:
+    """Раунд 37: ПРАВИЛО ИМЕНИ exe — запасной определитель редакции, когда
+    ВСЕ файлы редакции потеряны или битые, а appdata-наследие врёт.
+
+    Дистрибутивные exe называются «Порайонка_Пользователь*.exe» /
+    «Порайонка_Админ*.exe» — имя не теряется при копировании. Нейтральное
+    имя (dev/python, переименованный exe) -> None (старое поведение).
+    Кейс жалобы «user-сборка с admin-интерфейсом»: edition.json не доехал
+    до машины пользователя — но exe называется «Пользователь», поэтому роль
+    всё равно user, а не умолчательный admin.
+    """
+    try:
+        name = Path(getattr(sys, "executable", "") or "").name.casefold()
+    except Exception:
+        return None
+    if "пользователь" in name:
+        return EDITION_USER
+    if "админ" in name:
+        return EDITION_ADMIN
+    return None
+
+
+# ── Раунд 37: диагностика определения редакции ──────────────────────────
+# Требование промпта PROMPT_fix_user_installer.md: печатать путь exe, app_dir,
+# наличие/содержимое edition.json рядом и в %APPDATA%, итоговую роль —
+# ТОЛЬКО ASCII в print. У frozen GUI-exe (console=False) sys.stdout=None,
+# поэтому вся диагностика дублируется в файл %APPDATA%/porayonka/
+# edition_debug.log (перезаписывается на каждом старте приложения — его можно
+# прислать разработчику вместо скриншота консоли).
+_diag_lines: list = []
+
+
+def _ascii(value) -> str:
+    """ASCII-форма значения для print(): кириллица/прочее -> \\uXXXX-эскейпы
+    (без потерь информации), консоли с любой codepage не упадут."""
+    try:
+        return str(value).encode("unicode_escape", "backslashreplace") \
+            .decode("ascii", "replace")
+    except Exception:
+        return "?"
+
+
+def _diag(msg: str) -> None:
+    """Строка диагностики редакции: print (ASCII) + буфер для файлового лога
+    (файл пишется _flush_diag() в конце load_edition)."""
+    try:
+        _diag_lines.append(str(msg))
+    except Exception:
+        pass
+    try:
+        print(_ascii(msg))
+    except Exception:
+        pass
+
+
+def _debug_log_file() -> Path:
+    appdata = os.getenv("APPDATA", str(Path.home() / ".config"))
+    return Path(appdata) / "porayonka" / "edition_debug.log"
+
+
+def _flush_diag() -> None:
+    """Перезаписать %APPDATA%/porayonka/edition_debug.log накопленными
+    строками (UTF-8; ошибки записи молча пропускаются — диагностика не
+    должна ломать запуск)."""
+    global _diag_lines
+    lines, _diag_lines = _diag_lines, []
+    if not lines:
+        return
+    try:
+        import datetime as _dt37
+        hdr = "=== " + _dt37.datetime.now().isoformat(timespec="seconds") + " ==="
+        path = _debug_log_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(hdr + "\n" + "\n".join(lines) + "\n")
+    except OSError:
+        pass
+
+
+def _diag_file(tag: str, path: Optional[Path]) -> None:
+    """Одна строка о состоянии файла редакции: absent / invalid / role+user
+    (пароль НЕ логируется — только флаг наличия)."""
+    if path is None:
+        _diag(f"[EDITION] {tag}: n/a")
+        return
+    try:
+        if not path.exists():
+            _diag(f"[EDITION] {tag} {path}: absent")
+            return
+        d = _read_edition_file(path)
+        if d:
+            has_pw = bool(str(d.get("password") or "").strip()
+                          or str(d.get("password_hash") or "").strip())
+            _diag(f"[EDITION] {tag} {path}: role={d.get('role')!r} "
+                  f"user={d.get('user_name')!r} "
+                  f"password={'set' if has_pw else '-'}")
+        else:
+            _diag(f"[EDITION] {tag} {path}: exists, INVALID JSON")
+    except Exception as e:
+        _diag(f"[EDITION] {tag} {path}: diag error: {e}")
+
+
 def edition_file_candidates():
     """Кандидаты файла редакции (первый существующий побеждает).
 
@@ -43,12 +165,17 @@ def edition_file_candidates():
     Раунд 29 (задача 8): между exe-файлом и appdata вставлена запасная
     копия `edition.json.bak` — защита от случайного удаления основного файла
     (иначе приложение молча становилось admin-редакцией по умолчанию).
+    Раунд 37: добавлен ВСТРОЕННЫЙ edition.json внутри exe (_MEIPASS).
     """
-    return [
+    candidates = [
         _app_dir() / "edition.json",
         _app_dir() / "edition.json.bak",
-        _appdata_edition_file(),
     ]
+    embedded = _embedded_edition_file()
+    if embedded is not None:
+        candidates.append(embedded)
+    candidates.append(_appdata_edition_file())
+    return candidates
 
 
 def _read_edition_file(path: Path) -> Optional[dict]:
@@ -87,13 +214,17 @@ def _read_edition_file(path: Path) -> Optional[dict]:
 
 
 def _self_heal_edition_files() -> None:
-    """Раунд 29 (задача 8) + раунд 34: самовосстановление edition.json
-    рядом с программой — ТОЛЬКО из .bak в ТОЙ ЖЕ папке.
+    """Раунд 29 (задача 8) + раунд 34 + раунд 37: самовосстановление
+    edition.json рядом с программой.
 
-    - основного файла нет, а запасная копия .bak есть -> восстановить из .bak;
-    НИКОГДА не копировать edition.json из %APPDATA% в папку exe (иначе
-    appdata-наследие «прилипало» бы к дистрибутиву). Запись может быть
-    запрещена (Program Files) — мягко пропускаем.
+    - основного файла нет, а запасная копия .bak есть -> восстановить из
+      .bak в ТОЙ ЖЕ папке;
+    - раунд 37: нет ни основного, ни .bak, но есть ВСТРОЕННАЯ копия внутри
+      exe (_MEIPASS, запечена сборкой) -> восстановить рядом с exe из неё
+      (portable-папки доступны на запись; в Program Files запись молча
+      пропустится — embedded продолжит работать как источник напрямую);
+    - НИКОГДА не копировать edition.json из %APPDATA% в папку exe (иначе
+      appdata-наследие «прилипало» бы к дистрибутиву).
     """
     main_f = _app_dir() / "edition.json"
     bak_f = _app_dir() / "edition.json.bak"
@@ -102,6 +233,17 @@ def _self_heal_edition_files() -> None:
             import shutil
             shutil.copy2(bak_f, main_f)
             print("[EDITION] edition.json vosstanovlen iz edition.json.bak")
+            return
+    except OSError:
+        pass
+    try:
+        embedded = _embedded_edition_file()
+        if (not main_f.exists() and not bak_f.exists()
+                and embedded is not None and embedded.exists()):
+            import shutil
+            shutil.copy2(embedded, main_f)
+            _diag("[EDITION] edition.json vosstanovlen iz VSTROENNOJ kopii "
+                  "vnutri exe (_MEIPASS)")
     except OSError:
         pass
 
@@ -116,9 +258,17 @@ def load_edition(force: bool = False) -> dict:
       3) edition.json.bak рядом с программой (раунд 29, задача 8 — защита
          от случайного удаления основного; при этом сам основной
          восстанавливается из копии — см. _self_heal_edition_files);
-      4) edition.json в %APPDATA%/porayonka (записывается, напр., первым
+      4) ВСТРОЕННЫЙ edition.json внутри exe (раунд 37: datas PyInstaller ->
+         _MEIPASS — переживает перенос exe без сопутствующих файлов);
+      5) правило имени exe ПРИ КОНФЛИКТЕ (раунд 37): если имя exe даёт роль,
+         а %APPDATA% — ДРУГУЮ, идентичность exe побеждает appdata-наследие
+         (без унаследованных ФИО/пароля — диалог «Кто вы?» спросит сам);
+      6) edition.json в %APPDATA%/porayonka (записывается, напр., первым
          запуском user-редакции после выбора ФИО);
-      5) умолчание — admin (обратная совместимость со старыми установками).
+      7) ПРАВИЛО ИМЕНИ exe (раунд 37): «пользователь» -> user,
+         «админ» -> admin (только для дистрибутивных имён — спасает, когда
+         ВСЕ файлы редакции потерялись при переносе);
+      8) умолчание — admin (обратная совместимость со старыми установками).
 
     Роль (edition) берётся из самого приоритетного источника, а ФИО — из
     самого приоритетного источника, где оно НЕПУСТОЕ: установщик кладёт рядом
@@ -127,53 +277,61 @@ def load_edition(force: bool = False) -> dict:
     снова при каждом запуске.
 
     "explicit" (раунд 26, задача 4): True, если роль задана ЯВНО (env /
-    файлом), и False для умолчательного admin без edition.json — по нему
-    сброс user-роли настроек делается только для настоящих admin-дистрибутивов,
-    а старые установки без edition.json (роль из настроек) не ломаются.
+    файлом / встроенно / именем exe), и False для умолчательного admin без
+    edition.json — по нему сброс user-роли настроек делается только для
+    настоящих admin-дистрибутивов, а старые установки без edition.json
+    (роль из настроек) не ломаются.
 
     Раунд 26 (задача 5): поля "password" (plain, от установщика) и/или
     "password_hash" (base64 sha256) прокидываются как есть — используются
     парольным входом admin-редакции (ui/admin_gate.py).
 
     Раунд 31/32 (задача 1): в DEV-режиме (не frozen) env задаёт роль, а
-    пароль/ФИО дополняются из %APPDATA%\porayonka\edition.json, если env
+    пароль/ФИО дополняются из %APPDATA%\\porayonka\\edition.json, если env
     их не задал.
-    Раунд 34 (задача 2): ПРИОРИТЕТЫ переработаны:
-      1) env (role/user_name/пароль) — ТОЛЬКО для dev/тестов (не frozen);
-      2) edition.json РЯДОМ С РЕАЛЬНЫМ exe (_app_dir) — АБСОЛЮТНЫЙ приоритет:
-         если файл существует, читается ТОЛЬКО он (appdata НЕ мержится) —
-         «Порайонка_Админ.exe» всегда admin, «Порайонка_Пользователь*.exe»
-         всегда user, независимо от %APPDATA%;
-      3) edition.json.bak рядом с exe;
-      4) edition.json в %APPDATA% — только fallback;
-      5) умолчание — admin.
-    Диагностика (ASCII): путь к exe, _MEIPASS, выбранный app_dir, источник,
-    итоговая роль/ФИО — печатаются в load_edition() для отладки на ПК.
+    Раунд 34 (задача 2): ПРИОРИТЕТЫ переработаны: env — ТОЛЬКО для dev/тестов
+    (не frozen); edition.json РЯДОМ С РЕАЛЬНЫМ exe (_app_dir) — АБСОЛЮТНЫЙ
+    приоритет: если файл существует и валиден, читается ТОЛЬКО он (appdata
+    НЕ мержится) — «Порайонка_Админ.exe» всегда admin,
+    «Порайонка_Пользователь*.exe» всегда user, независимо от %APPDATA%.
+    Раунд 37: идентичность НЕ теряется при переносе — см. встроенный
+    edition.json (шаг 4), правило имени exe (шаг 6) и диагностику в файл
+    %APPDATA%/porayonka/edition_debug.log + ASCII-print.
     """
     global _cache
     if _cache is not None and not force:
         return _cache
     _self_heal_edition_files()
 
-    # Раунд 34: ASCII-диагностика (frozen onefile: exe vs _MEI)
-    try:
-        print(f"[EDITION] frozen={bool(getattr(sys, 'frozen', False))} "
-              f"exe={getattr(sys, 'executable', '?')}")
-        print(f"[EDITION] MEIPASS={getattr(sys, '_MEIPASS', None)}")
-    except Exception:
-        pass
+    # Раунд 34/37: диагностика (print ASCII + файл edition_debug.log)
     app_dir = _app_dir()
+    main_f = app_dir / "edition.json"
+    bak_f = app_dir / "edition.json.bak"
+    embedded_f = _embedded_edition_file()
+    appdata_f = _appdata_edition_file()
     try:
-        print(f"[EDITION] app_dir={app_dir}")
+        _diag(f"[EDITION] frozen={bool(getattr(sys, 'frozen', False))} "
+              f"exe={getattr(sys, 'executable', '?')}")
+        _diag(f"[EDITION] MEIPASS={getattr(sys, '_MEIPASS', None)}")
+        _diag(f"[EDITION] app_dir={app_dir}")
+        _diag_file("exe edition.json", main_f)
+        _diag_file("exe edition.json.bak", bak_f)
+        _diag_file("embedded edition.json", embedded_f
+                   if getattr(sys, "frozen", False) else None)
+        _diag_file("appdata edition.json", appdata_f)
+        _diag(f"[EDITION] exe name rule -> {_role_from_exe_name()!r}")
     except Exception:
         pass
 
     def _mk(role_, user_, expl_, pw_, pwh_, src_):
+        # Раунд 37: + "source" (откуда взялась роль: env/app_dir/app_dir.bak/
+        # embedded/appdata/name/name.mismatch/default) — виден в диагностике.
         _cache = {"role": role_, "user_name": user_, "explicit": expl_,
-                  "password": pw_, "password_hash": pwh_}
+                  "password": pw_, "password_hash": pwh_, "source": src_}
         try:
-            print(f"[EDITION] source={src_} role={role_} "
+            _diag(f"[EDITION] source={src_} role={role_} "
                   f"user={user_ or '-'} explicit={expl_}")
+            _flush_diag()
         except Exception:
             pass
         return _cache
@@ -197,7 +355,6 @@ def load_edition(force: bool = False) -> dict:
         return _mk(env_role, user_name, True, password, password_hash, "env")
 
     # 2) edition.json ryadom s exe - ABSOLYuTNYJ prioritet (bez merge s appdata)
-    main_f = app_dir / "edition.json"
     data = _read_edition_file(main_f)
     if data:
         r = str(data.get("role") or "").strip().lower()
@@ -211,11 +368,17 @@ def load_edition(force: bool = False) -> dict:
     elif main_f.exists():
         # Файл рядом с exe есть, но НЕВАЛИДЕН (например, сборочный bat записал
         # \n как текст) — не падаем в appdata fallback, чтобы старый user-файл
-        # в %APPDATA% не переопределял дистрибутив. Считаем такой exe admin.
+        # в %APPDATA% не переопределял дистрибутив. Раунд 37: сначала
+        # правило имени exe (битый json у «Пользователь» не должен давать
+        # admin-интерфейс), затем — прежнее умолчание admin.
+        named = _role_from_exe_name()
+        if named is not None:
+            _diag(f"[EDITION] WARN: {main_f} invalid JSON; exe name -> {named}")
+            return _mk(named, "", True, "", "", "app_dir.invalid.name")
         print(f"[EDITION] WARN: {main_f} exists but invalid JSON, using default admin")
         return _mk(EDITION_ADMIN, "", True, "", "", "app_dir.invalid")
     # 3) edition.json.bak ryadom s exe
-    data = _read_edition_file(app_dir / "edition.json.bak")
+    data = _read_edition_file(bak_f)
     if data:
         r = str(data.get("role") or "").strip().lower()
         if r in (EDITION_ADMIN, EDITION_USER):
@@ -225,12 +388,38 @@ def load_edition(force: bool = False) -> dict:
                        str(data.get("password") or "").strip(),
                        str(data.get("password_hash") or "").strip(),
                        "app_dir.bak")
-    # 4) appdata - tolko fallback
-    data = _read_edition_file(_appdata_edition_file())
+    # 4) VSTROENNYJ edition.json vnutri exe (raund 37) - absolyutnyj,
+    #    kak i ryadom lezhashchij: identichnost' zhorstko privyazana k sborki.
+    if embedded_f is not None:
+        data = _read_edition_file(embedded_f)
+        if data:
+            r = str(data.get("role") or "").strip().lower()
+            if r in (EDITION_ADMIN, EDITION_USER):
+                return _mk(r,
+                           str(data.get("user_name") or "").strip(),
+                           True,
+                           str(data.get("password") or "").strip(),
+                           str(data.get("password_hash") or "").strip(),
+                           "embedded")
+    # 5) raund 37: IDENTITY-MISMATCH — imya exe protivorechit appdata-role.
+    #    Identichnost' exe (fajl/vstroennyj/IMYa) vazhnee appdata-naslediya:
+    #    exe «Pol'zovatel'» na mashine, gde v %APPDATA% ostalsya admin,
+    #    DOZhEN stat' user (ishodnaya zhaloba raunda 35/36). Bez merge —
+    #    chuzhie FIO/parol' ne nasleduem, dialog «Kto vy?» sprosit sam.
+    named = _role_from_exe_name()
+    data = _read_edition_file(appdata_f)
+    apd_role = ""
     if data:
-        r = str(data.get("role") or "").strip().lower()
-        if r in (EDITION_ADMIN, EDITION_USER):
-            return _mk(r,
+        apd_role = str(data.get("role") or "").strip().lower()
+    if (named is not None and apd_role in (EDITION_ADMIN, EDITION_USER)
+            and apd_role != named):
+        _diag(f"[EDITION] exe name '{named}' != appdata role "
+              f"'{apd_role}'; exe identity wins")
+        return _mk(named, "", True, "", "", "name.mismatch")
+    # 6) appdata - tolko fallback
+    if data:
+        if apd_role in (EDITION_ADMIN, EDITION_USER):
+            return _mk(apd_role,
                        str(data.get("user_name") or "").strip(),
                        True,
                        str(data.get("password") or "").strip(),
@@ -246,10 +435,13 @@ def load_edition(force: bool = False) -> dict:
                        str(data.get("password") or "").strip(),
                        str(data.get("password_hash") or "").strip(),
                        "appdata")
-    # 5) umolchanie - admin (obratnaya sovmestimost')
+    # 7) raund 37: PRAVILO IMENI exe - esli vse fajly poteryany, no exe
+    #    nazyvaetsya «Pol'zovatel'»/«Admin», rol' vse ravno izvestna.
+    if named is not None:
+        _diag(f"[EDITION] no edition files; exe name rule -> {named}")
+        return _mk(named, "", True, "", "", "name")
+    # 8) umolchanie - admin (obratnaya sovmestimost')
     return _mk(EDITION_ADMIN, "", False, "", "", "default")
-
-    return _cache
 
 
 def is_user_edition() -> bool:

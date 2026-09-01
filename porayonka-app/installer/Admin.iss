@@ -54,6 +54,15 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\Порайонка_Админ.exe"; Description: "{cm:LaunchProgram,Порайонка — Администратор}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+procedure SaveStringToUTF8File(const FileName, Value: String; Append: Boolean);
+var
+  Lines: TArrayOfString;
+begin
+  SetArrayLength(Lines, 1);
+  Lines[0] := Value;
+  SaveStringsToUTF8File(FileName, Lines, Append);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   EditionPath: String;
@@ -63,11 +72,12 @@ begin
   begin
     { edition.json admin-редакции; пароль НЕ пишем (живёт в %APPDATA%,
       задаётся из настроек приложения) }
+    { Раунд 37: запись СТРОГО в UTF-8 (SaveStringToUTF8File, Inno 6.1+) }
     EditionPath := ExpandConstant('{app}\edition.json');
     Json := '{ "role": "admin" }';
-    SaveStringToFile(EditionPath, Json, False);
+    SaveStringToUTF8File(EditionPath, Json, False);
     { Раунд 29 (задача 8): запасная копия .bak — защита от случайного
       удаления edition.json (приложение восстановит основной из копии) }
-    SaveStringToFile(ExpandConstant('{app}\edition.json.bak'), Json, False);
+    SaveStringToUTF8File(ExpandConstant('{app}\edition.json.bak'), Json, False);
   end;
 end;

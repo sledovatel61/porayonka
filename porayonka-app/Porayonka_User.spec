@@ -22,11 +22,19 @@ except Exception:
 
 _icon = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
 
+# Раунд 37: ВСТРОЕННЫЙ edition.json — build-скрипт заранее пишет
+# build_edition/edition.json (роль дистрибутива: user); файл попадает в
+# корень папки распаковки _MEIPASS — идентичность сборки не теряется, даже
+# если рядом лежащий edition.json не доехал до машины пользователя.
+_edition_datas = []
+if os.path.exists("build_edition/edition.json"):
+    _edition_datas = [("build_edition/edition.json", ".")]
+
 a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[],
-    datas=[("core", "core"), ("ui", "ui"), ("assets", "assets")],
+    datas=[("core", "core"), ("ui", "ui"), ("assets", "assets")] + _edition_datas,
     hiddenimports=[],
     hookspath=_flet_hooks,
     hooksconfig={},

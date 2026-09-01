@@ -2,6 +2,7 @@
 # Загрузка/сохранение контролей, настроек, вложений и сетевая синхронизация.
 import json
 import os
+import threading
 import shutil
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -1138,6 +1139,9 @@ def read_shared_controls(settings: dict) -> List[Control]:
         return []
 
 
+_SHARED_WRITE_LOCK = threading.RLock()
+
+
 def write_shared_controls(controls: List[Control], settings: dict) -> bool:
     """Записать контроли в общий сетевой файл. Возвращает успех.
 
@@ -1155,35 +1159,40 @@ def write_shared_controls(controls: List[Control], settings: dict) -> bool:
     p = _parse_shared_path(settings)
     if not p:
         return False
-    tmp = None
-    try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        data = {
-            "schema_version": SCHEMA_VERSION,
-            "last_saved": datetime.now().isoformat(),
-            "controls": [c.to_dict() for c in controls],
-        }
-        if p.exists():
-            _make_backup(p, keep=5)
-        tmp = p.with_name(f"{p.name}.{uuid4().hex}.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        for attempt in range(3):
-            try:
-                os.replace(tmp, p)  # атомарная замена
-                return True
-            except OSError:
-                if attempt == 2:
-                    raise
-                time.sleep(0.15)
-    except OSError as e:
-        print(f"[CONTROLS_DATA] Oshibka zapisi v obshiy fayl: {e}")
-        if tmp is not None:
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
-        return False
+    # В одном экземпляре приложения запись может прийти одновременно из UI и
+    # polling-потока. Сериализация охватывает backup и replace: иначе Windows
+    # иногда возвращает WinError 5 при взаимном открытии целевого файла.
+    # Межпроцессный контур сохраняется: уникальный tmp + retry ниже.
+    with _SHARED_WRITE_LOCK:
+        tmp = None
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "schema_version": SCHEMA_VERSION,
+                "last_saved": datetime.now().isoformat(),
+                "controls": [c.to_dict() for c in controls],
+            }
+            if p.exists():
+                _make_backup(p, keep=5)
+            tmp = p.with_name(f"{p.name}.{uuid4().hex}.tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            for attempt in range(3):
+                try:
+                    os.replace(tmp, p)  # атомарная замена
+                    return True
+                except OSError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.15)
+        except OSError as e:
+            print(f"[CONTROLS_DATA] Oshibka zapisi v obshiy fayl: {e}")
+            if tmp is not None:
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+            return False
     return False
 
 

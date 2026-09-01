@@ -64,6 +64,20 @@ if exist assets\icon.ico (echo  OK — assets\icon.ico) else (echo  .. проп�
 echo.
 
 :: ── Шаг 5: Сборка exe ──────────────────────────────────────────
+:: Раунд 37: ВСТРОЕННЫЙ edition.json (включая ФИО, если задано) — spec
+:: кладёт его ВНУТРЬ exe (_MEIPASS). Кейс жалобы «user-сборка даёт admin»:
+:: edition.json терялся/ломался при переносе дистрибутива. Теперь роль
+:: запечена В САМ exe — перенос без edition.json всё равно даёт user.
+if exist build_edition rmdir /s /q build_edition
+set "PYFIO=%PORAYONKA_USER_FIO%"
+python -c "import pathlib,json,os; fio=os.environ.get('PYFIO','').strip(); d={'role':'user'}; d.update({'user_name':fio} if fio else {}); pathlib.Path('build_edition').mkdir(exist_ok=True); pathlib.Path('build_edition/edition.json').write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')"
+if errorlevel 1 (
+    echo.
+    echo  [ОШИБКА] Не удалось записать build_edition\edition.json!
+    echo.
+    pause
+    exit /b 1
+)
 echo [Шаг 5/6] PyInstaller Porayonka_User.spec (3-7 минут)...
 pyinstaller Porayonka_User.spec --noconfirm --clean --log-level WARN
 if errorlevel 1 (
@@ -77,8 +91,11 @@ if errorlevel 1 (
 :: ── Шаг 6: edition.json рядом с exe + проверка ─────────────────
 :: Раунд 36: edition.json пишем через python в UTF-8 (echo в cmd даёт
 :: OEM/ANSI-кодировку, и русское ФИО ломало чтение edition.json).
-set "PYFIO=%PORAYONKA_USER_FIO%"
+:: Раунд 37: + запасная копия .bak рядом (self-heal core/edition.py);
+:: build_edition чистим.
 python -c "import pathlib,json,os; fio=os.environ.get('PYFIO','').strip(); d={'role':'user'}; d.update({'user_name':fio} if fio else {}); pathlib.Path('dist/edition.json').write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')"
+copy /y "dist\edition.json" "dist\edition.json.bak" >nul
+if exist build_edition rmdir /s /q build_edition
 
 echo.
 if exist "dist\Порайонка_Пользователь.exe" (
