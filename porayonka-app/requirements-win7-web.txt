@@ -1,0 +1,47 @@
+# requirements-win7-web.txt
+# Раунд 38 (задача 3, P0): ВОСПРОИЗВОДИМЫЙ web build profile для Windows 7
+# (обе web-редакции: Пользователь Web + Админ Web). Используется ТОЛЬКО
+# сборочными скриптами build_user_web_win7.bat / build_admin_web_win7.bat
+# (чистый отдельный venv .venv-win7-web) — desktop-сборки Win10/11
+# НЕ затрагиваются (у них свой requirements.txt).
+#
+# Причина фиксации: транзитивный pydantic-core (Rust extension внутри
+# pydantic 2.x) собран современным Rust toolchain с базовой Windows 10 —
+# на Windows 7 импорт _pydantic_core падает с «Не найдена указанная
+# процедура» (НЕ то же самое, что отсутствующий api-ms-win-core-path-l1-1-0
+# .dll — тот стаб всё ещё нужен python311.dll и проверяется отдельно по
+# SHA256 в build-скриптах). Версии не угадывались: связка ниже проверена
+# импортом flet.fastapi, запуском uvicorn и websocket-сессией Flet.
+#
+# Логика выбора (эпоха Flet 0.23.2, октябрь 2024):
+#   * flet==0.23.2 — не повышать (как и везде в проекте);
+#   * fastapi 0.115.4 — последняя линия FastAPI эпохи flet 0.23.2, ещё
+#     работающая с Pydantic v1 (поддержка pydantic v1 снята только в
+#     FastAPI 0.126.0, декабрь 2025 — fastapi.tiangolo.com/release-notes);
+#   * pydantic 1.10.26 — Cython/чистый C, без Rust-расширения pydantic-core:
+#     windows-колёса cp311 совместимы с Win7;
+#   * starlette 0.41.3 — требование fastapi 0.115.4 (>=0.40.0,<0.42.0);
+#   * uvicorn 0.32.0 — чистый Python; БЕЗ extra [standard] — иначе
+#     подтягивается watchfiles (Rust). websockets закреплён отдельно (нужен
+#     uvicorn для websocket-протокола Flet). httptools/python-dotenv/PyYAML
+#     — наследие [standard] flet'а, безопасные (C/чистый Python);
+#   * watchfiles 0.22.0 — uvicorn НИКОГДА не импортирует его без флага
+#     --reload (мы не используем); закреплён на всякий случай до
+#     Rust-1.78 (Win10-база): версия эпохи, которая импортировалась бы и на
+#     Win7;
+#   * openpyxl — формат Excel приложения (как в основном requirements.txt).
+flet==0.23.2
+flet-core==0.23.2
+flet-runtime==0.23.2
+openpyxl==3.1.5
+fastapi==0.115.4
+starlette==0.41.3
+pydantic==1.10.26
+uvicorn==0.32.0
+websockets==13.1
+anyio==4.6.2.post1
+typing_extensions==4.12.2
+httptools==0.6.1
+python-dotenv==1.0.1
+PyYAML==6.0.2
+watchfiles==0.22.0

@@ -6,7 +6,7 @@ cls
 echo.
 echo ======================================================================
 echo   СБОРКА ВСЕХ ДИСТРИБУТИВОВ "ПОРАЙОНКА" v2 DARK final
-echo   Раунд 37: Админ + Пользователь (Win10/11) +
+echo   Раунд 38: Админ + Пользователь (Win10/11) +
 echo             Пользователь Web (Win7) + Админ Web (Win7)
 echo ======================================================================
 echo.
@@ -67,11 +67,64 @@ if errorlevel 1 (
 echo OK - DLL-стаб (x64, SHA256 проверен) будет встроен в web-бандлы
 echo.
 
+:: --- Шаг 4b: чистый Win7 WEB venv-профиль ------------------------------
+:: Раунд 38 (задача 3, P0): web-сборки собираются ТОЛЬКИ из чистого venv
+:: .venv-win7-web с requirements-win7-web.txt (FastAPI 0.115.4 / Pydantic
+:: v1.10.26 — БЕЗ Rust-расширения pydantic-core, падавшего на Win7 с
+:: «DLL load failed while importing _pydantic_core»). Desktop-ступени выше
+:: по-прежнему используют глобальный Python (без downgrade).
+set "W7VENV=.venv-win7-web"
+set "W7PY=%W7VENV%\Scripts\python.exe"
+echo [Шаг 5/11] Чистый Win7 web venv + pinned requirements-win7-web.txt...
+set "PYBASE="
+py -3.11 --version >nul 2>&1 && set "PYBASE=py -3.11"
+if not defined PYBASE (
+    python -c "import sys; raise SystemExit(0 if sys.version_info[:2]==(3,11) else 1)" >nul 2>&1 && set "PYBASE=python"
+)
+if not defined PYBASE (
+    echo [ОШИБКА] Python 3.11.x (x64) не найден - web-сборки Win7 невозможны.
+    echo Установите Python 3.11.x (профиль проверялся именно на 3.11).
+    exit /b 1
+)
+%PYBASE% --version
+if exist %W7VENV% rmdir /s /q %W7VENV%
+%PYBASE% -m venv %W7VENV%
+if errorlevel 1 (
+    echo [ОШИБКА] Не удалось создать venv %W7VENV%.
+    exit /b 1
+)
+"%W7PY%" -m pip install --upgrade pip -q
+"%W7PY%" -m pip install -r requirements-win7-web.txt -q
+if errorlevel 1 (
+    echo [ОШИБКА] Не удалось установить requirements-win7-web.txt.
+    exit /b 1
+)
+"%W7PY%" -m pip install pyinstaller==6.11.1 pillow -q
+if errorlevel 1 (
+    echo [ОШИБКА] Не удалось установить pyinstaller==6.11.1.
+    exit /b 1
+)
+:: ЖЁСТКИЙ стоп, если в профиле pydantic_core (Rust) или pydantic не v1 —
+:: на Windows 7 такая сборка заведомо падает при импорте _pydantic_core.
+"%W7PY%" -c "import importlib.util as u, sys; sys.exit(1 if u.find_spec('pydantic_core') else 0)"
+if errorlevel 1 (
+    echo [ОШИБКА] В профиле найден pydantic_core (Rust) - сборка НЕ запустится
+    echo на Windows 7. Проверьте requirements-win7-web.txt (pydantic 1.10.26).
+    exit /b 1
+)
+"%W7PY%" -c "import pydantic, sys; sys.exit(0 if str(pydantic.VERSION).startswith('1.') else 1)"
+if errorlevel 1 (
+    echo [ОШИБКА] В профиле pydantic НЕ v1 - для Win7 нужен 1.10.26.
+    exit /b 1
+)
+echo OK - Win7 web профиль чистый: pydantic v1, pydantic_core отсутствует
+echo.
+
 :: --- Шаг 3: Админский дистрибутив -----------------------------------------
 :: Раунд 37: build_edition\edition.json — РОЛЬ ЗАПЕЧАТЫВАЕТСЯ ВНУТРЬ exe
 :: (_MEIPASS) перед каждым pyinstaller; перенос exe без сопутствующих
 :: файлов редакцию больше не теряет (источник "embedded" в core/edition.py).
-echo [Шаг 5/10] Сборка АДМИНСКОГО дистрибутива (3-7 минут)...
+echo [Шаг 6/11] Сборка АДМИНСКОГО дистрибутива (3-7 минут)...
 if exist build_admin rmdir /s /q build_admin
 if exist dist_admin rmdir /s /q dist_admin
 if exist build_edition rmdir /s /q build_edition
@@ -87,7 +140,7 @@ echo OK - dist_admin\Порайонка_Админ.exe
 echo.
 
 :: --- Шаг 4: Пользовательский дистрибутив ----------------------------------
-echo [Шаг 6/10] Сборка ПОЛЬЗОВАТЕЛЬСКОГО дистрибутива (3-7 минут)...
+echo [Шаг 7/11] Сборка ПОЛЬЗОВАТЕЛЬСКОГО дистрибутива (3-7 минут)...
 if exist build_user rmdir /s /q build_user
 if exist dist_user rmdir /s /q dist_user
 if exist build_edition rmdir /s /q build_edition
@@ -103,12 +156,12 @@ echo OK - dist_user\Порайонка_Пользователь.exe
 echo.
 
 :: --- Шаг 5: Web-дистрибутив (ПОЛЬЗОВАТЕЛЬ) для Windows 7 ------------------
-echo [Шаг 7/10] Сборка WEB-дистрибутива ПОЛЬЗОВАТЕЛЬ для Win7 (3-7 минут)...
+echo [Шаг 8/11] Сборка WEB-дистрибутива ПОЛЬЗОВАТЕЛЬ для Win7 (3-7 минут)...
 if exist build_web rmdir /s /q build_web
 if exist dist_web rmdir /s /q dist_web
 if exist build_edition rmdir /s /q build_edition
 python -c "import pathlib,json; pathlib.Path('build_edition').mkdir(exist_ok=True); pathlib.Path('build_edition/edition.json').write_text(json.dumps({'role':'user'},ensure_ascii=False,indent=2),encoding='utf-8')"
-pyinstaller Porayonka_User_Web.spec --noconfirm --clean --log-level WARN --distpath dist_web --workpath build_web
+"%W7PY%" -m PyInstaller Porayonka_User_Web.spec --noconfirm --clean --log-level WARN --distpath dist_web --workpath build_web
 if errorlevel 1 (
     echo [ОШИБКА] Сборка web-дистрибутива пользователя не удалась.
     exit /b 1
@@ -119,16 +172,21 @@ copy /y "start_web_win7.bat" "dist_web\start_web_win7.bat" >nul
 if exist "assets\win7\api-ms-win-core-path-l1-1-0.dll" (
     copy /y "assets\win7\api-ms-win-core-path-l1-1-0.dll" "dist_web\api-ms-win-core-path-l1-1-0.dll" >nul
 )
+python tools\make_web_manifest.py --venv %W7VENV% --exe "dist_web\Порайонка_Пользователь_Web.exe" --out "dist_web\manifest_win7_web.txt"
+if errorlevel 1 (
+    echo [ОШИБКА] Манифест web-дистрибутива пользователя не сошёлся.
+    exit /b 1
+)
 echo OK - dist_web\Порайонка_Пользователь_Web.exe
 echo.
 
 :: --- Шаг 6: Web-дистрибутив (АДМИН) для Windows 7 -------------------------
-echo [Шаг 8/10] Сборка WEB-дистрибутива АДМИН для Win7 (3-7 минут)...
+echo [Шаг 9/11] Сборка WEB-дистрибутива АДМИН для Win7 (3-7 минут)...
 if exist build_admin_web rmdir /s /q build_admin_web
 if exist dist_admin_web rmdir /s /q dist_admin_web
 if exist build_edition rmdir /s /q build_edition
 python -c "import pathlib,json; pathlib.Path('build_edition').mkdir(exist_ok=True); pathlib.Path('build_edition/edition.json').write_text(json.dumps({'role':'admin'},ensure_ascii=False,indent=2),encoding='utf-8')"
-pyinstaller Porayonka_Admin_Web.spec --noconfirm --clean --log-level WARN --distpath dist_admin_web --workpath build_admin_web
+"%W7PY%" -m PyInstaller Porayonka_Admin_Web.spec --noconfirm --clean --log-level WARN --distpath dist_admin_web --workpath build_admin_web
 if errorlevel 1 (
     echo [ОШИБКА] Сборка web-дистрибутива админа не удалась.
     exit /b 1
@@ -140,11 +198,16 @@ if exist "assets\win7\api-ms-win-core-path-l1-1-0.dll" (
     copy /y "assets\win7\api-ms-win-core-path-l1-1-0.dll" "dist_admin_web\api-ms-win-core-path-l1-1-0.dll" >nul
 )
 if exist build_edition rmdir /s /q build_edition
+python tools\make_web_manifest.py --venv %W7VENV% --exe "dist_admin_web\Порайонка_Админ_Web.exe" --out "dist_admin_web\manifest_win7_web.txt"
+if errorlevel 1 (
+    echo [ОШИБКА] Манифест web-дистрибутива админа не сошёлся.
+    exit /b 1
+)
 echo OK - dist_admin_web\Порайонка_Админ_Web.exe
 echo.
 
 :: --- Шаг 7: Собираем всё в одну папку -------------------------------------
-echo [Шаг 9/10] Копирование всех дистрибутивов в dist_all\...
+echo [Шаг 10/11] Копирование всех дистрибутивов в dist_all\...
 if exist dist_all rmdir /s /q dist_all
 mkdir dist_all
 
@@ -163,6 +226,7 @@ copy /y "dist_web\Порайонка_Пользователь_Web.exe" "dist_all
 copy /y "dist_web\edition.json" "dist_all\Порайонка_Пользователь_Web\" >nul
 copy /y "dist_web\edition.json.bak" "dist_all\Порайонка_Пользователь_Web\" >nul
 copy /y "dist_web\start_web_win7.bat" "dist_all\Порайонка_Пользователь_Web\" >nul
+copy /y "dist_web\manifest_win7_web.txt" "dist_all\Порайонка_Пользователь_Web\" >nul
 if exist "dist_web\api-ms-win-core-path-l1-1-0.dll" (
     copy /y "dist_web\api-ms-win-core-path-l1-1-0.dll" "dist_all\Порайонка_Пользователь_Web\" >nul
 )
@@ -172,12 +236,13 @@ copy /y "dist_admin_web\Порайонка_Админ_Web.exe" "dist_all\Пор�
 copy /y "dist_admin_web\edition.json" "dist_all\Порайонка_Админ_Web\" >nul
 copy /y "dist_admin_web\edition.json.bak" "dist_all\Порайонка_Админ_Web\" >nul
 copy /y "dist_admin_web\start_web_win7.bat" "dist_all\Порайонка_Админ_Web\" >nul
+copy /y "dist_admin_web\manifest_win7_web.txt" "dist_all\Порайонка_Админ_Web\" >nul
 if exist "dist_admin_web\api-ms-win-core-path-l1-1-0.dll" (
     copy /y "dist_admin_web\api-ms-win-core-path-l1-1-0.dll" "dist_all\Порайонка_Админ_Web\" >nul
 )
 
 :: --- Шаг 8: Проверка итогов -----------------------------------------------
-echo [Шаг 10/10] Проверка итоговой папки...
+echo [Шаг 11/11] Проверка итоговой папки...
 echo.
 set "ERR=0"
 if not exist "dist_all\Порайонка_Админ\Порайонка_Админ.exe" set ERR=1
@@ -187,9 +252,11 @@ if not exist "dist_all\Порайонка_Пользователь\edition.json"
 if not exist "dist_all\Порайонка_Пользователь_Web\Порайонка_Пользователь_Web.exe" set ERR=1
 if not exist "dist_all\Порайонка_Пользователь_Web\edition.json" set ERR=1
 if not exist "dist_all\Порайонка_Пользователь_Web\start_web_win7.bat" set ERR=1
+if not exist "dist_all\Порайонка_Пользователь_Web\manifest_win7_web.txt" set ERR=1
 if not exist "dist_all\Порайонка_Админ_Web\Порайонка_Админ_Web.exe" set ERR=1
 if not exist "dist_all\Порайонка_Админ_Web\edition.json" set ERR=1
 if not exist "dist_all\Порайонка_Админ_Web\start_web_win7.bat" set ERR=1
+if not exist "dist_all\Порайонка_Админ_Web\manifest_win7_web.txt" set ERR=1
 
 if %ERR%==1 (
     echo [ОШИБКА] Не все файлы собраны. Проверьте dist_all\.
@@ -206,10 +273,10 @@ echo  Состав:
 echo    - Порайонка_Админ\Порайонка_Админ.exe  + edition.json (+.bak)
 echo    - Порайонка_Пользователь\Порайонка_Пользователь.exe  + edition.json (+.bak)
 echo    - Порайонка_Пользователь_Web\Порайонка_Пользователь_Web.exe
-echo                                + edition.json (+.bak) + start_web_win7.bat
+echo                                + edition.json (+.bak) + start_web_win7.bat + manifest
 echo                                + api-ms-win-core-path-l1-1-0.dll
 echo    - Порайонка_Админ_Web\Порайонка_Админ_Web.exe
-echo                                + edition.json (+.bak) + start_web_win7.bat
+echo                                + edition.json (+.bak) + start_web_win7.bat + manifest
 echo                                + api-ms-win-core-path-l1-1-0.dll
 echo.
 echo  Установка:

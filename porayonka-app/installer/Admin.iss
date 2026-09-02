@@ -7,6 +7,11 @@
 
 #include "Common.iss"
 
+; Раунд 38 (задача 4): константы для CommonUninstall.iss
+#define EditionExeName "Порайонка_Админ.exe"
+#define EditionSuffix "0001"
+#define EditionLabel "Администратор"
+
 [Setup]
 AppId={{A26A1A26-0001-0001-0001-0123456789AB}
 AppName=Порайонка — Администратор
@@ -49,6 +54,13 @@ Name: "{autodesktop}\Порайонка — Администратор"; Filenam
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PorayonkaAdmin"; ValueData: """{app}\Порайонка_Админ.exe"""; Flags: uninsdeletevalue
 
+; Раунд 38 (задача 4, P0): после деинсталляции не должно остаться НИЧЕГО
+; в {app}: Inno сам считает «своими» только установленные файлы, а приложение
+; и установщик создают ещё edition.json.bak, логи и пр. У каждой редакции
+; свой {app} — папка другой редакции здесь не затрагивается.
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
 ; Запуск — только финальная страница мастера (postinstall без Tasks) — раунд 28
 [Run]
 Filename: "{app}\Порайонка_Админ.exe"; Description: "{cm:LaunchProgram,Порайонка — Администратор}"; Flags: nowait postinstall skipifsilent
@@ -81,3 +93,6 @@ begin
     SaveStringToUTF8File(ExpandConstant('{app}\edition.json.bak'), Json, False);
   end;
 end;
+
+; Раунд 38 (задача 4): полное и безопасное удаление (общий код 4 редакций)
+#include "CommonUninstall.iss"

@@ -794,6 +794,17 @@ def scenario_persist_merge():
             check("11: поле «Входящий №» найдено", inc_field is not None)
             if inc_field is not None:
                 inc_field.value = "ВХСОП-NEW"
+            # Раунд 38, задача 6: новый контроль обязан иметь скан задания
+            # (PDF/изображение) — прикрепляем PDF через пикер, как реальный
+            # пользователь, иначе форма не даст сохранить карточку.
+            pdf11 = os.path.join(tempfile.mkdtemp(prefix="stress_pdf11_"), "scan11.pdf")
+            with open(pdf11, "wb") as f:
+                f.write(b"%PDF-1.4 persist-merge-scan")
+            picker11 = getattr(page, "_controls_attach_picker", None)
+            check("11: пикер вложений зарегистрирован", picker11 is not None)
+            if picker11 is not None:
+                _invoke_event_handler(picker11.on_result, type("E", (), {
+                    "files": [type("F", (), {"path": pdf11, "name": "scan11.pdf"})()]} )())
             save_btn = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
                         and getattr(c, "text", None) == "Сохранить"]
             check("11: кнопка «Сохранить» найдена", len(save_btn) == 1)
@@ -969,6 +980,15 @@ def scenario_offline_admin_to_online():
                               and (getattr(c, "hint_text", None) or "").startswith("Входящий")), None)
             if inc_field is not None:
                 inc_field.value = "ВХСОП-OFFLINE"
+            # Раунд 38, задача 6: новый контроль обязан иметь скан задания —
+            # офлайн-админ прикрепляет PDF (уйдёт в локальную папку вложений).
+            pdf14 = os.path.join(tempfile.mkdtemp(prefix="stress_pdf14_"), "scan14.pdf")
+            with open(pdf14, "wb") as f:
+                f.write(b"%PDF-1.4 offline-scan")
+            picker14 = getattr(page, "_controls_attach_picker", None)
+            if picker14 is not None:
+                _invoke_event_handler(picker14.on_result, type("E", (), {
+                    "files": [type("F", (), {"path": pdf14, "name": "scan14.pdf"})()]} )())
             save_btn = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
                         and getattr(c, "text", None) == "Сохранить"]
             save_btn[0].on_click(None)

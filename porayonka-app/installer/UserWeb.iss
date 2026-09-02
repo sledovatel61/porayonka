@@ -6,6 +6,11 @@
 
 #include "Common.iss"
 
+; Раунд 38 (задача 4): константы для CommonUninstall.iss
+#define EditionExeName "Порайонка_Пользователь_Web.exe"
+#define EditionSuffix "0003"
+#define EditionLabel "Пользователь (Web)"
+
 [Setup]
 AppId={{A26A1A26-0003-0003-0003-0123456789AB}
 AppName=Порайонка — Пользователь (Web для Win7)
@@ -53,6 +58,13 @@ Name: "{autodesktop}\Порайонка — Пользователь (Web)"; Fil
 ; Автозапуск ВСЕГДА (без чекбокса на странице задач) — раунд 28
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PorayonkaWeb"; ValueData: """{app}\start_web_win7.bat"""; Flags: uninsdeletevalue
+
+; Раунд 38 (задача 4, P0): после деинсталляции не должно остаться НИЧЕГО
+; в {app}: Inno сам считает «своими» только установленные файлы, а приложение
+; и установщик создают ещё edition.json.bak, логи и пр. У каждой редакции
+; свой {app} — папка другой редакции здесь не затрагивается.
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
 
 ; Запуск — только финальная страница мастера (postinstall без Tasks) — раунд 28
 [Run]
@@ -135,3 +147,6 @@ begin
     SaveStringToUTF8File(ExpandConstant('{app}\edition.json.bak'), Json, False);
   end;
 end;
+
+; Раунд 38 (задача 4): полное и безопасное удаление (общий код 4 редакций)
+#include "CommonUninstall.iss"
