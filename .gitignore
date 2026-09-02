@@ -67,3 +67,7 @@ installer/InnoSetup6/
 installer/innosetup-*.exe
 installer/*.log
 *.iss.bak
+
+# Local validation logs and generated audit reports
+porayonka-app/build*.log
+porayonka-app/tools/*_audit_report.txt
