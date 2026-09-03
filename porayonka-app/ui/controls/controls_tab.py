@@ -32,6 +32,7 @@ from core.controls_data import (
     read_shared_controls, write_shared_controls, get_shared_mtime,
     sync_attachments_from_shared,
     copy_attachment_to_local, copy_attachment_to_shared,
+    copy_attachment_to_shared_ex,
     resolve_attachment, delete_attachment, ATTACHMENT_WARN_MB,
     add_custom_initiator,
     merge_controls, _should_notify,
@@ -306,6 +307,56 @@ def _attach_event_is_duplicate(state: dict, sig: tuple, now=None, window: float 
 # замораживать UI-поток. Мелкие копируются синхронно (мгновенно, результат
 # виден сразу — поведение раундов 23/28 сохранено).
 _ATTACH_ASYNC_MB = 5
+
+
+# ── Completion-механизм фоновых копий вложений (раунд 38, fix stress 5c) ──
+# Семантика: файл объявляется «прикреплённым» только ПОСЛЕ публикации —
+# copy2 + os.replace завершены в _copy_batch, результат применён к модели и
+# UI через _apply_attach_result. Тесты (и сервисный код) ждут НАСТОЯЩЕЕ
+# завершение операции через wait_attach_jobs()/attach_jobs_pending(), а не
+# опрос Control.attachments: применение результата маршаллизуется в
+# UI-поток через _post_to_ui (в реальном Flet — отложенно, в headless-
+# стабе — синхронно в потоке копии), поэтому счётчик закрывает ОБА пути.
+_attach_jobs: Dict[str, int] = {}
+_attach_jobs_cv = threading.Condition()
+
+
+def _attach_job_begin(cid: str) -> None:
+    with _attach_jobs_cv:
+        _attach_jobs[cid] = _attach_jobs.get(cid, 0) + 1
+
+
+def _attach_job_end(cid: str) -> None:
+    with _attach_jobs_cv:
+        n = _attach_jobs.get(cid, 0) - 1
+        if n > 0:
+            _attach_jobs[cid] = n
+        else:
+            _attach_jobs.pop(cid, None)
+        _attach_jobs_cv.notify_all()
+
+
+def attach_jobs_pending(cid: str) -> int:
+    """Сколько фоновых копий вложений контроля ещё выполняется."""
+    with _attach_jobs_cv:
+        return _attach_jobs.get(cid, 0)
+
+
+def wait_attach_jobs(cid: str, timeout: float = 10.0) -> bool:
+    """True — все фоновые копии вложений контроля завершены.
+
+    «Завершена» = файл опубликован (или отказ зафиксирован) И результат
+    уже применён к модели/UI. False — timeout (повисшая операция видна
+    тесту как отдельный FAIL, а не как следствие в следующих проверках).
+    """
+    deadline = time.time() + timeout
+    with _attach_jobs_cv:
+        while _attach_jobs.get(cid):
+            left = deadline - time.time()
+            if left <= 0:
+                return False
+            _attach_jobs_cv.wait(left)
+        return True
 
 
 def _file_size_mb(fobj) -> float:
@@ -3455,12 +3506,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             page.open(dlg)
 
         def _copy_batch(files, cid, existing_names):
-            """Скопировать файлы вложений (shared → локальный фолбэк).
+            """Скопировать файлы вложений (shared → локальный фолбэк при офлайне).
 
             Аудит сети (раунд 30): ЧИСТОЕ копирование без доступа к
             detail_state/UI — безопасно вызывать из фонового потока.
             Возвращает (added_rels, failed). Имена уже прикреплённых файлов
-            не копируются повторно (раунд 21, задача 5)."""
+            не копируются повторно (раунд 21, задача 5).
+            Раунд 38 (fix stress 5c): reason "error" — сеть ДОСТУПНА,
+            но copy2/os.replace не прошли — это ОШИБКА, вложение НЕ
+            прикрепляется (локальный фолбэк при живой сети запрещён). Иначе
+            временный отказ (антивирус держит tmp на Windows) уводил
+            вложение в локальную копию: модель ссылалась на файл, которого
+            нет в shared, а в общей папке оставался осиротевший .tmp
+            (стабильное падение stress 5c 4/4). Локальный фолбэк — только
+            при недоступной shared-папке (офлайн-режим, reason "offline").
+            """
             added: List[str] = []
             failed = 0
             for fobj in files:
@@ -3474,21 +3534,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if _base in existing_names:
                     continue
                 rel = None
+                reason = "offline"
                 if settings.get("network_enabled"):
                     try:
-                        rel = copy_attachment_to_shared(cid, fpath, settings)
+                        rel, reason = copy_attachment_to_shared_ex(cid, fpath, settings)
                     except Exception:
                         # сеть отключена/недоступна — падаем в локальное копирование
                         traceback.print_exc()
-                        rel = None
-                if not rel:
+                        rel, reason = None, "offline"
+                if not rel and reason == "offline":
                     # Раунд 13 (задача 5): локальное копирование как фолбэк
+                    # (сеть выключена или shared-папка недоступна)
                     rel = copy_attachment_to_local(cid, fpath)
                 if rel:
                     existing_names.add(_base)
                     added.append(rel)
                 else:
                     failed += 1
+                    if reason == "error":
+                        print("[CONTROLS_TAB] attach publish failed (network up) "
+                              "- file NOT attached")
             return added, failed
 
         def _apply_attach_result(cid, is_new, added, failed, skipped):
@@ -3593,17 +3658,32 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _apply_attach_result(cid, detail_state["is_new"], added, failed, skipped)
             if big:
                 is_new_at_pick = detail_state["is_new"]
+                # Раунд 38 (fix stress 5c): completion-job регистрируется ДО
+                # старта потока; снимается строго ПОСЛЕ _apply_attach_result —
+                # к этому моменту файл опубликован, модель сохранена, UI
+                # обновлён. Тесты/сервис ждут wait_attach_jobs(), а не опрос
+                # Control.attachments.
+                _attach_job_begin(cid)
+
                 def _bg_copy():
                     try:
                         a, f = _copy_batch(big, cid, existing_names)
                     except Exception:
                         traceback.print_exc()
                         a, f = [], 1
-                    _post_to_ui(lambda: _apply_attach_result(cid, is_new_at_pick,
-                                                             a, f, skipped))
+
+                    def _fin():
+                        try:
+                            _apply_attach_result(cid, is_new_at_pick, a, f, skipped)
+                        finally:
+                            _attach_job_end(cid)
+
+                    _post_to_ui(_fin)
+
                 try:
                     threading.Thread(target=_bg_copy, daemon=True).start()
                 except Exception as ex:
+                    _attach_job_end(cid)
                     print(f"[CONTROLS_TAB] attach bg copy error: {ex}")
                     from ui.toast import show_error_toast
                     show_error_toast(page, "Не удалось прикрепить файл")

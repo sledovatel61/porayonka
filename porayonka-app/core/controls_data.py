@@ -860,6 +860,66 @@ def get_attachment_source_path(control_id: str, rel_path: str) -> Optional[Path]
     return get_attachment_dir(control_id) / safe if safe else None
 
 
+def _win_sharing_error(e: OSError) -> bool:
+    """True — ошибка «файл временно занят» (Windows: антивирус/индексатор
+    держит свежесозданный файл): PermissionError, WinError 5/32/33.
+
+    На Windows с Windows Defender/антивирусом свежий tmp-файл на короткое
+    время (десятки-сотни мс) открывается сторонним процессом эксклюзивно:
+    os.replace() и unlink() над ним падают PermissionError (WinError 32).
+    Именно этот отказ рождал детект stress-аудита раунда 38 (Windows,
+    4 из 4): shared-публикация не прошла, copy_attachment_to_shared вернул
+    None, вызывающая сторона ушла в ЛОКАЛЬНЫЙ фолбэк — вложение появилось
+    в модели, а в shared остался осиротевший .tmp и не было финального
+    файла. PermissionError на других ОС тоже ретраим (NFS-глитчи).
+    """
+    if isinstance(e, PermissionError):
+        return True
+    return getattr(e, "winerror", None) in (5, 32, 33)
+
+
+def _try_unlink(tmp: Path) -> None:
+    """Удалить tmp с ограниченными ретраями (Windows sharing-ошибки).
+
+    Если удалить не удалось — не фатально: файл остаётся под скрытым
+    tmp-именем (не повреждает финальное имя), а подчистит его sweeper
+    (_sweep_stale_tmp) при следующих копированиях в ту же папку.
+    """
+    for pause in (0.0, 0.05, 0.15, 0.3):
+        if pause:
+            time.sleep(pause)
+        try:
+            tmp.unlink()
+            return
+        except FileNotFoundError:
+            return
+        except OSError as e:
+            if not _win_sharing_error(e):
+                return
+    print(f"[CONTROLS_DATA] tmp left for sweeper: {tmp.name}")
+
+
+# Осиротевшие tmp старше этого возраста — реликты прерванных внешне копий
+# (kill процесса, обрыв сети). Активные tmp другого клиента младше порога
+# не трогаем.
+_TMP_SWEEP_AGE_SEC = 600
+
+
+def _sweep_stale_tmp(target_dir: Path,
+                     older_than_sec: int = _TMP_SWEEP_AGE_SEC) -> None:
+    """Удалить старые осиротевшие .tmp в папке вложений (best effort)."""
+    try:
+        now = time.time()
+        for p in target_dir.glob(".*.tmp"):
+            try:
+                if now - p.stat().st_mtime > older_than_sec:
+                    p.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 def _copy_atomic(src: Path, target_dir: Path, filename: str) -> bool:
     """Скопировать файл в target_dir АТОМАРНО: tmp-файл + os.replace.
 
@@ -868,19 +928,36 @@ def _copy_atomic(src: Path, target_dir: Path, filename: str) -> bool:
     resolve_attachment показывал вместо полного локального (shared приоритетнее
     локального). Теперь при сбое tmp удаляется, битого файла под финальным
     именем не остаётся. True — файл на месте и цел.
+
+    Раунд 38 (fix stress 5c): os.replace и удаление tmp — с ОГРАНИЧЕННЫМИ
+    ретраями при sharing-ошибках Windows (антивирус держит свежий tmp;
+    см. _win_sharing_error). Паузы суммарно < ~1.6 c и потому допустимы:
+    крупные файлы копируются в фоновом потоке (см. _ATTACH_ASYNC_MB), а
+    ретрай нужен только при реальном отказе. Без ретраев единичный отказ
+    антивируса откатывал публикацию в shared и уводил вложение в локальную
+    копию, оставляя в shared осиротевший .tmp (модель опережала публикацию).
     """
     tmp = target_dir / f".{filename}.{uuid4().hex}.tmp"
     try:
         shutil.copy2(src, tmp)
-        os.replace(tmp, target_dir / filename)
-        return True
     except OSError as e:
         print(f"[CONTROLS_DATA] copy attachment error: {e}")
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
+        _try_unlink(tmp)
         return False
+    last: Optional[OSError] = None
+    for pause in (0.0, 0.05, 0.1, 0.2, 0.4, 0.8):
+        if pause:
+            time.sleep(pause)
+        try:
+            os.replace(tmp, target_dir / filename)
+            return True
+        except OSError as e:
+            last = e
+            if not _win_sharing_error(e):
+                break
+    print(f"[CONTROLS_DATA] publish attachment error: {last}")
+    _try_unlink(tmp)
+    return False
 
 
 def copy_attachment_to_local(control_id: str, source_path: str) -> Optional[str]:
@@ -896,6 +973,7 @@ def copy_attachment_to_local(control_id: str, source_path: str) -> Optional[str]
         if not src.exists():
             return None
         target_dir = get_attachment_dir(control_id)
+        _sweep_stale_tmp(target_dir)
         filename = _unique_filename(target_dir, src.name)
         if not _copy_atomic(src, target_dir, filename):
             return None
@@ -903,6 +981,48 @@ def copy_attachment_to_local(control_id: str, source_path: str) -> Optional[str]
     except OSError as e:
         print(f"[CONTROLS_DATA] copy attachment error: {e}")
         return None
+
+
+def copy_attachment_to_shared_ex(control_id: str, source_path: str,
+                                 settings: dict) -> tuple:
+    """Копирование в shared с ЯВНОЙ причиной отказа.
+
+    Возвращает (rel_path | None, reason), reason:
+      "ok"      — файл опубликован в shared (copy2 + os.replace прошли);
+      "offline" — shared-папка недоступна (путь не задан / каталог
+                  недостижим): вызывающая сторона вправе уйти в локальный
+                  фолбэк (офлайн-режим, вложение доедет синхронизацией);
+      "error"   — сеть ДОСТУПНА (каталог есть), но копия/публикация не
+                  удалась: вложение НЕ прикреплять никуда — модель не
+                  должна ссылаться на неопубликованный файл, а в shared не
+                  должно оставаться осиротевшего .tmp (раунд 38, root cause
+                  падения stress 5c на Windows: без различения причин
+                  единичный отказ антивируса уводил вложение в локальную
+                  копию, оставляя общий файл неопубликованным).
+    """
+    if not control_id:
+        return None, "error"
+    shared_dir = _shared_dir(settings)
+    if shared_dir is None:
+        return None, "offline"
+    try:
+        src = Path(source_path)
+        target_dir = shared_dir / "controls_attachments" / control_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"[CONTROLS_DATA] shared attachments dir unavailable: {e}")
+        return None, "offline"
+    try:
+        if not src.exists():
+            return None, "error"
+        _sweep_stale_tmp(target_dir)
+        filename = _unique_filename(target_dir, src.name)
+        if not _copy_atomic(src, target_dir, filename):
+            return None, "error"
+        return f"{control_id}/{filename}", "ok"
+    except OSError as e:
+        print(f"[CONTROLS_DATA] copy attachment to shared error: {e}")
+        return None, "error"
 
 
 def copy_attachment_to_shared(control_id: str, source_path: str, settings: dict) -> Optional[str]:
@@ -913,26 +1033,11 @@ def copy_attachment_to_shared(control_id: str, source_path: str, settings: dict)
     Раунд 13: пустой control_id или недоступная shared-папка — сразу None,
     вызывающая сторона переходит на локальное копирование (без TypeError).
     Аудит сети: копирование атомарное (_copy_atomic) — обрыв сети на полпути
-    не оставляет битого файла под финальным именем.
+    не оставляет битого файла под финальным именем. Нужна причина отказа —
+    см. copy_attachment_to_shared_ex.
     """
-    if not control_id:
-        return None
-    shared_dir = _shared_dir(settings)
-    if shared_dir is None:
-        return None
-    try:
-        src = Path(source_path)
-        if not src.exists():
-            return None
-        target_dir = shared_dir / "controls_attachments" / control_id
-        target_dir.mkdir(parents=True, exist_ok=True)
-        filename = _unique_filename(target_dir, src.name)
-        if not _copy_atomic(src, target_dir, filename):
-            return None
-        return f"{control_id}/{filename}"
-    except OSError as e:
-        print(f"[CONTROLS_DATA] copy attachment to shared error: {e}")
-        return None
+    rel, _reason = copy_attachment_to_shared_ex(control_id, source_path, settings)
+    return rel
 
 
 def _unique_filename(target_dir: Path, name: str) -> str:
