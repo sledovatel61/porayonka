@@ -515,6 +515,39 @@ def _entry():
     import sys
     if "--web" in sys.argv:
         os.environ["PORAYONKA_WEB"] = "1"
+        # Раунд 38 (задачи 3.3/7): в web-режиме FLET_ASSETS_DIR ведёт в
+        # пользовательский каталог %APPDATA%\porayonka\web_assets — туда
+        # копируются статические файлы бандла (иконка/звук), а кнопка
+        # «Скачать» вложения кладёт копии для отдачи браузеру
+        # (/assets/downloads/). Делается ДО ft.app — сервер читает env при
+        # запуске. Desktop-режим не затрагивается.
+        try:
+            import shutil as _sh38w
+            _appdata38 = os.environ.get("APPDATA") or os.path.expanduser("~")
+            _wa38 = os.path.join(_appdata38, "porayonka", "web_assets")
+            os.makedirs(_wa38, exist_ok=True)
+            _src38 = None
+            if getattr(sys, "frozen", False):
+                _src38 = os.path.join(getattr(sys, "_MEIPASS", ""), "assets")
+            else:
+                _src38 = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "assets")
+            if _src38 and os.path.isdir(_src38):
+                for _nm38 in os.listdir(_src38):
+                    _sp38 = os.path.join(_src38, _nm38)
+                    if os.path.isfile(_sp38):
+                        try:
+                            _sh38w.copy2(_sp38, os.path.join(_wa38, _nm38))
+                        except OSError:
+                            pass
+            # свежая сессия — чистим каталог скачанных копий
+            _dl38 = os.path.join(_wa38, "downloads")
+            if os.path.isdir(_dl38):
+                _sh38w.rmtree(_dl38, ignore_errors=True)
+            os.makedirs(_dl38, exist_ok=True)
+            os.environ["FLET_ASSETS_DIR"] = _wa38
+        except Exception:
+            pass
         # Раунд 26 (задача 1): у frozen console=False нет stdout/stderr —
         # чиним ДО старта uvicorn (внутри ft.app).
         _ensure_console_streams()

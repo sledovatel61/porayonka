@@ -420,11 +420,19 @@ def scenario_attachments():
 
 
 def scenario_big_attach_async_ui():
-    """Полный прогон: событие FilePicker с крупным файлом -> фоновая копия."""
+    """Полный прогон: событие FilePicker с крупным файлом -> фоновая копия.
+
+    Раунд 38 (fix): сценарий ждёт НАСТОЯЩЕЕ завершение всей операции через
+    completion-механизм (файл опубликован, модель сохранена, UI обновлён),
+    а не только появление записи в Control.attachments — раньше на Windows
+    (антивирус держит свежий .tmp) тест стабильно ловил момент, когда
+    вложение уже в модели, а shared-файл ещё не опубликован.
+    """
     shared_dir, shared_path, server_settings = _shared_ctx()
     big = os.path.join(tempfile.gettempdir(), "stress_big_scan2.pdf")
     with open(big, "wb") as f:
         f.truncate(6 * 1024 * 1024)
+    src_size = os.path.getsize(big)
     try:
         with Client("bigu", shared_path) as cli:
             cli.prepare()
@@ -444,27 +452,164 @@ def scenario_big_attach_async_ui():
                     return
                 _invoke_event_handler(picker.on_result, type("E", (), {
                     "files": [type("F", (), {"path": big, "name": "stress_big_scan2.pdf"})()]} )())
-                # фоновая копия + применение: ждём завершения (до 10 с)
-                deadline = time.time() + 10
-                done = False
-                ctl = None
-                while time.time() < deadline:
-                    ctl = next((c for c in load_controls() if c.id == "big2"), None)
-                    if ctl and ctl.attachments:
-                        done = True
-                        break
-                    time.sleep(0.05)
-                check("5c: крупный файл прикрепился через ФОНОВУЮ копию",
-                      done and ctl is not None
-                      and any(str(a).endswith("stress_big_scan2.pdf") for a in ctl.attachments))
+                # ждём настоящее завершение фоновой операции (10 с на 6 МБ —
+                # с запасом даже для медленного SMB/антивирусных ретраев;
+                # при timeout — отдельный FAIL с понятной диагностикой)
+                finished = ct_module.wait_attach_jobs("big2", timeout=10)
+                check("5c: фоновая копия завершена (completion, не опрос модели)",
+                      finished)
+                # 1. локальная модель обновлена (ровно одно вложение)
+                ctl = next((c for c in load_controls() if c.id == "big2"), None)
+                check("5c: локальная модель обновлена: ровно одно вложение",
+                      ctl is not None and len(ctl.attachments) == 1
+                      and str(ctl.attachments[0]).endswith("/stress_big_scan2.pdf"),
+                      f"{ctl.attachments if ctl else None}")
+                # 2. финальный shared-файл существует
                 sh_path = os.path.join(shared_dir, "controls_attachments", "big2")
+                sh_file = os.path.join(sh_path, "stress_big_scan2.pdf")
                 check("5c: файл лежит в shared-папке вложений",
-                      os.path.exists(os.path.join(sh_path, "stress_big_scan2.pdf")))
+                      os.path.exists(sh_file))
+                # 3. размер финального файла совпадает с исходным
+                check("5c: размер shared-файла совпадает с исходным",
+                      os.path.exists(sh_file)
+                      and os.path.getsize(sh_file) == src_size,
+                      f"{os.path.getsize(sh_file) if os.path.exists(sh_file) else -1}"
+                      f" vs {src_size}")
+                # 4. временных .tmp нет
+                names5c = os.listdir(sh_path) if os.path.isdir(sh_path) else []
                 check("5c: tmp-мусора в папке вложений нет",
-                      not any(n.endswith(".tmp") for n in os.listdir(sh_path)))
+                      not any(n.endswith(".tmp") for n in names5c), f"{names5c}")
+                # 5. строка вложения видна в UI открытой карточки
                 txt = _texts(tab)
                 check("5c: строка вложения видна в UI",
                       any("stress_big_scan2.pdf" in t for t in txt))
+                # 6. повторное событие тем же файлом — антидубль
+                _invoke_event_handler(picker.on_result, type("E", (), {
+                    "files": [type("F", (), {"path": big, "name": "stress_big_scan2.pdf"})()]} )())
+                check("5c: повторное событие не запустило вторую фоновую копию",
+                      ct_module.wait_attach_jobs("big2", timeout=2))
+                ctl = next((c for c in load_controls() if c.id == "big2"), None)
+                check("5c: повторное событие - вложение осталось ОДНИМ (дубля нет)",
+                      ctl is not None and len(ctl.attachments) == 1,
+                      f"{ctl.attachments if ctl else None}")
+                # 7. после небольшой выдержки .tmp не «воскресает»
+                time.sleep(0.4)
+                names5c = os.listdir(sh_path) if os.path.isdir(sh_path) else []
+                check("5c: после выдержки tmp не появляется повторно",
+                      not any(n.endswith(".tmp") for n in names5c))
+                # 8. polling/повторное чтение не теряет вложение
+                page._controls_poll_apply(get_shared_mtime(cli.settings),
+                                          read_shared_controls(cli.settings))
+                ctl = next((c for c in load_controls() if c.id == "big2"), None)
+                check("5c: polling/re-read не потерял вложение",
+                      ctl is not None and len(ctl.attachments) == 1)
+            finally:
+                page._controls_poll_stop["flag"] = True
+    finally:
+        try:
+            os.remove(big)
+        except OSError:
+            pass
+
+
+def scenario_attach_publish_error():
+    """Ошибка публикации большого вложения при ДОСТУПНОЙ сети (раунд 38 fix).
+
+    Регрессионные проверки: финального attachment в модели НЕТ, ложная
+    ссылка не сохраняется, .tmp удалён, приложение не падает, ошибка
+    диагностируется (ASCII/cp1251-safe print). Плюс контрпроверка: при
+    НЕдоступной shared-папке (офлайн) вложение обязано прикрепиться
+    локально — офлайн-семантика раундов 13/30 не сломана.
+    """
+    shared_dir, shared_path, server_settings = _shared_ctx()
+    big = os.path.join(tempfile.gettempdir(), "stress_big_scan5.pdf")
+    with open(big, "wb") as f:
+        f.truncate(6 * 1024 * 1024)
+    try:
+        with Client("bigerr", shared_path) as cli:
+            cli.prepare()
+            write_shared_controls(
+                [_mk("big5", "ВХСОП-BIG5", "2026-08-01T10:00:00")], cli.settings)
+            save_controls([_mk("big5", "ВХСОП-BIG5", "2026-08-01T10:00:00")])
+            page, tab, _ = build()
+            try:
+                rows = _rows(tab)
+                check("5e: строка контроля найдена (ошибка публикации)",
+                      len(rows) >= 1)
+                rows[0].on_click(None)
+                picker = getattr(page, "_controls_attach_picker", None)
+                check("5e: пикер найден", picker is not None)
+                if picker is None:
+                    return
+                # сеть доступна, но copy2 стабильно падает (обрыв/отказ на
+                # уровне ОС); monkeypatch контролируемый, без UNC-сервера
+                orig_copy2 = cd_module.shutil.copy2
+
+                def _boom(*a, **kw):
+                    raise OSError("simulated publish failure")
+
+                cd_module.shutil.copy2 = _boom
+                try:
+                    _invoke_event_handler(picker.on_result, type("E", (), {
+                        "files": [type("F", (), {"path": big,
+                                                 "name": "stress_big_scan5.pdf"})()]} )())
+                    done = ct_module.wait_attach_jobs("big5", timeout=10)
+                finally:
+                    cd_module.shutil.copy2 = orig_copy2
+                check("5e: фоновая операция завершена (повисания нет)", done)
+                # модель НЕ содержит ссылку на неопубликованный файл
+                ctl = next((c for c in load_controls() if c.id == "big5"), None)
+                check("5e: в модели НЕТ ложной ссылки на неопубликованный файл",
+                      ctl is not None and not ctl.attachments,
+                      f"{ctl.attachments if ctl else None}")
+                sh_dir = os.path.join(shared_dir, "controls_attachments", "big5")
+                names5e = os.listdir(sh_dir) if os.path.isdir(sh_dir) else []
+                check("5e: финального файла в shared нет",
+                      "stress_big_scan5.pdf" not in names5e, f"{names5e}")
+                check("5e: tmp после ошибки удалён (мусора нет)",
+                      not any(n.endswith(".tmp") for n in names5e), f"{names5e}")
+                # приложение не упало: контроль и вкладка живы
+                check("5e: приложение не упало, контроль на месте",
+                      ctl is not None and ctl.incoming_number == "ВХСОП-BIG5")
+            finally:
+                page._controls_poll_stop["flag"] = True
+        # контрпроверка офлайн-фолбэка: shared-папка НЕдоступна — вложение
+        # прикрепляется локально (большой файл, фоновое копирование)
+        block_dir = tempfile.mkdtemp(prefix="stress_offblock_")
+        blocker = os.path.join(block_dir, "b")
+        with open(blocker, "w", encoding="utf-8") as f:
+            f.write("x")
+        with Client("bigoff", os.path.join(blocker, "controls.json")) as cli_off:
+            cli_off.prepare()
+            save_controls([_mk("bigo", "ВХСОП-BIGO", "2026-08-01T10:00:00")])
+            page, tab, _ = build()
+            try:
+                rows = _rows(tab)
+                check("5e: строка контроля найдена (офлайн-фолбэк)",
+                      len(rows) >= 1)
+                rows[0].on_click(None)
+                picker = getattr(page, "_controls_attach_picker", None)
+                check("5e: пикер найден (офлайн)", picker is not None)
+                if picker is None:
+                    return
+                _invoke_event_handler(picker.on_result, type("E", (), {
+                    "files": [type("F", (), {"path": big,
+                                             "name": "stress_big_scan5.pdf"})()]} )())
+                done = ct_module.wait_attach_jobs("bigo", timeout=10)
+                ctl = next((c for c in load_controls() if c.id == "bigo"), None)
+                check("5e: офлайн-фолбэк: копия завершена, вложение одно",
+                      done and ctl is not None and len(ctl.attachments) == 1,
+                      f"{ctl.attachments if ctl else None}")
+                local_att = os.path.join(cli_off.appdata, "porayonka",
+                                         "controls_attachments", "bigo",
+                                         "stress_big_scan5.pdf")
+                check("5e: офлайн-фолбэк: локальная копия цела (размер совпадает)",
+                      os.path.exists(local_att)
+                      and os.path.getsize(local_att) == os.path.getsize(big))
+                p = resolve_attachment("bigo", ctl.attachments[0],
+                                       cli_off.settings) if ctl and ctl.attachments else None
+                check("5e: офлайн-вложение открывается (resolve/fallback)",
+                      p is not None and os.path.exists(str(p)))
             finally:
                 page._controls_poll_stop["flag"] = True
     finally:
@@ -794,6 +939,17 @@ def scenario_persist_merge():
             check("11: поле «Входящий №» найдено", inc_field is not None)
             if inc_field is not None:
                 inc_field.value = "ВХСОП-NEW"
+            # Раунд 38, задача 6: новый контроль обязан иметь скан задания
+            # (PDF/изображение) — прикрепляем PDF через пикер, как реальный
+            # пользователь, иначе форма не даст сохранить карточку.
+            pdf11 = os.path.join(tempfile.mkdtemp(prefix="stress_pdf11_"), "scan11.pdf")
+            with open(pdf11, "wb") as f:
+                f.write(b"%PDF-1.4 persist-merge-scan")
+            picker11 = getattr(page, "_controls_attach_picker", None)
+            check("11: пикер вложений зарегистрирован", picker11 is not None)
+            if picker11 is not None:
+                _invoke_event_handler(picker11.on_result, type("E", (), {
+                    "files": [type("F", (), {"path": pdf11, "name": "scan11.pdf"})()]} )())
             save_btn = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
                         and getattr(c, "text", None) == "Сохранить"]
             check("11: кнопка «Сохранить» найдена", len(save_btn) == 1)
@@ -969,6 +1125,15 @@ def scenario_offline_admin_to_online():
                               and (getattr(c, "hint_text", None) or "").startswith("Входящий")), None)
             if inc_field is not None:
                 inc_field.value = "ВХСОП-OFFLINE"
+            # Раунд 38, задача 6: новый контроль обязан иметь скан задания —
+            # офлайн-админ прикрепляет PDF (уйдёт в локальную папку вложений).
+            pdf14 = os.path.join(tempfile.mkdtemp(prefix="stress_pdf14_"), "scan14.pdf")
+            with open(pdf14, "wb") as f:
+                f.write(b"%PDF-1.4 offline-scan")
+            picker14 = getattr(page, "_controls_attach_picker", None)
+            if picker14 is not None:
+                _invoke_event_handler(picker14.on_result, type("E", (), {
+                    "files": [type("F", (), {"path": pdf14, "name": "scan14.pdf"})()]} )())
             save_btn = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
                         and getattr(c, "text", None) == "Сохранить"]
             save_btn[0].on_click(None)
@@ -1039,6 +1204,7 @@ def main():
     scenario_shared_deleted()         # 4
     scenario_attachments()            # 5 (атомарность, обрыв)
     scenario_big_attach_async_ui()    # 5 (фоновая копия >5 МБ через UI)
+    scenario_attach_publish_error()   # 5e (ошибка публикации + офлайн-фолбэк)
     scenario_slow_network()           # 6
     scenario_corrupt_startup()        # 6b
     scenario_many_clients()           # 7 (гонка, .bak, конвергенция)

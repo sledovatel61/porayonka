@@ -2704,6 +2704,17 @@ def main():
         inc19 = [c for c in walk(tab19) if isinstance(c, ft.TextField)
                  and (getattr(c, "hint_text", "") or "").startswith("Входящий")]
         inc19[0].value = "РЛ-NEW"
+        # Раунд 38 (задача 6): НОВАЯ карточка сохраняется только со сканом —
+        # прикрепляем PDF через picker перед сохранением (раньше скан не
+        # требовался).
+        src19 = os.path.join(tempfile.mkdtemp(prefix="porayonka_s19_"), "акт19.pdf")
+        with open(src19, "wb") as f:
+            f.write(b"%PDF-harn19-scan")
+        picker19 = getattr(page19, "_controls_attach_picker", None)
+        check("harn19: picker вложений доступен для скана новой карточки",
+              picker19 is not None)
+        _ev19 = type("E", (), {"files": [type("F", (), {"path": src19, "name": "акт19.pdf"})()]})()
+        _invoke_event_handler(getattr(picker19, "on_result", None), _ev19)
         save19 = [c for c in walk(tab19) if isinstance(c, ft.ElevatedButton)
                   and getattr(c, "text", None) == "Сохранить"]
         save19[0].on_click(None)
@@ -6080,6 +6091,519 @@ def main():
     check("fix37: assets/win7/README - вложенный путь архива + обе SHA256",
           "api-ms-win-core-path-blender" in w7r92 and _sha_zip37 in w7r92
           and _sha_dll37 in w7r92)
+
+    # ════════════════════════════════════════════════════════════════
+    # 93. Раунд 38 (задача 2, P0): user/admin sync, лечение дублей §2.4
+    # ════════════════════════════════════════════════════════════════
+    import hashlib as _h93
+
+    def _rec93(cid, num, upd="2026-07-20T10:00:00", atts=None, content="Текст задания"):
+        return {"id": cid, "incoming_number": num, "receive_date": "2026-07-20",
+                "initiator": "ГУК СК", "content": content,
+                "executors": ["Семисенко Иван Юрьевич"], "controller": "Потемкин С.А.",
+                "control_type": "once", "period_days": 7, "due_date": "2026-07-25",
+                "end_date": None, "done": False, "done_date": None, "comment": "",
+                "tasks": [], "milestones": [], "attachments": atts or [],
+                "archived": False, "archived_at": None, "archive_reason": "",
+                "created_at": upd, "updated_at": upd}
+
+    def _shared93(records):
+        d93 = tempfile.mkdtemp(prefix="porayonka_shared38_")
+        p93 = os.path.join(d93, "controls.json")
+        with open(p93, "w", encoding="utf-8") as f:
+            json.dump({"schema_version": 2, "last_saved": datetime.now().isoformat(),
+                       "controls": records}, f, ensure_ascii=False, indent=2)
+        return d93, p93
+
+    def _netset93(shared_path):
+        save_settings({"network_enabled": True, "network_role": "admin",
+                       "network_user": "", "network_shared_path": shared_path,
+                       "notify_log": {}, "notify_sound": True, "extra_people": []})
+
+    def _sha93(pth):
+        with open(pth, "rb") as f:
+            return _h93.sha256(f.read()).hexdigest()
+
+    def _rows_with(tab_, needle):
+        return [r for r in _visible_rows(tab_)
+                if any(isinstance(t, ft.Text) and t.value and needle in str(t.value)
+                       for t in walk(r))]
+
+    def _restore_admin93():
+        os.environ.pop("PORAYONKA_EDITION", None)
+        os.environ.pop("PORAYONKA_USER", None)
+        try:
+            os.remove(_edfile68)
+        except OSError:
+            pass
+        _le23(force=True)
+
+    def _user93():
+        os.environ["PORAYONKA_EDITION"] = "user"
+        os.environ["PORAYONKA_USER"] = "Семисенко Иван Юрьевич"
+        _le23(force=True)
+
+    # §2.4(1): user с чистым appdata + shared с парой дублей: одна строка,
+    # shared НЕ записывается (байты неизменны)
+    _seed_raw([])
+    sdA, spA = _shared93([_rec93("dupA", "Иссоп-216-193-26", atts=["dupA/s.pdf"]),
+                          _rec93("dupB", "иссоп 216-193-26", "2026-07-21T09:00:00"),
+                          _rec93("solo1", "ВХСОП-455-2026")])
+    _netset93(spA)
+    shaA0 = _sha93(spA)
+    _user93()
+    page, tab, _ = build(1280)
+    check("sync38: user - дубль показан ОДНОЙ строкой (view-лечение)",
+          len(_rows_with(tab, "Иссоп-216-193-26")) == 1
+          and len(_visible_rows(tab)) == 2, f"{len(_visible_rows(tab))}")
+    check("sync38: user НИКОГДА не пишет shared (файл не изменился)",
+          _sha93(spA) == shaA0)
+    _cacheA = load_controls()
+    check("sync38: локальный кэш user = authoritative shared-view (2 записи)",
+          len(_cacheA) == 2 and {c.id for c in _cacheA} >= {"solo1"})
+    check("sync38: canonical в кэше user - запись с вложением (dupA)",
+          any(c.id == "dupA" for c in _cacheA) and not any(c.id == "dupB" for c in _cacheA))
+    _restore_admin93()
+
+    # §2.4(2): user со stale local (другой UUID, те же бизнес-данные) + shared:
+    # одна строка, stale/local-only записи НЕ выгружаются в shared
+    _seed_raw([_rec93("stale1", "Иссоп-216-5006-25"),
+               _rec93("ghost1", "ЛОКАЛЬНЫЙ-ПРИЗРАК-38")])
+    sdB, spB = _shared93([_rec93("canon1", "иссоп 216-5006-25")])
+    _netset93(spB)
+    shaB0 = _sha93(spB)
+    _user93()
+    page, tab, _ = build(1280)
+    check("sync38: user stale - показан canonical из shared, одна строка",
+          len(_rows_with(tab, "216-5006-25")) == 1)
+    check("sync38: local-only «призрак» НЕ показывается при живом shared",
+          len(_rows_with(tab, "ЛОКАЛЬНЫЙ-ПРИЗРАК-38")) == 0)
+    check("sync38: stale запись НЕ выгружена (shared неизменён)",
+          _sha93(spB) == shaB0)
+    _cacheB = load_controls()
+    check("sync38: кэш user заменён shared-снимком (stale1/ghost1 убраны)",
+          {c.id for c in _cacheB} == {"canon1"})
+    _restore_admin93()
+
+    # §2.4(3): shared содержит два разных UUID одной записи: admin-лечение
+    # оставляет одну (shared переписан исцелённым), independent записи целы
+    _seed_raw([_rec93("localsolo", "ВХСОП-101-2026")])
+    sdC, spC = _shared93([_rec93("hA", "Иссоп-216-194-26", atts=["hA/akt.pdf"]),
+                          _rec93("hB", "иссоп 216-194-26", "2026-07-21T09:00:00"),
+                          _rec93("keep1", "ВХСОП-9848-25")])
+    _netset93(spC)
+    page, tab, _ = build(1280)
+    with open(spC, encoding="utf-8") as f:
+        _scC = json.load(f)["controls"]
+    check("sync38: admin-лечение - shared содержит ОДНУ запись пары",
+          len([c for c in _scC if "216-194-26" in (c.get("incoming_number") or "").lower()]) == 1
+          and len(_scC) == 3, f"всего: {len(_scC)}")
+    check("sync38: admin-лечение - canonical = запись с вложением (hA)",
+          any(c.get("id") == "hA" for c in _scC))
+    # idempotent второй запуск admin на исцелённом shared
+    shaC1 = _sha93(spC)
+    page, tab, _ = build(1280)
+    check("sync38: повторный запуск admin - shared не меняется (идемпотентно)",
+          _sha93(spC) == shaC1)
+
+    # §2.4(7): второй admin (другая машина) работает поверх исцелённого
+    # shared - дубль НЕ возвращается, новая запись доезжает
+    _appB = tempfile.mkdtemp(prefix="porayonka_appdataB_")
+    _appA_env = os.environ.get("APPDATA")
+    os.environ["APPDATA"] = _appB
+    _netset93(spC)  # настройки живут в APPDATA "машины B" - задаём заново
+    page, tab, _ = build(1280)  # B: локальный кэш пуст, shared авторитетен
+    check("sync38: admin B на другой машине видит исцелённый shared (3 записи)",
+          len(_visible_rows(tab)) == 3, f"{len(_visible_rows(tab))}")
+    # B добавляет новый контроль (полный UI-путь: карточка + скан + сохранить)
+    _open_card(tab, via_add=True)
+    srcB = os.path.join(tempfile.mkdtemp(prefix="porayonka_scanB_"), "актB.pdf")
+    with open(srcB, "wb") as f:
+        f.write(b"%PDF-scan-B-38")
+    _fire_picker(getattr(page, "_controls_attach_picker"),
+                 type("E", (), {"files": [_F13(srcB, "актB.pdf")]})())
+    tf_B = [c for c in walk(tab) if isinstance(c, ft.TextField)
+            and "Входящий" in str(getattr(c, "hint_text", "") or "")]
+    if tf_B:
+        tf_B[0].value = "ВХСОП-7777-38"
+    saveB = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+             and getattr(c, "text", None) == "Сохранить"]
+    okB = True
+    try:
+        saveB[0].on_click(None)
+    except Exception:
+        okB = False
+        traceback.print_exc()
+    with open(spC, encoding="utf-8") as f:
+        _scC2 = json.load(f)["controls"]
+    check("sync38: admin B сохранил новый контроль в shared (4 записи)",
+          okB and len(_scC2) == 4
+          and any((c.get("incoming_number") or "") == "ВХСОП-7777-38" for c in _scC2),
+          f"всего: {len(_scC2)}")
+    check("sync38: дубль НЕ вернулся после записи второго admin",
+          len([c for c in _scC2 if "216-194-26" in (c.get("incoming_number") or "").lower()]) == 1)
+    os.environ["APPDATA"] = _appA_env
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
+               "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+               "extra_people": []})
+
+    # ════════════════════════════════════════════════════════════════
+    # 94. Раунд 38 (задача 5, P1): вложение видно СРАЗУ (sync+async)
+    # ════════════════════════════════════════════════════════════════
+    _seed_raw([_ctrl("a38", "А-38", executors=["Семисенко И.Ю."])])
+    page, tab, _ = build()
+
+    def _scan_panel_of(tab_):
+        """Минимальный контейнер, в поддереве которого есть «Скан задания»."""
+        cands = []
+        for c in walk(tab_):
+            if isinstance(c, ft.Container):
+                txts = {str(t.value) for t in walk(c)
+                        if isinstance(t, ft.Text) and t.value}
+                if "Скан задания" in txts:
+                    cands.append(c)
+        cands.sort(key=lambda c: len(walk(c)))
+        return cands[0] if cands else None
+
+    def _file_in_scan_panel(tab_, fname):
+        sp = _scan_panel_of(tab_)
+        if sp is None:
+            return False
+        return any(isinstance(t, ft.Text) and t.value == fname for t in walk(sp))
+
+    _open_card(tab, via_add=True)
+    srcS = os.path.join(tempfile.mkdtemp(prefix="porayonka_s38_"), "малый.png")
+    with open(srcS, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"s" * 64)
+    ok94s = True
+    try:
+        _fire_picker(getattr(page, "_controls_attach_picker"),
+                     type("E", (), {"files": [_F13(srcS, "малый.png")]})())
+    except Exception:
+        ok94s = False
+        traceback.print_exc()
+    check("attach38: sync-файл (<5 МБ) виден В СКАН-ПАНЕЛИ сразу", 
+          ok94s and _file_in_scan_panel(tab, "малый.png"))
+    # большой файл (>5 МБ): фоновый путь копирования
+    big_dir = tempfile.mkdtemp(prefix="porayonka_b38_")
+    srcBig = os.path.join(big_dir, "большой.pdf")
+    with open(srcBig, "wb") as f:
+        f.write(b"%PDF" + os.urandom(6 * 1024 * 1024))
+    ok94b = True
+    try:
+        _fire_picker(getattr(page, "_controls_attach_picker"),
+                     type("E", (), {"files": [_F13(srcBig, "большой.pdf")]})())
+    except Exception:
+        ok94b = False
+        traceback.print_exc()
+    appeared94 = False
+    for _i in range(100):
+        if _file_in_scan_panel(tab, "большой.pdf"):
+            appeared94 = True
+            break
+        time.sleep(0.1)
+    check("attach38: async-файл (>5 МБ, фоновое копирование) виден в скан-панели",
+          ok94b and appeared94)
+    check("attach38: каждый файл - ровно ОДНА строка (без дублей UI)",
+          _file_in_scan_panel(tab, "малый.png") and _file_in_scan_panel(tab, "большой.pdf")
+          and [t.value for t in walk(_scan_panel_of(tab))
+               if isinstance(t, ft.Text) and t.value in ("малый.png", "большой.pdf")].count("малый.png") == 1)
+    att_root94 = os.path.join(os.environ["APPDATA"], "porayonka", "controls_attachments")
+    ids94 = [d for d in os.listdir(att_root94)
+             if os.path.isdir(os.path.join(att_root94, d))
+             and any(f.startswith("большой") for f in os.listdir(os.path.join(att_root94, d)))]
+    check("attach38: большой файл физически скопирован в папку вложений",
+          len(ids94) >= 1)
+
+    # 95. Раунд 38 (задача 5): отмена НОВОЙ карточки убирает orphan-файлы
+    cancel95 = [c for c in walk(tab) if isinstance(c, ft.TextButton)
+                and getattr(c, "text", None) == "Отмена"]
+    check("attach38: кнопка «Отмена» в новой карточке найдена", bool(cancel95))
+    ok95 = True
+    try:
+        cancel95[0].on_click(None)
+    except Exception:
+        ok95 = False
+        traceback.print_exc()
+    leftovers95 = []
+    for d in ids94 or []:
+        pth = os.path.join(att_root94, d)
+        if os.path.isdir(pth):
+            leftovers95 += [f for f in os.listdir(pth)]
+    check("attach38: отмена новой карточки - orphan-файлы убраны",
+          ok95 and not leftovers95, f"{leftovers95}")
+
+    # ════════════════════════════════════════════════════════════════
+    # 96. Раунд 38 (задача 6, P1): НОВАЯ admin-карточка не сохраняется без скана
+    # ════════════════════════════════════════════════════════════════
+    def _live_card96(tab_):
+        """Текущая ОТКРЫТАЯ карточка (видимый overlay): закрытая карточка
+        остаётся в дереве с visible=False - её поддерево не учитываем."""
+        ovs = [c for c in walk(tab_) if isinstance(c, ft.Container)
+               and getattr(c, "visible", False) is True
+               and getattr(c, "bgcolor", None) == "#cc04070f"]
+        return ovs[0] if ovs else None
+
+    def _card_has96(root, text_btn=None, text_part=None):
+        if root is None:
+            return False
+        if text_btn:
+            return any(isinstance(c, ft.ElevatedButton)
+                       and getattr(c, "text", None) == text_btn for c in walk(root))
+        return any(isinstance(t, ft.Text) and t.value and text_part in str(t.value)
+                   for t in walk(root))
+
+    _open_card(tab, via_add=True)
+    card96 = _live_card96(tab)
+    tf96 = [c for c in walk(card96) if isinstance(c, ft.TextField)
+            and "Входящий" in str(getattr(c, "hint_text", "") or "")] if card96 else []
+    check("scan38: поле «Входящий №» найдено в новой карточке", bool(tf96))
+    # Регресс раунда 38 (задача 5): FilePicker.on_result НАКАПЛИВАЕТ замыкания
+    # старых карточек (EventHandler.subscribe) — старое замыкание копировало
+    # файл и глушило актуальное по антидубль-гварду («скопировано, но не
+    # видно до переоткрытия»). После переоткрытий должен остаться ОДИН
+    # подписанный обработчик (stale отписан в _ensure_file_picker).
+    _eh96 = getattr(getattr(page, "_controls_attach_picker", None), "on_result", None)
+    _n_h96 = len(getattr(_eh96, "_EventHandler__handlers", {}) or {})
+    check("attach38: после N переоткрытий карточки у attach-пикера РОВНО 1 обработчик",
+          _n_h96 == 1, f"handlers={_n_h96}")
+    _ehd96 = getattr(getattr(page, "_controls_attach_dl_picker", None), "on_result", None)
+    _n_hd96 = len(getattr(_ehd96, "_EventHandler__handlers", {}) or {})
+    check("attach38: у download-пикера тоже РОВНО 1 обработчик (без накопления)",
+          _n_hd96 == 1, f"handlers={_n_hd96}")
+    tf96[0].value = "БЕЗ-СКАНА-38"
+    btn96 = [c for c in walk(card96) if isinstance(c, ft.ElevatedButton)
+             and getattr(c, "text", None) == "Сохранить"]
+    n_before96 = len(load_controls())
+    ok96 = True
+    try:
+        btn96[0].on_click(None)
+    except Exception:
+        ok96 = False
+        traceback.print_exc()
+    card96b = _live_card96(tab)
+    check("scan38: сохранение БЕЗ скана отклонено: карточка открыта, подсказка",
+          ok96 and card96b is not None
+          and _card_has96(card96b, text_part="Прикрепите скан задания"))
+    check("scan38: карточка осталась открытой («Сохранить» на месте)",
+          _card_has96(card96b, text_btn="Сохранить"))
+    check("scan38: запись НЕ добавилась без скана", len(load_controls()) == n_before96)
+    # toast-текст дублирует подсказку дословно
+    hint96t = [str(t.value) for t in walk(card96b) if isinstance(t, ft.Text) and t.value]
+    check("scan38: русский текст ошибки дословно верен",
+          any("Прикрепите скан задания (PDF или изображение)" in v for v in hint96t))
+    # прикрепляем скан - подсказка снимается, сохранение проходит
+    src96 = os.path.join(tempfile.mkdtemp(prefix="porayonka_s96_"), "акт.pdf")
+    with open(src96, "wb") as f:
+        f.write(b"%PDF-scan96-content")
+    _fire_picker(getattr(page, "_controls_attach_picker"),
+                 type("E", (), {"files": [_F13(src96, "акт.pdf")]})())
+    card96c = _live_card96(tab)
+    check("scan38: после прикрепления скана подсказка снята",
+          card96c is not None
+          and not _card_has96(card96c, text_part="Прикрепите скан задания"))
+    check("scan38: скан-файл виден в открытой карточке",
+          _card_has96(card96c, text_part="акт.pdf"))
+    btn96[0].on_click(None)
+    check("scan38: со сканом сохранение прошло (карточка закрылась, запись добавлена)",
+          len(load_controls()) == n_before96 + 1
+          and _live_card96(tab) is None)
+    new96 = [c for c in load_controls() if c.incoming_number == "БЕЗ-СКАНА-38"]
+    check("scan38: сохранённый контроль содержит вложение",
+          new96 and new96[0].attachments and str(new96[0].attachments[0]).endswith("акт.pdf"))
+    # исторический контроль БЕЗ вложений сохраняется после редактирования
+    rows96 = _visible_rows(tab)
+    check("scan38: историческая строка есть в таблице", bool(rows96))
+    rows96[0].on_click(None)
+    btn96h = [c for c in walk(tab) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Сохранить"]
+    n_before96h = len(load_controls())
+    ok96h = True
+    try:
+        if btn96h:
+            btn96h[0].on_click(None)
+    except Exception:
+        ok96h = False
+        traceback.print_exc()
+    check("scan38: исторический контроль без скана СОХРАНЯЕТСЯ (миграция не блокирована)",
+          ok96h and bool(btn96h) and len(load_controls()) == n_before96h)
+
+    # пилюля «Без скана» в таблице (только admin, только активные без вложений)
+    _seed_raw([_ctrl("ns38a", "БЕЗ-СКАНА-А", executors=["Семисенко И.Ю."]),
+               _ctrl("ns38b", "БЕЗ-СКАНА-Б", executors=["Чашин Э.А."])])
+    data96b = json.load(open(get_controls_file(), encoding="utf-8"))
+    data96b["controls"][1]["done"] = True  # исполненный - без пилюли
+    with open(get_controls_file(), "w", encoding="utf-8") as f:
+        json.dump(data96b, f, ensure_ascii=False, indent=2)
+    page, tab, _ = build()
+    pills96 = [str(t.value) for t in walk(tab) if isinstance(t, ft.Text)
+               and str(t.value) == "Без скана"]
+    check("scan38: пилюля «Без скана» - только у активного без вложений (1 из 2)",
+          len(pills96) == 1, f"{pills96}")
+    _user93()
+    page, tab, _ = build()
+    pills96u = [str(t.value) for t in walk(tab) if isinstance(t, ft.Text)
+                and str(t.value) == "Без скана"]
+    check("scan38: у user пилюля «Без скана» не показывается", not pills96u)
+    _restore_admin93()
+
+    # ════════════════════════════════════════════════════════════════
+    # 97. Раунд 38 (задача 7, P1): «Скачать» -> «Открыть» (сохранённая копия)
+    # ════════════════════════════════════════════════════════════════
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
+               "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+               "extra_people": []})
+    _seed_raw([_ctrl("dl38", "ДЛ-38", executors=["Семисенко И.Ю."])])
+    att_dir97 = os.path.join(os.environ["APPDATA"], "porayonka",
+                             "controls_attachments", "dl38")
+    os.makedirs(att_dir97, exist_ok=True)
+    src97_bytes = b"ORIGINAL-BYTES-" + os.urandom(64)
+    with open(os.path.join(att_dir97, "документ.pdf"), "wb") as f:
+        f.write(src97_bytes)
+    data97 = json.load(open(get_controls_file(), encoding="utf-8"))
+    data97["controls"][0]["attachments"] = ["dl38/документ.pdf"]
+    with open(get_controls_file(), "w", encoding="utf-8") as f:
+        json.dump(data97, f, ensure_ascii=False, indent=2)
+    page, tab, _ = build()
+    rows97 = _rows_with(tab, "ДЛ-38")
+    rows97[0].on_click(None)
+    dl_btn97 = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                and getattr(c, "tooltip", None) == "Скачать"]
+    check("dl38: кнопка «Скачать» есть в строке вложения",
+          len(dl_btn97) == 1, f"{len(dl_btn97)}")
+    picker97 = getattr(page, "_controls_attach_dl_picker", None)
+    check("dl38: picker «Скачать копию» зарегистрирован", picker97 is not None)
+    called97 = {}
+    picker97.save_file = lambda **kw: called97.update(kw)  # headless-заглушка
+    ok97 = True
+    try:
+        dl_btn97[0].on_click(None)
+    except Exception:
+        ok97 = False
+        traceback.print_exc()
+    check("dl38: открыт диалог сохранения с ИСХОДНЫМ именем и расширением",
+          ok97 and called97.get("file_name") == "документ.pdf")
+    # Cancel - ничего не копируется, кнопка не меняется
+    _fire_picker(picker97, type("E", (), {"path": None})())
+    check("dl38: Cancel - копия не создана, кнопка осталась «Скачать»",
+          [c for c in walk(tab) if isinstance(c, ft.IconButton)
+           and getattr(c, "tooltip", None) == "Скачать"]
+          and not [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                   and getattr(c, "tooltip", None) == "Открыть сохранённую копию"])
+    # успешное сохранение - байт-в-байт; кнопка становится «Открыть сохранённую копию»
+    dst97 = os.path.join(tempfile.mkdtemp(prefix="porayonka_dl97_"), "копия.pdf")
+    dl_btn97[0].on_click(None)
+    _fire_picker(picker97, type("E", (), {"path": dst97})())
+    bytes97 = open(dst97, "rb").read() if os.path.exists(dst97) else b""
+    check("dl38: копия сохранена байт-в-байт (исходник на месте)",
+          bytes97 == src97_bytes
+          and open(os.path.join(att_dir97, "документ.pdf"), "rb").read() == src97_bytes)
+    open_btn97 = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                  and getattr(c, "tooltip", None) == "Открыть сохранённую копию"]
+    check("dl38: после сохранения кнопка стала «Открыть сохранённую копию»",
+          len(open_btn97) == 1)
+    # копия удалена -> снова предложить скачать
+    os.remove(dst97)
+    ok97d = True
+    try:
+        open_btn97[0].on_click(None)
+    except Exception:
+        ok97d = False
+    check("dl38: удалённая копия - возврат к «Скачать» (понятное поведение)",
+          ok97d and [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                     and getattr(c, "tooltip", None) == "Скачать"])
+    # user read-only карточка: «Скачать» доступна (не вырезана прунингом)
+    _user93()
+    page, tab, _ = build()
+    rows97u = _rows_with(tab, "ДЛ-38")
+    rows97u[0].on_click(None)
+    dl_btn97u = [c for c in walk(tab) if isinstance(c, ft.IconButton)
+                 and getattr(c, "tooltip", None) == "Скачать"]
+    check("dl38: user read-only карточка - «Скачать» доступна", len(dl_btn97u) == 1)
+    _restore_admin93()
+
+    # ════════════════════════════════════════════════════════════════
+    # 98-99. Раунд 38 (задача 9, P1): incremental import preview + upsert UI
+    # ════════════════════════════════════════════════════════════════
+    _save_off({"network_enabled": False, "network_role": "admin", "network_user": "",
+               "network_shared_path": "", "notify_log": {}, "notify_sound": True,
+               "extra_people": []})
+    _seed_raw([_ctrl("impA", "Иссоп-216-193-26", executors=["Семисенко И.Ю."])])
+    att_dir98 = os.path.join(os.environ["APPDATA"], "porayonka",
+                             "controls_attachments", "impA")
+    os.makedirs(att_dir98, exist_ok=True)
+    with open(os.path.join(att_dir98, "акт.pdf"), "wb") as f:
+        f.write(b"import-akt-bytes")
+    data98 = json.load(open(get_controls_file(), encoding="utf-8"))
+    data98["controls"][0]["attachments"] = ["impA/акт.pdf"]
+    data98["controls"][0]["comment"] = "комментарий-не-стирать"
+    with open(get_controls_file(), "w", encoding="utf-8") as f:
+        json.dump(data98, f, ensure_ascii=False, indent=2)
+    # flat xlsx: обновление impA (новое содержание) + одна новая запись
+    from openpyxl import Workbook as _Wb98
+    from core.controls_exporter import TABLE_HEADERS as _TH98
+    xlsx98 = os.path.join(tempfile.mkdtemp(prefix="porayonka_x98_"), "import38.xlsx")
+    wb98 = _Wb98()
+    ws98 = wb98.active
+    ws98.append(["КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ"] + [None] * 9)
+    ws98.append(_TH98)
+    ws98.append([1, "иссоп 216-193-26", "20.07.2026", "ГУК СК", "Содержание обновлено импортом",
+                 "Семисенко И.Ю.", "Потемкин С.А.", "разовый", "31.07.2026", ""])
+    ws98.append([2, "Иссоп-216-321-26", "22.07.2026", "СУ", "Новая запись из файла",
+                 "Чашин Э.А.", "Потемкин С.А.", "разовый", "29.07.2026", ""])
+    wb98.save(xlsx98)
+    page, tab, _ = build()
+    picker98 = getattr(page, "_controls_import_picker", None)
+    check("import38: picker импорта зарегистрирован", picker98 is not None)
+    _fire_picker(picker98, type("E", (), {"path": xlsx98, "files": None})())
+    dlg98 = page.dialogs[-1] if page.dialogs else None
+    texts98 = {str(t.value) for t in walk(dlg98) if isinstance(t, ft.Text) and t.value} if dlg98 else set()
+    summary98 = " ".join(sorted(texts98))
+    check("import38: открылся предпросмотр импорта", dlg98 is not None)
+    check("import38: preview со статистикой новые/обновляемые/без изменений/конфликты",
+          "Новые: 1" in summary98 and "Обновляемые: 1" in summary98
+          and "Без изменений" in summary98 and "Конфликты: 0" in summary98,
+          f"{summary98[:160]}")
+    check("import38: импортированные без файлов помечаются «Без скана»",
+          "Без скана: 1" in summary98)
+    conf98 = [c for c in walk(dlg98) if isinstance(c, ft.ElevatedButton)
+              and getattr(c, "text", None) == "Импортировать"]
+    n_before98 = len(load_controls())
+    ok98 = True
+    try:
+        conf98[0].on_click(None)
+    except Exception:
+        ok98 = False
+        traceback.print_exc()
+    after98 = load_controls()
+    rec98A = [c for c in after98 if c.id == "impA"]
+    rec98N = [c for c in after98 if (c.incoming_number or "") == "Иссоп-216-321-26"]
+    check("import38: применение - запись с id=A обновлена in place",
+          ok98 and len(after98) == n_before98 + 1 and len(rec98A) == 1
+          and rec98A[0].content == "Содержание обновлено импортом")
+    check("import38: attachments и comment существующей записи не тронуты",
+          rec98A and rec98A[0].attachments == ["impA/акт.pdf"]
+          and rec98A[0].comment == "комментарий-не-стирать"
+          and os.path.exists(os.path.join(att_dir98, "акт.pdf")))
+    check("import38: новая запись добавлена с уникальным id",
+          len(rec98N) == 1 and rec98N[0].id != "impA")
+    bkp_root98 = os.path.join(os.environ["APPDATA"], "porayonka", "backups")
+    bkp98 = [f for f in os.listdir(bkp_root98) if f.startswith("pre-import-")] \
+        if os.path.isdir(bkp_root98) else []
+    check("import38: backup controls.json создан ДО применения", bool(bkp98))
+    # повторный импорт того же файла: ничего нового не добавляет
+    _fire_picker(picker98, type("E", (), {"path": xlsx98, "files": None})())
+    summary98b = " ".join(sorted({str(t.value) for t in walk(page.dialogs[-1])
+                                  if isinstance(t, ft.Text) and t.value})) \
+        if page.dialogs else ""
+    n_mid98 = len(load_controls())
+    if page.dialogs:
+        conf98b = [c for c in walk(page.dialogs[-1]) if isinstance(c, ft.ElevatedButton)
+                   and getattr(c, "text", None) == "Импортировать"]
+        if conf98b:
+            conf98b[0].on_click(None)
+    check("import38: повторный импорт идемпотентен (количество не изменилось)",
+          len(load_controls()) == n_mid98)
 
     print()
     if FAILURES:

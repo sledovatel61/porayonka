@@ -32,6 +32,7 @@ from core.controls_data import (
     read_shared_controls, write_shared_controls, get_shared_mtime,
     sync_attachments_from_shared,
     copy_attachment_to_local, copy_attachment_to_shared,
+    copy_attachment_to_shared_ex,
     resolve_attachment, delete_attachment, ATTACHMENT_WARN_MB,
     add_custom_initiator,
     merge_controls, _should_notify,
@@ -41,6 +42,14 @@ from core.controls_data import (
 )
 # Раунд 29 (задача 6): lock-файлы редактирования контроля в общей папке.
 from core import control_locks as _clocks29
+
+# Раунд 38 (задача 1): business identity + лечение логических дублей.
+from core.controls_dedup import (
+    dedupe_controls, diagnose_duplicates, diagnostics_report,
+    normalize_incoming_number,
+)
+# Раунд 38 (задача 8): ежедневные резервные копии.
+from core import backup as _backup38
 
 FILTER_OTHER = "__other__"  # пункт «Прочие» в фильтрах исполнителей/контролёров
 
@@ -61,7 +70,14 @@ def _iter_tree_parents(root):
                 stack.extend((ch, c, a) for ch in v)
             elif v is not None:
                 stack.append((v, c, a))
-from core.controls_exporter import ControlsExcelExporter, import_from_excel, TABLE_HEADERS, control_type_text
+from core.controls_exporter import (
+    ControlsExcelExporter, import_from_excel, import_plan,
+    _apply_row_to_existing, TABLE_HEADERS, control_type_text,
+)
+from core.controls_data import (
+    shared_file_exists, _shared_dir, _parse_shared_path,
+    get_controls_file, get_attachments_path, get_data_path,
+)
 from core.controls_notify import (
     collect_alarm_controls, due_alarms, prune_alarm_log, alarm_interval_hours,
 )
@@ -230,17 +246,37 @@ def _period_key(days: int) -> str:
     return "custom"
 
 def _ensure_file_picker(page: ft.Page, attr: str, on_result):
+    # Раунд 38 (задача 5, P1) — КОРНЕВАЯ ПРИЧИНА «вложение скопировано, но не
+    # видно до переоткрытия карточки»: EventHandler.subscribe() в Flet 0.23.2
+    # НАКАПЛИВАЕТ обработчики (dict) при каждом присваивании on_result — старые
+    # замыкания прошлых карточек НЕ снимаются. Первым срабатывает ЗАМЫКАНИЕ
+    # ЗАКРЫТОЙ карточки: файл копируется, событие помечается дублем
+    # (_attach_event_is_duplicate), актуальное замыкание выходит молча — и его
+    # ВИДИМАЯ панель вложений не перестраивается. Поэтому при перебиндинге
+    # прежнее замыкание явно ОТПИСЫВАЕМ (unsubscribe), оставляя ровно один
+    # обработчик — текущей открытой карточки.
     if not hasattr(page, attr):
         picker = ft.FilePicker(on_result=on_result)
         page.overlay.append(picker)
         setattr(page, attr, picker)
+        setattr(page, attr + "_handler", on_result)
         try:
             page.update()
         except Exception:
             traceback.print_exc()
     else:
+        picker = getattr(page, attr)
+        old = getattr(page, attr + "_handler", None)
         try:
-            getattr(page, attr).on_result = on_result
+            eh = getattr(picker, "on_result", None)
+            if old is not None and eh is not None \
+                    and hasattr(eh, "unsubscribe"):
+                eh.unsubscribe(old)
+        except Exception:
+            traceback.print_exc()
+        try:
+            picker.on_result = on_result
+            setattr(page, attr + "_handler", on_result)
         except Exception:
             traceback.print_exc()
     return getattr(page, attr)
@@ -271,6 +307,56 @@ def _attach_event_is_duplicate(state: dict, sig: tuple, now=None, window: float 
 # замораживать UI-поток. Мелкие копируются синхронно (мгновенно, результат
 # виден сразу — поведение раундов 23/28 сохранено).
 _ATTACH_ASYNC_MB = 5
+
+
+# ── Completion-механизм фоновых копий вложений (раунд 38, fix stress 5c) ──
+# Семантика: файл объявляется «прикреплённым» только ПОСЛЕ публикации —
+# copy2 + os.replace завершены в _copy_batch, результат применён к модели и
+# UI через _apply_attach_result. Тесты (и сервисный код) ждут НАСТОЯЩЕЕ
+# завершение операции через wait_attach_jobs()/attach_jobs_pending(), а не
+# опрос Control.attachments: применение результата маршаллизуется в
+# UI-поток через _post_to_ui (в реальном Flet — отложенно, в headless-
+# стабе — синхронно в потоке копии), поэтому счётчик закрывает ОБА пути.
+_attach_jobs: Dict[str, int] = {}
+_attach_jobs_cv = threading.Condition()
+
+
+def _attach_job_begin(cid: str) -> None:
+    with _attach_jobs_cv:
+        _attach_jobs[cid] = _attach_jobs.get(cid, 0) + 1
+
+
+def _attach_job_end(cid: str) -> None:
+    with _attach_jobs_cv:
+        n = _attach_jobs.get(cid, 0) - 1
+        if n > 0:
+            _attach_jobs[cid] = n
+        else:
+            _attach_jobs.pop(cid, None)
+        _attach_jobs_cv.notify_all()
+
+
+def attach_jobs_pending(cid: str) -> int:
+    """Сколько фоновых копий вложений контроля ещё выполняется."""
+    with _attach_jobs_cv:
+        return _attach_jobs.get(cid, 0)
+
+
+def wait_attach_jobs(cid: str, timeout: float = 10.0) -> bool:
+    """True — все фоновые копии вложений контроля завершены.
+
+    «Завершена» = файл опубликован (или отказ зафиксирован) И результат
+    уже применён к модели/UI. False — timeout (повисшая операция видна
+    тесту как отдельный FAIL, а не как следствие в следующих проверках).
+    """
+    deadline = time.time() + timeout
+    with _attach_jobs_cv:
+        while _attach_jobs.get(cid):
+            left = deadline - time.time()
+            if left <= 0:
+                return False
+            _attach_jobs_cv.wait(left)
+        return True
 
 
 def _file_size_mb(fobj) -> float:
@@ -622,6 +708,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     def _persist(controls: List[Control], to_shared: bool = True):
         save_controls(controls)
         state["last_sync"] = datetime.now()
+        # Раунд 38 (задача 1): user-редакция НИКОГДА не пишет в общий файл —
+        # save_controls выше обновляет только локальный кэш для офлайн-чтения.
+        if edition_user:
+            _update_sync_ui()
+            _refresh_filter_options()
+            return
         if settings.get("network_enabled") and to_shared:
             # Задача 1: если кто-то писал в shared, пока мы работали — merge перед записью
             try:
@@ -644,6 +736,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         save_controls(merged)
                     except Exception:
                         traceback.print_exc()
+            # Раунд 38 (задача 1): исходящий список лечится от логических
+            # дублей ПЕРЕД записью в shared — параллельные admin не возвращают
+            # дубль в общий файл.
+            try:
+                controls, _dwp38 = dedupe_controls(
+                    controls, local_attach_root=get_attachments_path(),
+                    shared_dir=_shared_dir(settings), move_files=True)
+                if _dwp38["merged"]:
+                    state["controls"] = controls
+                    save_controls(controls)
+                    print(f"[CONTROLS_TAB] dedup on write: { _dwp38['merged']} healed")
+            except Exception:
+                traceback.print_exc()
             ok = write_shared_controls(controls, settings)
             state["network_ok"] = bool(ok)
             try:
@@ -673,20 +778,74 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             traceback.print_exc()
 
+    def _dedupe_view(controls_list):
+        """Раунд 38 (задача 1): «сухая» дедупликация для READ-пути (и user-,
+        и admin-режима): одинаковые записи под разными id показываются ОДНОЙ
+        строкой даже если общая база ещё не исцелена физически (физическое
+        лечение с переносом файлов — только у admin при записи, см.
+        _load_initial)."""
+        try:
+            healed, _dst38 = dedupe_controls(controls_list, move_files=False)
+            return healed
+        except Exception:
+            traceback.print_exc()
+            return controls_list
+
     def _load_initial():
         state["known_attachments"] = {}
         if settings.get("network_enabled"):
             local = load_controls()
             shared = read_shared_controls(settings)
-            if shared:
+            if edition_user:
+                # Раунд 38 (задача 1, P0): ПОЛЬЗОВАТЕЛЬ строго read-only на
+                # уровне сети. Shared — авторитетный snapshot: читаем его,
+                # обновляем локальный кэш только для офлайн-чтения и
+                # НИКОГДА не вызываем write_shared_controls (ни при старте,
+                # ни polling, ни закрытии): устаревший локальный кэш не
+                # публикуется и не загрязняет общий файл (источник
+                # полевых дублей). Роль берём из core/edition.py, а не из
+                # унаследованных network_role/network_user настроек.
+                if shared_file_exists(settings):
+                    view = _dedupe_view(shared)
+                    state["controls"] = view
+                    state["network_ok"] = True
+                    try:
+                        save_controls(view)
+                    except Exception:
+                        traceback.print_exc()
+                else:
+                    # shared недоступен — последний локальный кэш
+                    state["controls"] = local
+                    state["network_ok"] = False
+            elif shared:
                 # Аудит сети (раунд 30): раньше shared ПОДМЕНЯЛ state целиком,
                 # и локальные правки оффлайн-сессии (добавленные контроли)
                 # молча пропадали при старте, когда сеть снова доступна.
                 # Теперь — merge; если локальные данные добавили что-то новое,
                 # результат сразу отдаётся обратно в shared.
                 merged = merge_controls(local, shared)
-                if len(merged) > len(shared):
-                    print(f"[CONTROLS_TAB] startup merge: +{len(merged) - len(shared)} local controls")
+                # Раунд 38 (задача 1): admin-лечение логических дублей.
+                diag38 = diagnose_duplicates(merged)
+                dstats38 = {"merged": 0, "groups": 0}
+                if diag38.get("dup_records"):
+                    print(diagnostics_report(merged))
+                    # Backup local/shared JSON + папок вложений ДО первой
+                    # миграции (маркер — чтобы backup делался однажды).
+                    try:
+                        _mig_marker38 = _backup38.get_backup_root() / ".migration_dedup38_done"
+                        if not _mig_marker38.exists():
+                            _backup38.migration_backup(
+                                get_controls_file(), _parse_shared_path(settings),
+                                get_attachments_path(), _shared_dir(settings))
+                            _mig_marker38.write_text("done", encoding="ascii")
+                    except Exception:
+                        traceback.print_exc()
+                    merged, dstats38 = dedupe_controls(
+                        merged, local_attach_root=get_attachments_path(),
+                        shared_dir=_shared_dir(settings), move_files=True)
+                if len(merged) > len(shared) or dstats38["merged"]:
+                    print(f"[CONTROLS_TAB] startup merge: +{len(merged) - len(shared)} local controls"
+                          + (f" (dedup healed: {dstats38['merged']})" if dstats38["merged"] else ""))
                     try:
                         write_shared_controls(merged, settings)
                     except Exception:
@@ -695,7 +854,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 state["network_ok"] = True
             else:
                 # shared пуст/не существует — грузим локальные и засеваем shared
-                state["controls"] = local
+                # (прежде засевания — лечение локальных дублей, чтобы не
+                # размножить их по сети).
+                healed38, _ds38 = dedupe_controls(
+                    local, local_attach_root=get_attachments_path(),
+                    shared_dir=_shared_dir(settings), move_files=True)
+                state["controls"] = healed38
                 try:
                     ok = write_shared_controls(state["controls"], settings)
                     state["network_ok"] = bool(ok)
@@ -732,6 +896,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         else:
             sync_label.value = "Сеть: нет связи"
             sync_dot.bgcolor = GLASS["overdue"]
+        # Раунд 38 (задача 8.3): admin-only статус резервных копий (дата
+        # последней успешной локальной/общей копии + путь) — в tooltip
+        # индикатора синхронизации, без опасной автоперезаписи рабочей базы.
+        try:
+            if not edition_user:
+                sync_dot.tooltip = _backup38.backup_status_text(
+                    settings, is_admin=True)
+        except Exception:
+            pass
         try:
             _safe_update(sync_label)
             _safe_update(sync_dot)
@@ -1129,7 +1302,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # исполнителями и сроками, каждый с новой строки — max_lines = числу
         # строк (раньше жёсткие 2 строки обрезали п.2/п.3 с многоточием; высота
         # строки растёт под контент — так и задумано, см. промпт раунда 21).
-        content_controls = [_cell(content_text, _W["content"] - (46 if ctl.attachments else 0) - 2, tooltip=content_tooltip, max_lines=max(2, len(content_lines)), color=GLASS["text"], size=13)]
+        _no_scan38 = (not ctl.attachments) and (not ctl.archived) and (not ctl.done) and (not edition_user)
+        _att_w38 = 0
+        if ctl.attachments:
+            _att_w38 = 46
+        elif _no_scan38:
+            _att_w38 = 76
+        content_controls = [_cell(content_text, _W["content"] - _att_w38 - 2, tooltip=content_tooltip, max_lines=max(2, len(content_lines)), color=GLASS["text"], size=13)]
         if ctl.attachments:
             # Раунд 23 (задача 1): значок вложения — ЗАМЕТНАЯ жёлтая пилюля
             # (скрепка 14 + счётчик bold), вместо мелкой тусклой скрепки 12px
@@ -1139,6 +1318,16 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 width=44, bgcolor=GLASS["today"], border_radius=8,
                 padding=ft.padding.symmetric(horizontal=6, vertical=2),
                 tooltip=f"Вложений: {len(ctl.attachments)}",
+            ))
+        elif _no_scan38:
+            # Раунд 38 (задача 6): admin явно видит активные контроли БЕЗ
+            # скана (в т.ч. импортированные из Excel) — их нужно дозаполнить
+            # вложением. Бледно-красная пилюля с предупреждающей иконкой.
+            content_controls.append(ft.Container(
+                content=ft.Row(controls=[ft.Icon(ft.icons.WARNING_AMBER, size=13, color=GLASS["overdue"]), ft.Text("Без скана", size=10, weight=ft.FontWeight.BOLD, color=GLASS["overdue"], no_wrap=True)], spacing=2, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                width=74, bgcolor=with_alpha(GLASS["overdue"], "1a"), border_radius=8,
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                tooltip="Скан задания не прикреплён",
             ))
 
         is_archive = state["mode"] == "archive"
@@ -2210,11 +2399,28 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     )
 
     def _apply_pending_on_close():
-        """Задача 3: при закрытии карточки применить накопленные сетевые изменения (merge)."""
+        """Задача 3: при закрытии карточки применить накопленные сетевые изменения (merge).
+        Раунд 38 (задача 1): в user-режиме — замена authoritative shared,
+        без записи в сеть."""
         pending = state["pending_shared"]
         state["pending_shared"] = None
         try:
             if pending is None:
+                return
+            if edition_user:
+                view = _dedupe_view(pending["controls"])
+                state["controls"] = view
+                state["shared_mtime"] = pending["mtime"]
+                state["last_sync"] = datetime.now()
+                state["network_ok"] = True
+                try:
+                    save_controls(view)
+                except Exception:
+                    traceback.print_exc()
+                _sync_attachments(view)
+                _update_sync_ui()
+                _rebuild_table()
+                _refresh_counters()
                 return
             merged = merge_controls(state["controls"], pending["controls"])
             state["controls"] = merged
@@ -2256,6 +2462,19 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             pass
 
     def _hide_detail(e=None):
+        # Раунд 38 (задача 5): отмена НОВОЙ карточки (не сохранена) — удалить
+        # скопированные за эту сессию файлы вложений («сироты» в local/shared
+        # controls_attachments/<new_id>), чтобы общая папка не засорялась.
+        try:
+            if detail_state.get("is_new") and not detail_state.get("_saved"):
+                cid38o = detail_state.get("control_id")
+                for rel38o in list(detail_state.get("attachments") or []):
+                    try:
+                        delete_attachment(cid38o, rel38o, settings)
+                    except Exception:
+                        traceback.print_exc()
+        except Exception:
+            traceback.print_exc()
         detail_overlay_container.visible = False
         state["editing"] = False
         _release_edit_lock()  # Раунд 29 (задача 6): закрытие карточки снимает lock
@@ -2420,6 +2639,13 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         detail_state["attachments"] = list(ctl.attachments) if ctl and ctl.attachments else []
         detail_state["tasks"] = []
         detail_state["milestones"] = []
+        # Раунд 38 (задачи 5/6/7): служебные поля сессии карточки —
+        # подсказка «прикрепите скан», флаг «новая карточка сохранена» (для
+        # очистки orphan-вложений при отмене) и карта скачанных копий
+        # {rel: path} для кнопки «Скачать» -> «Открыть».
+        detail_state["scan_hint"] = ""
+        detail_state["_saved"] = False
+        detail_state["saved_copies"] = {}
 
         # Fields helpers
         # Раунд 5: НЕ используем expand=True у полей карточки — внутри scroll-колонки
@@ -2891,6 +3117,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, tooltip=fn),
                 ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=16, icon_color=GLASS["accent"],
                               tooltip="Открыть в программе", on_click=lambda e: _open_attach(rel)),
+                # Раунд 38 (задача 7): скачать/открыть сохранённую копию
+                # доступно и из предпросмотра
+                _dl_button_for(rel),
                 ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=16, icon_color=GLASS["overdue"],
                               tooltip="Удалить", on_click=lambda e: (_close_preview(), _confirm_remove_attach(rel))),
                 ft.IconButton(icon=ft.icons.CLOSE, icon_size=16, icon_color=GLASS["text_secondary"],
@@ -2980,6 +3209,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                                           tooltip="Предпросмотр", on_click=lambda e, r=rel: _open_preview(r)),
                             ft.IconButton(icon=ft.icons.OPEN_IN_NEW, icon_size=18, icon_color=GLASS["text_secondary"],
                                           tooltip="Открыть", on_click=lambda e, r=rel: _open_attach(r)),
+                            # Раунд 38 (задача 7): «Скачать» -> «Открыть» (копия)
+                            _dl_button_for(rel),
                             ft.IconButton(icon=ft.icons.DELETE_OUTLINE, icon_size=18, icon_color=GLASS["overdue"],
                                           tooltip="Удалить", on_click=lambda e, r=rel: _confirm_remove_attach(r)),
                         ], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -3052,6 +3283,178 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 traceback.print_exc()
 
+        # ── Раунд 38 (задача 7, P1): «Скачать копию» -> «Открыть копию» ────
+        def _is_web38() -> bool:
+            if os.environ.get("PORAYONKA_WEB"):
+                return True
+            try:
+                return bool(getattr(page, "web", False))
+            except Exception:
+                return False
+
+        def _web_download_dir38():
+            """Каталог скачанных копий внутри FLET_ASSETS_DIR (web-режим:
+            попадает под /assets/<...>, отдаётся браузеру сервером)."""
+            try:
+                base = os.environ.get("FLET_ASSETS_DIR")
+                if not base:
+                    base = str(get_data_path() / "web_assets")
+                d = os.path.join(base, "downloads")
+                os.makedirs(d, exist_ok=True)
+                return d
+            except Exception:
+                traceback.print_exc()
+                return None
+
+        def _open_path38(path_str: str) -> bool:
+            """Открыть сохранённую копию системным просмотрщиком/браузером."""
+            import subprocess, sys
+            try:
+                if sys.platform == "win32":
+                    os.startfile(path_str)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", path_str])
+                else:
+                    subprocess.Popen(["xdg-open", path_str])
+                return True
+            except Exception as ex:
+                print(f"[CONTROLS_TAB] open saved copy error: {ex}")
+                return False
+
+        def _download_attach(rel: str):
+            """Раунд 38 (задача 7): сначала «Скачать» (FilePicker.save_file с
+            исходным именем; web — отдача файла браузеру через /assets), после
+            успешного сохранения эта же кнопка становится «Открыть» и
+            запускает именно сохранённую копию. Cancel ничего не копирует и
+            не меняет кнопку."""
+            saved = detail_state.get("saved_copies", {}).get(rel)
+            if saved:
+                if saved.startswith("web:"):
+                    try:
+                        page.launch_url(saved[4:])
+                        return
+                    except Exception as ex:
+                        print(f"[CONTROLS_TAB] launch saved copy error: {ex}")
+                if os.path.exists(saved):
+                    if _open_path38(saved):
+                        return
+                # копия исчезла/ошибка — снова предложить скачать
+                detail_state["saved_copies"].pop(rel, None)
+                _rebuild_attach()
+                from ui.toast import show_error_toast
+                show_error_toast(page, "Сохранённая копия не найдена — скачайте снова")
+                return
+            fn = rel.split("/")[-1]
+            src = resolve_attachment(detail_state["control_id"], rel, settings)
+            if not (src and os.path.exists(str(src))):
+                try:
+                    alt = attachment_abs(rel)
+                    if os.path.exists(str(alt)):
+                        src = alt
+                except Exception:
+                    pass
+            if not src or not os.path.exists(str(src)):
+                from ui.toast import show_error_toast
+                show_error_toast(page, "Файл вложения не найден")
+                return
+            if _is_web38():
+                # Web-режим (Win7): FilePicker.save_file не умеет отдавать
+                # файл в браузер — копируем в каталог, который сервер Flet
+                # раздаёт как /assets/downloads/, и открываем URL браузером
+                # (браузер скачивает/открывает сам; серверный temp-путь
+                # пользователя не вводит в заблуждение).
+                try:
+                    ddir = _web_download_dir38()
+                    if not ddir:
+                        raise OSError("no download dir")
+                    from urllib.parse import quote as _q38
+                    uname = _unique_download_name38(ddir, fn)
+                    dst = os.path.join(ddir, uname)
+                    import shutil as _sh38
+                    tmp = dst + ".tmp"
+                    _sh38.copy2(str(src), tmp)
+                    os.replace(tmp, dst)
+                    url = f"/assets/downloads/{_q38(uname)}"
+                    detail_state["saved_copies"][rel] = "web:" + url
+                    _rebuild_attach()
+                    page.launch_url(url)
+                    from ui.toast import show_toast
+                    show_toast(page, f"Копия отдана браузеру: {fn}", icon=ft.icons.DOWNLOAD)
+                except Exception as ex:
+                    print(f"[CONTROLS_TAB] web download error: {ex}")
+                    from ui.toast import show_error_toast
+                    show_error_toast(page, "Не удалось скачать файл")
+                return
+            # Desktop: системный диалог сохранения (подтверждение перезаписи
+            # — нативное, из FilePicker.save_file).
+            try:
+                detail_state["_dl_pending"] = {"rel": rel, "src": str(src)}
+                page._controls_attach_dl_picker.save_file(
+                    dialog_title="Сохранить копию вложения",
+                    file_name=fn)
+            except Exception as ex:
+                print(f"[CONTROLS_TAB] download trigger error: {ex}")
+                from ui.toast import show_error_toast
+                show_error_toast(page, "Не удалось скачать файл")
+
+        def _unique_download_name38(ddir: str, name: str) -> str:
+            stem, dot, suffix = name.rpartition(".")
+            cand = name
+            i = 1
+            while os.path.exists(os.path.join(ddir, cand)):
+                cand = f"{stem}_{i}{dot}{suffix}" if dot else f"{name}_{i}"
+                i += 1
+            return cand
+
+        def _on_dl_saved(e):
+            """Результат FilePicker.save_file для «Скачать»: байт-в-байт
+            атомарная копия выбранного назначения; успех — кнопка становится
+            «Открыть». Cancel — ничего не происходит."""
+            pend = detail_state.get("_dl_pending")
+            detail_state["_dl_pending"] = None
+            if not pend:
+                return
+            path = getattr(e, "path", None)
+            if not path:
+                return  # Cancel
+            rel, src = pend["rel"], pend["src"]
+            try:
+                import shutil as _sh38
+                dst_dir = os.path.dirname(path) or "."
+                os.makedirs(dst_dir, exist_ok=True)
+                tmp = path + ".tmp"
+                _sh38.copy2(src, tmp)   # байт-в-байт, исходник не трогаем
+                if os.path.exists(path):
+                    os.replace(tmp, path)  # перезапись — подтверждена диалогом
+                else:
+                    os.replace(tmp, path)
+                detail_state["saved_copies"][rel] = path
+                _rebuild_attach()
+                from ui.toast import show_toast
+                show_toast(page, f"Сохранено: {os.path.basename(path)}",
+                           icon=ft.icons.DOWNLOAD_DONE)
+            except Exception as ex:
+                print(f"[CONTROLS_TAB] save copy error: {ex}")
+                try:
+                    if os.path.exists(path + ".tmp"):
+                        os.remove(path + ".tmp")
+                except Exception:
+                    pass
+                from ui.toast import show_error_toast
+                show_error_toast(page, "Не удалось сохранить копию")
+
+        def _dl_button_for(rel: str):
+            saved = detail_state.get("saved_copies", {}).get(rel)
+            if saved:
+                return ft.IconButton(icon=ft.icons.FILE_OPEN, icon_size=18,
+                                     icon_color=GLASS["in_progress"],
+                                     tooltip="Открыть сохранённую копию",
+                                     on_click=lambda e, r=rel: _download_attach(r))
+            return ft.IconButton(icon=ft.icons.DOWNLOAD, icon_size=18,
+                                 icon_color=GLASS["accent"],
+                                 tooltip="Скачать",
+                                 on_click=lambda e, r=rel: _download_attach(r))
+
         def _open_attach(rel: str):
             import subprocess, sys, os
             path = resolve_attachment(detail_state["control_id"], rel, settings)
@@ -3103,12 +3506,21 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             page.open(dlg)
 
         def _copy_batch(files, cid, existing_names):
-            """Скопировать файлы вложений (shared → локальный фолбэк).
+            """Скопировать файлы вложений (shared → локальный фолбэк при офлайне).
 
             Аудит сети (раунд 30): ЧИСТОЕ копирование без доступа к
             detail_state/UI — безопасно вызывать из фонового потока.
             Возвращает (added_rels, failed). Имена уже прикреплённых файлов
-            не копируются повторно (раунд 21, задача 5)."""
+            не копируются повторно (раунд 21, задача 5).
+            Раунд 38 (fix stress 5c): reason "error" — сеть ДОСТУПНА,
+            но copy2/os.replace не прошли — это ОШИБКА, вложение НЕ
+            прикрепляется (локальный фолбэк при живой сети запрещён). Иначе
+            временный отказ (антивирус держит tmp на Windows) уводил
+            вложение в локальную копию: модель ссылалась на файл, которого
+            нет в shared, а в общей папке оставался осиротевший .tmp
+            (стабильное падение stress 5c 4/4). Локальный фолбэк — только
+            при недоступной shared-папке (офлайн-режим, reason "offline").
+            """
             added: List[str] = []
             failed = 0
             for fobj in files:
@@ -3122,21 +3534,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 if _base in existing_names:
                     continue
                 rel = None
+                reason = "offline"
                 if settings.get("network_enabled"):
                     try:
-                        rel = copy_attachment_to_shared(cid, fpath, settings)
+                        rel, reason = copy_attachment_to_shared_ex(cid, fpath, settings)
                     except Exception:
                         # сеть отключена/недоступна — падаем в локальное копирование
                         traceback.print_exc()
-                        rel = None
-                if not rel:
+                        rel, reason = None, "offline"
+                if not rel and reason == "offline":
                     # Раунд 13 (задача 5): локальное копирование как фолбэк
+                    # (сеть выключена или shared-папка недоступна)
                     rel = copy_attachment_to_local(cid, fpath)
                 if rel:
                     existing_names.add(_base)
                     added.append(rel)
                 else:
                     failed += 1
+                    if reason == "error":
+                        print("[CONTROLS_TAB] attach publish failed (network up) "
+                              "- file NOT attached")
             return added, failed
 
         def _apply_attach_result(cid, is_new, added, failed, skipped):
@@ -3159,6 +3576,9 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     # существующего контрола — diff-движок 0.23.2 его не
                     # переносит под новый родитель, и строка «пропадала» до
                     # переоткрытия карточки, скрин 13.08.2026).
+                    # Раунд 38 (задача 6): успешное прикрепление снимает
+                    # красную подсказку «прикрепите скан».
+                    detail_state["scan_hint"] = ""
                     try:
                         scan_panel.content = _make_scan_section()
                         _safe_update(scan_panel)
@@ -3238,22 +3658,41 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _apply_attach_result(cid, detail_state["is_new"], added, failed, skipped)
             if big:
                 is_new_at_pick = detail_state["is_new"]
+                # Раунд 38 (fix stress 5c): completion-job регистрируется ДО
+                # старта потока; снимается строго ПОСЛЕ _apply_attach_result —
+                # к этому моменту файл опубликован, модель сохранена, UI
+                # обновлён. Тесты/сервис ждут wait_attach_jobs(), а не опрос
+                # Control.attachments.
+                _attach_job_begin(cid)
+
                 def _bg_copy():
                     try:
                         a, f = _copy_batch(big, cid, existing_names)
                     except Exception:
                         traceback.print_exc()
                         a, f = [], 1
-                    _post_to_ui(lambda: _apply_attach_result(cid, is_new_at_pick,
-                                                             a, f, skipped))
+
+                    def _fin():
+                        try:
+                            _apply_attach_result(cid, is_new_at_pick, a, f, skipped)
+                        finally:
+                            _attach_job_end(cid)
+
+                    _post_to_ui(_fin)
+
                 try:
                     threading.Thread(target=_bg_copy, daemon=True).start()
                 except Exception as ex:
+                    _attach_job_end(cid)
                     print(f"[CONTROLS_TAB] attach bg copy error: {ex}")
                     from ui.toast import show_error_toast
                     show_error_toast(page, "Не удалось прикрепить файл")
 
         _ensure_file_picker(page, "_controls_attach_picker", _on_attach_picked)
+        # Раунд 38 (задача 7): picker «Скачать копию вложения» (desktop); у
+        # каждой карточки свой актуальный on_result через _dl_pending —
+        # callbacks разных picker/карточек не смешиваются.
+        _ensure_file_picker(page, "_controls_attach_dl_picker", _on_dl_saved)
 
         def _pick_attach(e=None):
             if edition_user:  # Раунд 23 (задача 2): read-only — без прикрепления
@@ -3276,6 +3715,38 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 except Exception:
                     traceback.print_exc()
                 return
+            # Раунд 38 (задача 6, P1): НОВУЮ карточку нельзя сохранить без
+            # успешно скопированного скана (pdf/png/jpg/jpeg, файл физически
+            # доступен через resolve_attachment/локальный fallback). Карточка
+            # остаётся открытой, секция «Скан задания» подсвечивается.
+            # Существующие исторические контроли без вложения — сохраняются
+            # после обычного редактирования (требование только к созданию).
+            if is_new:
+                scan_ok38 = False
+                for rel in (detail_state.get("attachments") or []):
+                    fn38 = str(rel).split("/")[-1].lower()
+                    if not fn38.endswith((".pdf", ".png", ".jpg", ".jpeg")):
+                        continue
+                    try:
+                        p38 = resolve_attachment(detail_state["control_id"], rel, settings)
+                        if p38 and os.path.exists(str(p38)):
+                            scan_ok38 = True
+                            break
+                    except Exception:
+                        pass
+                    try:
+                        alt38 = attachment_abs(rel)
+                        if os.path.exists(str(alt38)):
+                            scan_ok38 = True
+                            break
+                    except Exception:
+                        pass
+                if not scan_ok38:
+                    _set_scan_hint("Прикрепите скан задания (PDF или изображение)")
+                    from ui.toast import show_error_toast
+                    show_error_toast(page, "Прикрепите скан задания (PDF или изображение)")
+                    return
+            detail_state["scan_hint"] = ""
             if not detail_state["receive_date"]:
                 # Раунд 22 (задача 2): раньше здесь был ТИХИЙ return — у
                 # импортированных карточек без даты поступления «Сохранить»
@@ -3363,6 +3834,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                         state["controls"][idx] = c
                         break
             _persist(state["controls"])
+            # Раунд 38 (задача 5): карточка сохранена — вложения НЕ
+            # считаются orphan при закрытии (_hide_detail чистит их только
+            # при отмене НОВОЙ карточки).
+            detail_state["_saved"] = True
             _hide_detail()
             _rebuild_table()
             _refresh_counters()
@@ -3622,10 +4097,29 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                             horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
             attach_col_ref["col"] = col
             _fill_attach_col(col)
-            return ft.Column(controls=[
-                ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), _attach_btn28], spacing=6, tight=True),
-                col,
-            ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+            rows38 = [ft.Row(controls=[ft.Icon(ft.icons.ATTACH_FILE, size=15, color=GLASS["text"]), ft.Text("Скан задания", size=13, weight=ft.FontWeight.BOLD, color=GLASS["text"]), ft.Container(expand=True), _attach_btn28], spacing=6, tight=True),
+                      col]
+            # Раунд 38 (задача 6): подсветка секции при попытке сохранить
+            # НОВУЮ карточку без скана — красная строка-подсказка под списком.
+            _hint38 = (detail_state.get("scan_hint") or "").strip()
+            if _hint38:
+                rows38.append(ft.Row(controls=[
+                    ft.Icon(ft.icons.ERROR_OUTLINE, size=15, color=GLASS["overdue"]),
+                    ft.Text(_hint38, size=12, weight=ft.FontWeight.BOLD,
+                            color=GLASS["overdue"]),
+                ], spacing=6, tight=True))
+            return ft.Column(controls=rows38, spacing=8, tight=True,
+                             horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+
+        def _set_scan_hint(text: str):
+            """Установить/снять красную подсказку секции «Скан задания» и
+            пересобрать её на месте (карточка остаётся открытой)."""
+            detail_state["scan_hint"] = text or ""
+            try:
+                scan_panel.content = _make_scan_section()
+                _safe_update(scan_panel)
+            except Exception:
+                traceback.print_exc()
 
         # Раунд 23 (задача 1): ссылка на панель секции нужна _on_attach_picked —
         # точечный update attach_col на Win-клиенте 0.23.2 НЕ перерисовывал
@@ -3779,7 +4273,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             # «Закрыть», X закрытия карточки и лупы/открытия вложений
             # (тултипы «Предпросмотр»/«Открыть»); у кликабельных контейнеров
             # дат (календари receive/due/end/пунктов) снимается on_click.
-            _RO_KEEP_TOOLTIPS = {"Предпросмотр", "Открыть"}
+            # Раунд 38 (задача 7): read-only пользователю разрешены и
+            # «Скачать»/«Открыть сохранённую копию» (просмотровые действия,
+            # данные не меняют).
+            _RO_KEEP_TOOLTIPS = {"Предпросмотр", "Открыть", "Скачать",
+                                 "Открыть сохранённую копию"}
             _ro_doomed = []
             for _rc, _par, _at in _iter_tree_parents(detail_card):
                 try:
@@ -4014,9 +4512,24 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _preview_import(path: str):
         from ui.toast import show_error_toast
-        parsed, stats = import_from_excel(path, state["controls"])
-        if not parsed and stats["errors"] == 0:
-            show_error_toast(page, "Не найдено ни одного контроля")
+        # Раунд 38 (задача 9): инкрементальный upsert-план — новые строки
+        # добавляются, точные дубли пропускаются, существующие обновляются
+        # in-place (id/вложения/архив сохраняются), неоднозначности —
+        # конфликт без молчаливой перезаписи. Сравнение номеров — той же
+        # нормализацией, что и сетевая защита от дублей.
+        plan = import_plan(path, state["controls"])
+        parsed = plan["new"]
+        updates = plan["updates"]
+        conflicts = plan["conflicts"]
+        stats = {"errors": plan["errors"], "full_format": plan["full_format"],
+                 "skipped": plan["unchanged"] + len(updates) + len(conflicts)}
+        if not parsed and not updates and stats["errors"] == 0:
+            if plan["unchanged"] or conflicts:
+                show_error_toast(
+                    page, f"Нет изменений: без изменений {plan['unchanged']}"
+                          + (f" · конфликты: {len(conflicts)}" if conflicts else ""))
+            else:
+                show_error_toast(page, "Не найдено ни одного контроля")
             return
         preview_list = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=300)
         for c in parsed[:20]:
@@ -4026,24 +4539,66 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                     radius=8, padding=ft.padding.symmetric(horizontal=8, vertical=6), bgcolor=GLASS["surface_alt"],
                 )
             )
-        summary = ft.Text(f"Найдено: {len(parsed)+stats['skipped']} · Импортируемо: {len(parsed)} · Пропущено: {stats['skipped']} · Ошибок: {stats['errors']} · Формат: {'полный' if stats['full_format'] else 'таблица'}", size=11, color=GLASS["text_secondary"])
+        # Обновляемые записи — тоже показываем в предпросмотре
+        for target38, changed38, _rc38 in updates[:20]:
+            preview_list.controls.append(
+                glass_panel(
+                    content=ft.Row(controls=[ft.Text(target38.incoming_number or "—", size=11, color=GLASS["text_secondary"], width=90, no_wrap=True), ft.Text(f"обновление: {', '.join(changed38[:4])}" + ("…" if len(changed38) > 4 else ""), size=11, color=GLASS["soon"], expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS), ft.Text("обновл.", size=10, color=GLASS["soon"], width=80, no_wrap=True)], spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    radius=8, padding=ft.padding.symmetric(horizontal=8, vertical=6), bgcolor=with_alpha(GLASS["soon"], "14"),
+                )
+            )
+        for num38, why38 in conflicts[:10]:
+            preview_list.controls.append(
+                glass_panel(
+                    content=ft.Row(controls=[ft.Icon(ft.icons.ERROR_OUTLINE, size=14, color=GLASS["overdue"]), ft.Text(f"конфликт: {num38} — {why38}", size=11, color=GLASS["overdue"], expand=True, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS)], spacing=6, tight=True),
+                    radius=8, padding=ft.padding.symmetric(horizontal=8, vertical=6), bgcolor=with_alpha(GLASS["overdue"], "14"),
+                )
+            )
+        found38 = len(parsed) + stats["skipped"]
+        _no_scan_new38 = sum(1 for c in parsed if not (c.attachments or []))
+        summary = ft.Text(
+            f"Найдено: {found38} · Новые: {len(parsed)} · Обновляемые: {len(updates)} · "
+            f"Без изменений: {plan['unchanged']} · Конфликты: {len(conflicts)} · "
+            f"Ошибок: {stats['errors']}"
+            + (f" · Без скана: {_no_scan_new38}" if _no_scan_new38 else "")
+            + f" · Формат: {'полный' if stats['full_format'] else 'таблица'}",
+            size=11, color=GLASS["text_secondary"])
         def _confirm(e=None):
             try:
+                # Раунд 38 (задача 9): backup controls.json ДО применения
+                # (восстановление — из каталога backups).
+                try:
+                    _backup38.backup_file_now(get_controls_file(), purpose="import")
+                except Exception:
+                    traceback.print_exc()
+                used38 = {str(x.id) for x in state["controls"]}
                 for c in parsed:
                     # Раунд 22 (задачи 2/3/5): id присваиваем НЕМЕДЛЕННО при
                     # импорте — раньше парсер отдавал id=None «на потом», а
                     # «потом» не наступало: контроль без id ломал вложения
                     # (TypeError Path/None), «Сохранить» матчило None == None
                     # и задваивало строки, предпросмотр не находил файл.
-                    if not c.id:
+                    if not c.id or str(c.id) in used38:
                         c.id = str(uuid4())
+                    used38.add(str(c.id))
                     state["controls"].append(c)
+                # in-place обновления существующих записей (id сохраняются,
+                # вложения не трогаются — сливает _apply_row_to_existing)
+                for target38, _fields38, row_ctl38 in updates:
+                    try:
+                        _apply_row_to_existing(target38, row_ctl38)
+                    except Exception:
+                        traceback.print_exc()
                 _persist(state["controls"])
                 page.close(dialog)
                 _rebuild_table()
                 _refresh_counters()
                 from ui.toast import show_toast
-                show_toast(page, f"Импортировано: {len(parsed)}", icon=ft.icons.CLOUD_DOWNLOAD)
+                show_toast(
+                    page,
+                    f"Импортировано: {len(parsed)}"
+                    + (f" · Обновлено: {len(updates)}" if updates else ""),
+                    icon=ft.icons.CLOUD_DOWNLOAD)
             except Exception:
                 traceback.print_exc()
         def _close(e=None):
@@ -4688,10 +5243,39 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         _run()
 
     def _background_loop():
+        # Раунд 38 (задача 8): ежедневные резервные копии. Первый запуск —
+        # сразу (атомарно, в фоне; UI не блокируется), дальше — периодически
+        # раз в ~30 минут: приложение может жить в трее несколько дней, маркер
+        # «once per day» перепроверяется, и за новый календарный день копия
+        # создаётся сама. Функции внутри idempotent и снабжены межпроцессным
+        # lock (web-процесс с несколькими Flet-session не дублирует backup).
+        _bg_cycle38 = {"n": 0}
+
+        def _daily_backups38():
+            try:
+                _backup38.maybe_daily_local_backup()
+            except Exception:
+                pass
+            try:
+                _backup38.maybe_daily_shared_backup(settings,
+                                                    is_admin=not edition_user)
+            except Exception:
+                pass
+
+        try:
+            _daily_backups38()
+        except Exception:
+            pass
         while not _poll_stop["flag"]:
             time.sleep(20)
             if _poll_stop["flag"]:
                 break
+            _bg_cycle38["n"] += 1
+            if _bg_cycle38["n"] % 30 == 0:  # ~ каждые 30 минут (цикл ~60 сек)
+                try:
+                    _daily_backups38()
+                except Exception:
+                    pass
             # Аудит сети (раунд 30): СЕТЕВОЙ I/O (stat/чтение shared) выполняется
             # в этом фоновом потоке, а не в UI-потоке — на медленном SMB
             # (latency 0.5–2 с, таймауты) опрос больше не замораживает интерфейс.
@@ -4726,7 +5310,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             traceback.print_exc()
         try:
-            uploaded = sync_local_attachments_to_shared(state["controls"], settings)
+            # Раунд 38 (задача 1): user-редакция в общую папку НИЧЕГО не
+            # выгружает (ни контролей, ни вложений) — только читает.
+            uploaded = 0 if edition_user else \
+                sync_local_attachments_to_shared(state["controls"], settings)
             if uploaded:
                 print(f"[CONTROLS_TAB] offline attachments uploaded: {uploaded}")
                 try:
@@ -4788,11 +5375,26 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             print("[CONTROLS_TAB] conflict dialog error")
 
     def _apply_shared_update(shared: List[Control], mtime: float, toast: bool = True):
-        """Подхват сетевых изменений без открытой карточки (replace + ненавязчивый toast)."""
+        """Подхват сетевых изменений без открытой карточки (replace + ненавязчивый toast).
+        Раунд 38 (задача 1): список показывается через «сухую» дедупликацию
+        (_dedupe_view) — дубли под разными id не отображаются, даже если общая
+        база ещё не исцелена admin'ом; в user-режиме обновляется локальный
+        кэш для офлайн-чтения."""
+        try:
+            shared = _dedupe_view(shared)
+        except Exception:
+            traceback.print_exc()
         state["controls"] = shared
         state["shared_mtime"] = mtime
         state["last_sync"] = datetime.now()
         state["network_ok"] = True
+        if edition_user:
+            # user: authoritative shared -> локальный кэш для офлайн-чтения
+            # (write_shared_controls в user-режиме не вызывается никогда).
+            try:
+                save_controls(shared)
+            except Exception:
+                traceback.print_exc()
         _sync_attachments(shared)
         try:
             _update_sync_ui()
@@ -4809,7 +5411,10 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _on_network_back(mtime: float, shared: Optional[List[Control]] = None):
         """Задача 4: сеть вернулась после офлайна — merge (НЕ подмена), локальные правки дороже.
-        Аудит сети: `shared` может быть передан уже прочитанным (I/O в фоновом потоке)."""
+        Аудит сети: `shared` может быть передан уже прочитанным (I/O в фоновом потоке).
+        Раунд 38 (задача 1): в user-режиме shared — авторитетный snapshot:
+        кэш заменяется ИМ, stale local-only записи обратно в сеть НЕ
+        возвращаются."""
         if shared is None:
             try:
                 shared = read_shared_controls(settings)
@@ -4823,7 +5428,33 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             except Exception:
                 traceback.print_exc()
             return
+        if edition_user:
+            # user: кэш заменяется authoritative shared-данными
+            try:
+                shared_view = _dedupe_view(shared)
+            except Exception:
+                shared_view = shared
+            state["controls"] = shared_view
+            state["shared_mtime"] = mtime
+            state["last_sync"] = datetime.now()
+            state["network_ok"] = True
+            try:
+                save_controls(shared_view)
+            except Exception:
+                traceback.print_exc()
+            _sync_attachments(shared_view)
+            try:
+                _update_sync_ui()
+            except Exception:
+                traceback.print_exc()
+            try:
+                from ui.toast import show_toast
+                show_toast(page, "Сеть восстановлена, данные синхронизированы", icon=ft.icons.CLOUD_SYNC)
+            except Exception:
+                print("[CONTROLS_TAB] network back toast error")
+            return
         merged = merge_controls(state["controls"], shared)
+        merged = _dedupe_view(merged)
         print(f"[CONTROLS_TAB] merge: {len(shared)} controls from shared")
         state["controls"] = merged
         state["shared_mtime"] = mtime

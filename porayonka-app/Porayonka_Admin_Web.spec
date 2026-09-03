@@ -84,7 +84,11 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # Раунд 38 (задача 3.2): UPX для web-сборок Win7 ВЫКЛЮЧЕН — сжатые
+    # native-расширения (pyd/uvloop/httptools) распаковываются UPX-runtime,
+    # который на Win7 добавляет лишний слой отказов загрузчика; несжатый
+    # бандл предсказуемее (и снимает ложные срабатывания антивирусов).
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

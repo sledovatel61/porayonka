@@ -418,33 +418,25 @@ def split_executors(text) -> List[str]:
     return out
 
 
-def import_from_excel(
-    filepath: str,
-    existing: List[Control],
-    skip_duplicates: bool = True,
-) -> Tuple[List[Control], dict]:
-    """Импорт контролей из .xlsx.
+def _parse_import_rows(filepath: str) -> Tuple[List[Tuple[int, list, dict]], dict, int]:
+    """Разобрать .xlsx в список (номер_строки, row, col_idx) + скрытый лист.
 
-    :param filepath: путь к файлу
-    :param existing: текущие контроли (для дедупликации по incoming_number)
-    :return: (controls, stats) где stats = {"imported", "skipped", "errors", "full_format"}
+    Общая часть import_from_excel()/import_plan(). Возвращает
+    (parsed_rows, full_by_incoming, errors) — parsed_rows содержит только
+    строки с непустым вх. номером.
     """
     from openpyxl import load_workbook
 
-    stats = {"imported": 0, "skipped": 0, "errors": 0, "full_format": False}
-    if not filepath:
-        return [], stats
-
+    full_by_incoming: dict = {}
+    errors = 0
     wb = load_workbook(filepath, data_only=True)
-    full_by_incoming = {}
     if FULL_SHEET in wb.sheetnames:
-        stats["full_format"] = True
         full_by_incoming = _read_full_sheet(wb[FULL_SHEET])
 
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
-        return [], stats
+        return [], full_by_incoming, errors
 
     # Шапка может лежать не в первой строке: раунд 7 — строка 1 объединённый
     # заголовок «КОНТРОЛИ ОТДЕЛА КРИМИНАЛИСТИКИ», шапка — строка 2.
@@ -489,9 +481,7 @@ def import_from_excel(
         # Упрощённый маппинг: если колонки не распознаны — читать по порядку
         col_idx = {i: i for i in range(min(10, len(header)))}
 
-    existing_incoming = {c.incoming_number for c in existing}
-    new_controls: List[Control] = []
-    errors = 0
+    parsed: List[Tuple[int, list, dict]] = []
     for ri, row in enumerate(rows[header_row_idx + 1:], header_row_idx + 2):
         if all(v is None or str(v).strip() == "" for v in row):
             continue
@@ -501,21 +491,228 @@ def import_from_excel(
             incoming_cell = row[ci]
         if not incoming_cell or not str(incoming_cell).strip():
             continue  # служебная строка (инфо) без вх. № — не считать
-        if str(incoming_cell).strip() in existing_incoming:
-            stats["skipped"] += 1
-            continue
+        parsed.append((ri, row, col_idx))
+    return parsed, full_by_incoming, errors
+
+
+def import_from_excel(
+    filepath: str,
+    existing: List[Control],
+    skip_duplicates: bool = True,
+) -> Tuple[List[Control], dict]:
+    """Импорт контролей из .xlsx (TODO-совместимая добавочная семантика).
+
+    Раунд 38: реализована поверх import_plan() — основной поток
+    инкрементального импорта/upsert; здесь возвращаются ТОЛЬКО новые записи,
+    а stats дополнен новыми счётчиками (updated/unchanged/conflicts).
+
+    :param filepath: путь к файлу
+    :param existing: текущие контроли (для дедупликации по incoming_number)
+    :return: (controls, stats) где stats = {"imported", "skipped", "errors",
+             "full_format", "updated", "unchanged", "conflicts"}
+    """
+    stats = {"imported": 0, "skipped": 0, "errors": 0, "full_format": False,
+             "updated": 0, "unchanged": 0, "conflicts": 0}
+    if not filepath:
+        return [], stats
+    plan = import_plan(filepath, existing)
+    stats["imported"] = len(plan["new"])
+    stats["unchanged"] = plan["unchanged"]
+    stats["conflicts"] = len(plan["conflicts"])
+    stats["updated"] = len(plan["updates"])
+    stats["skipped"] = plan["unchanged"] + len(plan["updates"]) + len(plan["conflicts"])
+    stats["errors"] = plan["errors"]
+    stats["full_format"] = plan["full_format"]
+    return plan["new"], stats
+
+
+def _apply_row_to_existing(existing: Control, row_ctl: Control) -> List[str]:
+    """Раунд 38 (задача 9): слить данные Excel-строки В СУЩЕСТВУЮЩУЮ запись
+    IN PLACE (canonical id сохраняется). Возвращает список имён изменённых
+    полей (пустой — запись без изменений).
+
+    Правила безопасности:
+    - attachments и физические файлы НИКОГДА не очищаются из-за отсутствия
+      вложений в Excel (union, без удаления);
+    - richer-поля (tasks, milestones, archive metadata, comment) не стираются
+      ПУСТЫМИ значениями импорта;
+    - скаляры обновляются только НЕПУСТЫМИ значениями из Excel;
+    - archived-метаданные импортом не меняются;
+    - incoming_number канонической записи не переписывается (совпадение уже
+      доказано нормализованным сравнением).
+    """
+    changed: List[str] = []
+
+    def _set(attr: str, val) -> None:
+        if val in (None, "", [], {}):
+            return
+        if getattr(existing, attr, None) != val:
+            setattr(existing, attr, val)
+            changed.append(attr)
+
+    _set("receive_date", row_ctl.receive_date)
+    _set("initiator", row_ctl.initiator)
+    _set("content", row_ctl.content)
+    # Исполнители — заменяются только непустым списком
+    if row_ctl.executors and row_ctl.executors != existing.executors:
+        existing.executors = list(row_ctl.executors)
+        changed.append("executors")
+    _set("controller", row_ctl.controller)
+    if row_ctl.control_type and row_ctl.control_type != existing.control_type:
+        existing.control_type = row_ctl.control_type
+        changed.append("control_type")
+    if row_ctl.period_days and row_ctl.period_days != existing.period_days:
+        existing.period_days = row_ctl.period_days
+        changed.append("period_days")
+    _set("end_date", row_ctl.end_date)
+    _set("due_date", row_ctl.due_date)
+    # Исполнение: Excel «Исполнено + дата» непусто — отметить (не снимать)
+    if row_ctl.done and not existing.done:
+        existing.done = True
+        existing.done_date = row_ctl.done_date
+        changed.append("done")
+    elif row_ctl.done and existing.done and row_ctl.done_date \
+            and row_ctl.done_date != existing.done_date:
+        existing.done_date = row_ctl.done_date
+        changed.append("done_date")
+    _set("comment", row_ctl.comment)
+    # Пункты/точки: только непустые из импорта (пустое значение не стирает)
+    if row_ctl.tasks:
+        old = [(t.title, t.due_date, t.is_done) for t in (existing.tasks or [])]
+        new = [(t.title, t.due_date, t.is_done) for t in row_ctl.tasks]
+        if old != new:
+            existing.tasks = row_ctl.tasks
+            changed.append("tasks")
+    if row_ctl.milestones:
+        old = [(m.date, m.note, m.is_done) for m in (existing.milestones or [])]
+        new = [(m.date, m.note, m.is_done) for m in row_ctl.milestones]
+        if old != new:
+            existing.milestones = row_ctl.milestones
+            changed.append("milestones")
+    # Вложения — union, никогда не очищаются
+    if row_ctl.attachments:
+        seen = {str(a).split("/")[-1].casefold() for a in (existing.attachments or [])}
+        merged = list(existing.attachments or [])
+        added = 0
+        for rel in row_ctl.attachments:
+            nm = str(rel).split("/")[-1].casefold()
+            if nm and nm not in seen:
+                seen.add(nm)
+                merged.append(rel)
+                added += 1
+        if added:
+            existing.attachments = merged
+            changed.append("attachments")
+    if changed:
+        existing.updated_at = datetime.now().isoformat()
+    return changed
+
+
+def import_plan(filepath: str, existing: List[Control]) -> dict:
+    """Раунд 38 (задача 9): безопасный ИНКРЕМЕНТАЛЬНЫЙ импорт/upsert.
+
+    Возвращает план:
+      {"new": [Control],        # новые логические контроли (id уникален)
+       "updates": [(existing_ctl, [изменённые поля], row_ctl)],
+            # in-place обновления: existing_ctl — каноническая запись (id тот же,
+            # сейчас НЕ мутирует), row_ctl — данные строки для применения через
+            # _apply_row_to_existing(existing_ctl, row_ctl) после подтверждения
+       "unchanged": int,        # точные неизменившиеся дубли
+       "conflicts": [(номер, причина)],  # неоднозначности — не трогаем
+       "errors": int, "full_format": bool}
+
+    Сопоставление: сначала по `id` из скрытого листа round-trip (тот же id
+    НЕ дублируется), затем по НОРМАЛИЗОВАННОМУ вх. номеру (та же
+    нормализация, что защита сети от дублей — core/controls_dedup).
+    Неоднозначное соответствие (несколько записей с тем же номером) —
+    конфликт: молча не перезатираем.
+    """
+    from .controls_dedup import normalize_incoming_number
+    import copy as _copy
+    import uuid as _uuid
+
+    plan = {"new": [], "updates": [], "unchanged": 0, "conflicts": [],
+            "errors": 0, "full_format": bool(False)}
+    if not filepath:
+        return plan
+    try:
+        parsed, full_by_incoming, errors = _parse_import_rows(filepath)
+    except Exception as e:
+        plan["errors"] = 1
+        print(f"[CONTROLS_EXCEL] open error: {e}")
+        return plan
+    plan["full_format"] = bool(full_by_incoming)
+
+    existing = list(existing or [])
+    by_id = {str(c.id): c for c in existing if getattr(c, "id", None)}
+    by_num: dict = {}
+    for c in existing:
+        key = normalize_incoming_number(c.incoming_number or "")
+        if key:
+            by_num.setdefault(key, []).append(c)
+    used_ids = set(by_id.keys())
+    handled_nums = set()   # номера, уже обработанные в этом файле (new/updated)
+    _no_skip: set = set()  # разбор строк без пропуска «уже есть» — merge ниже
+
+    for ri, row, col_idx in parsed:
         try:
-            ctl = _row_to_control(row, col_idx, full_by_incoming, existing_incoming)
-            if ctl is None:
-                stats["skipped"] += 1
-                continue
-            new_controls.append(ctl)
-            stats["imported"] += 1
+            ctl = _row_to_control(row, col_idx, full_by_incoming, _no_skip)
         except Exception as e:
-            errors += 1
+            plan["errors"] += 1
             print(f"[CONTROLS_EXCEL] row {ri} error: {e}")
-    stats["errors"] = errors
-    return new_controls, stats
+            continue
+        if ctl is None:
+            continue
+        row_id = str(ctl.id) if getattr(ctl, "id", None) else ""
+        num_key = normalize_incoming_number(ctl.incoming_number or "")
+        # Внутрифайловый дубль номера: первая строка с номером обрабатывается,
+        # повторные — конфликт (молча ничего не добавляем и не перетираем).
+        if num_key and num_key in handled_nums:
+            # round-trip полного формата: та же запись по id второй раз — это
+            # не конфликт, а повтор (без изменений)
+            if row_id and row_id in by_id:
+                plan["unchanged"] += 1
+            else:
+                plan["conflicts"].append((ctl.incoming_number,
+                                          "номер повторяется внутри файла"))
+            continue
+        target = None
+        if row_id and row_id in by_id:
+            # round-trip скрытого листа: та же запись по id — обновление
+            target = by_id[row_id]
+            ctl.id = row_id
+        elif num_key and num_key in by_num:
+            cands = by_num[num_key]
+            if len(cands) == 1:
+                target = cands[0]
+            else:
+                plan["conflicts"].append((ctl.incoming_number,
+                                          "несколько записей с таким номером"))
+                continue
+        if target is not None:
+            # upsert данных под canonical id (id/вложения/архив не трогаем).
+            # План считается на КОПИИ (deepcopy) — реальное применение
+            # выполняет UI после подтверждения (предпросмотр не мутирует
+            # рабочие данные при отмене).
+            probe = _copy.deepcopy(target)
+            changed = _apply_row_to_existing(probe, ctl)
+            if changed:
+                plan["updates"].append((target, changed, ctl))
+                if num_key:
+                    handled_nums.add(num_key)
+            else:
+                plan["unchanged"] += 1
+                if num_key:
+                    handled_nums.add(num_key)
+            continue
+        # Новая запись
+        if num_key:
+            handled_nums.add(num_key)
+        if not getattr(ctl, "id", None) or str(ctl.id) in used_ids:
+            ctl.id = str(_uuid.uuid4())
+        used_ids.add(str(ctl.id))
+        plan["new"].append(ctl)
+    return plan
 
 
 def _read_full_sheet(ws) -> dict:
@@ -550,12 +747,17 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
     if incoming in existing_incoming:
         return None  # дубликат
 
-    # Если есть скрытый лист — берём точные данные оттуда
+    # Если есть скрытый лист — берём точные данные оттуда, НО поверх
+    # накладываем видимые колонки основной таблицы (раунд 38, задача 9):
+    # админ редактирует именно их в Excel — правки должны применяться, а не
+    # игнорироваться скрытым листом; неизменённый файл по-прежнему «без
+    # изменений» (наложенные значения совпадают с экспортированными).
     if full_by_incoming:
         full_row = full_by_incoming.get(incoming)
         if full_row:
             ctl = _from_full_row(full_row, incoming)
             if ctl is not None:
+                _overlay_visible_row(ctl, row, col_idx)
                 return ctl
 
     receive = parse_excel_date(_get(2))
@@ -649,6 +851,80 @@ def _row_to_control(row, col_idx, full_by_incoming: dict,
     # Раунд 20 (задача 3): пункты задания из текста содержания
     ctl.tasks = content_tasks
     return ctl
+
+
+def _overlay_visible_row(ctl: Control, row, col_idx) -> None:
+    """Раунд 38 (задача 9): наложить ВИДИМЫЕ колонки основной таблицы поверх
+    записи, восстановленной из скрытого листа _controls_full. Пустые/неизменные
+    ячейки ничего не меняют (richer-данные full-листа — задачи, вложения,
+    архив, комментарий — сохраняются); изменённые админом в Excel ячейки —
+    корректное обновление in place при импорте.
+    """
+    def _get(i):
+        ci = col_idx.get(i)
+        if ci is None or ci >= len(row):
+            return None
+        return row[ci]
+
+    receive = parse_excel_date(_get(2))
+    if receive:
+        ctl.receive_date = receive
+    v = str(_get(3) or "").strip()
+    if v:
+        ctl.initiator = v
+    content_v = str(_get(4) or "").strip()
+    if content_v and content_v != (ctl.content or "").strip():
+        # Содержание изменили в Excel — перечитываем (в т.ч. пункты «п. N»)
+        try:
+            new_content, new_tasks = parse_content_tasks(content_v)
+        except Exception:
+            new_content, new_tasks = content_v, []
+        ctl.content = new_content
+        if new_tasks:
+            ctl.tasks = new_tasks
+    execs = split_executors(_get(5))
+    if execs:
+        cur = sorted((e or "").strip().casefold() for e in (ctl.executors or []))
+        new = sorted((e or "").strip().casefold() for e in execs)
+        if new != cur:
+            executors = list(execs)
+            for _t in (ctl.tasks or []):
+                for _a in _t.assignees:
+                    if _a and not any((_e or "").strip().casefold() == _a.casefold()
+                                      for _e in executors):
+                        executors.append(_a)
+            ctl.executors = executors
+    v = str(_get(6) or "").strip()
+    if v:
+        ctl.controller = v
+    type_raw = _get(7)
+    type_text = str(type_raw or "").strip()
+    if type_text:
+        end_date = parse_excel_date(type_raw)
+        if end_date is not None:
+            ctl.control_type, ctl.period_days = ONE_TIME, 0
+            ctl.end_date = end_date
+        else:
+            ctype, period_days = parse_periodicity(type_text)
+            ctl.control_type = ctype
+            if period_days:
+                ctl.period_days = period_days
+            m = re.search(r"\d{1,2}\.\d{1,2}\.\d{4}", type_text)
+            if m:
+                ed = parse_excel_date(m.group(0))
+                if ed:
+                    ctl.end_date = ed
+    if ctl.control_type == ONE_TIME and not ctl.period_days:
+        ctl.period_days = 7
+    due = parse_excel_date(_get(8))
+    if due is not None:
+        ctl.due_date = due
+    done_text = _get(9)
+    if done_text is not None and str(done_text).strip() != "":
+        ctl.done = True
+        dd = parse_excel_date(done_text)
+        if dd:
+            ctl.done_date = dd
 
 
 def _from_full_row(full: dict, incoming: str) -> Optional[Control]:
