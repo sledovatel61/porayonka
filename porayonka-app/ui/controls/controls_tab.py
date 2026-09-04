@@ -1994,7 +1994,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     # ── Detail overlay with global calendar dropdown ──────────
     # Global calendar for task dates etc to avoid clipping
-    global_cal_state = {"setter": None, "visible": False}
+    global_cal_state = {"setter": None, "visible": False, "can_clear": False}
     global_cal_panel = ft.Container(visible=False, width=280, bgcolor=GLASS["surface_solid"], border=ft.border.all(1, GLASS["border"]), border_radius=12, padding=ft.padding.all(10))
     # will be filled later per open
 
@@ -2133,6 +2133,20 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
     global_cal_root = ft.Container(visible=False, width=300, height=340, bgcolor=GLASS["surface_solid"], border=ft.border.all(1, GLASS["border"]), border_radius=12, padding=ft.padding.all(10), top=200, left=300)
     global_cal_header = ft.Text("", size=13, weight=ft.FontWeight.W_700, color=GLASS["text"])
     global_cal_grid = ft.Column(spacing=2, tight=True)
+    # Раунд 39 (задача 1): команда «Очистить» ВНУТРИ ЕДИНОГО глобального
+    # календаря. Второй независимый календарь НЕ создаётся — используется
+    # существующий контракт setter(Optional[str]) (тот же, что и у
+    # create_russian_date_field: on_change(None) = «дата не указана»).
+    # Кнопка видна только у полей, которым очистка разрешена (can_clear) —
+    # у конечной даты. У «Дата получения»/«Срок»/дат пунктов/точек её нет:
+    # там очистка меняла бы существующую семантику.
+    global_cal_clear_btn = ft.TextButton(
+        "Очистить",
+        on_click=lambda e: _global_cal_clear(),
+        style=ft.ButtonStyle(color=GLASS["text_muted"]),
+        tooltip="Очистить дату (сделать «не указана»)",
+        visible=False,
+    )
     global_cal_panel_content = ft.Column(
         controls=[
             ft.Row(controls=[ft.IconButton(icon=ft.icons.CHEVRON_LEFT, icon_size=18, icon_color=GLASS["text_secondary"], width=28, height=28, padding=0, on_click=lambda e: _global_cal_nav(-1)), ft.Container(content=global_cal_header, expand=True, alignment=ft.alignment.center), ft.IconButton(icon=ft.icons.CHEVRON_RIGHT, icon_size=18, icon_color=GLASS["text_secondary"], width=28, height=28, padding=0, on_click=lambda e: _global_cal_nav(1))], spacing=4, tight=True),
@@ -2140,7 +2154,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.Row(controls=[ft.Container(width=34, height=20, alignment=ft.alignment.center, content=ft.Text(wd, size=10, weight=ft.FontWeight.W_700, color=GLASS["text_muted"])) for wd in ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"]], spacing=2, tight=True),
             global_cal_grid,
             ft.Container(height=6),
-            ft.Row(controls=[ft.TextButton("Сегодня", on_click=lambda e: _global_cal_today(), style=ft.ButtonStyle(color=GLASS["accent"])), ft.Container(expand=True), ft.TextButton("Закрыть", on_click=lambda e: _close_global_cal(), style=ft.ButtonStyle(color=GLASS["text_muted"]))], spacing=4, tight=True),
+            ft.Row(controls=[ft.TextButton("Сегодня", on_click=lambda e: _global_cal_today(), style=ft.ButtonStyle(color=GLASS["accent"])), ft.Container(expand=True), global_cal_clear_btn, ft.TextButton("Закрыть", on_click=lambda e: _close_global_cal(), style=ft.ButtonStyle(color=GLASS["text_muted"]))], spacing=4, tight=True),
         ], spacing=2, tight=True,
     )
     global_cal_root.content = global_cal_panel_content
@@ -2155,11 +2169,36 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         except Exception:
             traceback.print_exc()
 
-    def _open_global_cal(setter, current_iso=None):
+    def _global_cal_clear():
+        """Раунд 39 (задача 1): «Очистить» в едином глобальном календаре.
+
+        Вызывает ТЕКУЩИЙ setter с None — ровно тот же контракт, что и
+        выбор даты (setter(iso)) и что и on_change(None) в
+        create_russian_date_field. Никакого второго календаря.
+        """
+        setter = global_cal_state.get("setter")
+        if setter is None:
+            _close_global_cal()
+            return
+        try:
+            setter(None)
+        except Exception:
+            traceback.print_exc()
+        global_cal_display["selected"] = None
+        _close_global_cal()
+
+    def _open_global_cal(setter, current_iso=None, can_clear=False):
         if edition_user:
             # Раунд 23 (задача 2): read-only — календари не открываем вообще
             return
         global_cal_state["setter"] = setter
+        # Раунд 39 (задача 1): показываем «Очистить» только у поля, которому
+        # очистка разрешена (сейчас — конечная дата периодического контроля).
+        global_cal_state["can_clear"] = bool(can_clear)
+        try:
+            global_cal_clear_btn.visible = bool(can_clear)
+        except Exception:
+            pass
         sel = None
         if current_iso:
             try:
@@ -2780,21 +2819,51 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
         # End date
         end_field_text = ft.Text(_display_date(detail_state["end_date"]), size=13, color=GLASS["text"] if detail_state["end_date"] else GLASS["text_muted"])
+        # Раунд 39 (задача 1): ЯВНАЯ команда очистки конечной даты.
+        # КОРЕНЬ дефекта: у поля конечной даты не было ни крестика, ни
+        # «Очистить» в календаре — выставленную дату нельзя было снять
+        # никак, только перезаписать другой. Кнопка повторяет проверенный
+        # паттерн create_russian_date_field (крестик внутри поля; внутренний
+        # IconButton перехватывает клик раньше on_click контейнера).
+        end_clear_btn = ft.IconButton(
+            icon=ft.icons.CLEAR,
+            icon_size=14,
+            icon_color=GLASS["text_muted"],
+            width=22, height=22, padding=0,
+            visible=bool(detail_state["end_date"]) and not edition_user,
+            tooltip="Очистить конечную дату (сделать «не указана»)",
+        )
         end_box = ft.Container(
-            content=ft.Row(controls=[end_field_text, ft.Container(expand=True), ft.Icon(ft.icons.CALENDAR_MONTH, size=18, color=GLASS["text_secondary"])], spacing=6, tight=True),
+            content=ft.Row(controls=[end_field_text, ft.Container(expand=True), end_clear_btn, ft.Icon(ft.icons.CALENDAR_MONTH, size=18, color=GLASS["text_secondary"])], spacing=6, tight=True),
             width=160, height=40, bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]), border_radius=10,
             padding=ft.padding.symmetric(horizontal=12, vertical=6),
         )
         end_box.visible = (ctl.control_type if ctl else ONE_TIME) == PERIODIC
         def _set_end(iso):
+            """iso=None — дата очищена («не указана»). Контракт Optional[str],
+            тот же, что и on_change(Optional[str]) единого календаря."""
             detail_state["end_date"] = iso
             end_field_text.value = _display_date(iso)
+            end_field_text.color = GLASS["text"] if iso else GLASS["text_muted"]
+            # крестик виден, только пока дата задана
+            try:
+                end_clear_btn.visible = bool(iso) and not edition_user
+            except Exception:
+                pass
             try:
                 _safe_update(end_field_text)
+                _safe_update(end_clear_btn)
             except Exception:
                 traceback.print_exc()
             _refresh_cycle_hint()
-        end_box.on_click = lambda e: _open_global_cal(_set_end, detail_state["end_date"])
+        def _clear_end(e=None):
+            # Раунд 39 (задача 1): очистка НЕ трогает due_date, period_days,
+            # tasks, milestones — обнуляется только end_date.
+            _set_end(None)
+        end_clear_btn.on_click = _clear_end
+        # Раунд 39 (задача 1): can_clear=True — в едином глобальном календаре
+        # для этого поля появится «Очистить». Второй календарь не создаётся.
+        end_box.on_click = lambda e: _open_global_cal(_set_end, detail_state["end_date"], can_clear=True)
 
         cycle_hint = ft.Text("", size=11, color=GLASS["text_secondary"], italic=True)
         def _period_days_val() -> int:
@@ -2814,10 +2883,32 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 _safe_update(cycle_hint)
             except Exception:
                 traceback.print_exc()
+        # Раунд 39 (задача 1): ПРЕДЫДУЩИЙ тип контроля — чтобы обнулять
+        # end_date только на реальном ПЕРЕХОДЕ «Постоянный» -> «Разовый»,
+        # а не при любом on_change дропдауна.
+        _type_prev = {"value": (ctl.control_type if ctl else ONE_TIME)}
+
         def _on_type_change(e):
-            is_per = (e.control.value == PERIODIC)
+            new_type = e.control.value or ONE_TIME
+            is_per = (new_type == PERIODIC)
+            was_per = (_type_prev["value"] == PERIODIC)
+            _type_prev["value"] = new_type
             period_dd.visible = is_per
             end_box.visible = is_per
+            # Раунд 39 (задача 1): переход «Постоянный» -> «Разовый» ОБНУЛЯЕТ
+            # скрытое значение end_date. Без этого поле пряталось
+            # (end_box.visible=False), а значение оставалось в detail_state и
+            # молча уезжало в controls.json/Excel — «дату очистил, а она
+            # вернулась».
+            #
+            # ВАЖНО, это НЕ откат раунда 22: раунд 22 требует, чтобы end_date
+            # РАЗОВОГО контроля («срок разового контроля», колонка H Excel)
+            # не стирался при СОХРАНЕНИИ карточки. Здесь обнуление происходит
+            # только на ЯВНОМ действии пользователя (смена типа в дропдауне),
+            # а не при загрузке/сохранении уже существующего разового контроля
+            # с его собственной датой из Excel.
+            if not is_per and was_per:
+                _set_end(None)
             # Раунд 5: «Промежуточные точки» показываем всегда (секция добавлена всегда),
             # а не прячем — иначе «+ Добавить точку» добавлял точку в скрытую колонку и
             # «ничего не происходило». milestones_header удалён (нет такого контрола).
@@ -4479,18 +4570,185 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             from ui.toast import show_error_toast
             show_error_toast(page, f"Ошибка: {ex}")
 
+    # ════════════════════════════════════════════════════════════════
+    # Раунд 39 (задача 5): ИМПОРТ EXCEL В ADMIN WIN7 WEB (FilePicker upload)
+    # ════════════════════════════════════════════════════════════════
+    # КОРЕНЬ дефекта: _on_import_picked брал только e.path / e.files[0].path.
+    # В нативном клиенте это реальный путь на диске, а в БРАУЗЕРЕ (web-режим
+    # Win7) у FilePickerResultEvent.files[*].path = None — браузер не отдаёт
+    # серверу локальный путь. Код попадал в `if not path: return` и молча
+    # выходил: «выбрал файл — ничего не произошло». Чтобы файл попал на
+    # сервер, его нужно ЗАГРУЗИТЬ: picker.upload([FilePickerUploadFile(name,
+    # page.get_upload_url(name, expires))]) и дождаться on_upload c
+    # progress == 1.0 и error is None; физически файл ложится в
+    # FLET_UPLOAD_DIR/<имя> (flet/fastapi/flet_upload.py:
+    # os.path.join(upload_dir, file_name)). Каталог задаёт main.py::_entry()
+    # — без него эндпоинт /upload вообще не регистрируется.
+    #
+    # Почему НЕ блокирующее ожидание: тело обработчика события Flet 0.23.2
+    # исполняется под общим UI-lock (ui/update_lock.py), а on_upload приходит
+    # тем же путём — ожидание внутри on_result было бы ДЕДЛОКОМ. Поэтому
+    # цепочка колбэков: on_result -> picker.upload() -> on_upload -> preview.
+
+    _import_pending = {"name": None, "active": False}
+
+    def _import_log(msg: str):
+        """ASCII-safe запись в лог запуска web (frozen console=False:
+        print уходит в devnull, исключение теряется бесследно)."""
+        try:
+            safe = msg.encode("ascii", "replace").decode("ascii")
+            print("[CONTROLS_TAB][IMPORT] " + safe)
+            appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+            logdir = os.path.join(appdata, "porayonka")
+            os.makedirs(logdir, exist_ok=True)
+            from datetime import datetime as _dt39
+            with open(os.path.join(logdir, "error.log"), "a",
+                      encoding="utf-8", errors="replace") as _f39:
+                _f39.write("[%s] [IMPORT] %s\n"
+                           % (_dt39.now().isoformat(), safe))
+        except Exception:
+            pass
+
+    def _import_fail(msg_ru: str, detail: str = ""):
+        """Понятный русский toast + ASCII-safe запись в лог. Исключение не
+        теряется при console=False."""
+        _import_log(("FAIL " + (detail or msg_ru)))
+        try:
+            from ui.toast import show_error_toast
+            show_error_toast(page, msg_ru)
+        except Exception:
+            traceback.print_exc()
+
+    def _web_upload_dir() -> Optional[str]:
+        return os.environ.get("FLET_UPLOAD_DIR") or None
+
+    def _uploaded_path(file_name: str) -> Optional[str]:
+        """Физический путь загруженного браузером файла (или None)."""
+        d = _web_upload_dir()
+        if not d or not file_name:
+            return None
+        # basename — защита от «имени» с путевыми разделителями
+        return os.path.join(d, os.path.basename(file_name))
+
+    def _ensure_upload_handler(picker, handler):
+        """Подписать on_upload ровно ОДИН раз: EventHandler.subscribe() в
+        Flet 0.23.2 НАКАПЛИВАЕТ обработчики (dict), поэтому старую подписку
+        сначала снимаем — иначе после повторного импорта срабатывало бы
+        замыкание прошлой попытки (та же первопричина, что чинил раунд 38
+        для on_result, см. _ensure_file_picker)."""
+        old = getattr(page, "_controls_import_upload_handler", None)
+        try:
+            eh = getattr(picker, "on_upload", None)
+            if old is not None and eh is not None and hasattr(eh, "unsubscribe"):
+                eh.unsubscribe(old)
+        except Exception:
+            traceback.print_exc()
+        try:
+            picker.on_upload = handler
+            page._controls_import_upload_handler = handler
+        except Exception:
+            traceback.print_exc()
+
+    def _start_import_upload(files):
+        """Web: загрузить выбранный xlsx на сервер, потом отдать в preview."""
+        picker = getattr(page, "_controls_import_picker", None)
+        if picker is None:
+            _import_fail("Импорт недоступен: диалог выбора файла не инициализирован",
+                         "picker is None")
+            return
+        if not _web_upload_dir():
+            _import_fail("Импорт Excel в веб-версии недоступен: не задан каталог загрузки",
+                         "FLET_UPLOAD_DIR not set")
+            return
+        target = None
+        for f in files:
+            nm = getattr(f, "name", None)
+            if nm:
+                target = f
+                break
+        if target is None:
+            _import_fail("Не удалось определить имя выбранного файла", "empty file name")
+            return
+        nm = target.name
+        if not nm.lower().endswith(".xlsx"):
+            _import_fail("Нужен файл Excel в формате .xlsx", "not xlsx: " + nm)
+            return
+        try:
+            url = page.get_upload_url(nm, 3600)
+        except Exception as ex:
+            _import_fail("Не удалось подготовить загрузку файла",
+                         "get_upload_url: %s: %s" % (type(ex).__name__, ex))
+            return
+        _import_pending["name"] = nm
+        _import_pending["active"] = True
+        _ensure_upload_handler(picker, _on_import_uploaded)
+        _import_log("upload start: " + nm)
+        try:
+            picker.upload([ft.FilePickerUploadFile(nm, url)])
+        except Exception as ex:
+            _import_pending["active"] = False
+            _import_fail("Не удалось отправить файл на сервер",
+                         "upload: %s: %s" % (type(ex).__name__, ex))
+
+    def _on_import_uploaded(ue):
+        """Завершение upload: progress==1.0 и error is None -> импорт."""
+        try:
+            if not _import_pending.get("active"):
+                return
+            err = getattr(ue, "error", None)
+            prog = getattr(ue, "progress", None)
+            nm = getattr(ue, "file_name", None) or _import_pending.get("name")
+            if err:
+                _import_pending["active"] = False
+                _import_fail("Ошибка загрузки файла на сервер",
+                             "upload error: %s (%s)" % (err, nm))
+                return
+            if prog is None or float(prog) < 1.0:
+                return  # ещё грузится — ждём события progress=1.0
+            _import_pending["active"] = False
+            path = _uploaded_path(nm)
+            # Импортируем ТОЛЬКО проверив существующий физический .xlsx.
+            # Фиктивные/сконструированные пути запрещены.
+            if not path or not os.path.isfile(path):
+                _import_fail("Загруженный файл не найден на сервере",
+                             "missing uploaded file: %s" % nm)
+                return
+            if not path.lower().endswith(".xlsx"):
+                _import_fail("Нужен файл Excel в формате .xlsx",
+                             "uploaded not xlsx: %s" % path)
+                return
+            _import_log("upload done: " + path)
+            _preview_import(path)
+        except Exception as ex:
+            _import_pending["active"] = False
+            _import_fail("Не удалось завершить загрузку файла",
+                         "on_upload: %s: %s" % (type(ex).__name__, ex))
+            traceback.print_exc()
+
     def _on_import_picked(e):
+        files = list(getattr(e, "files", None) or [])
         path = None
+        # 1) save_file-форма результата (e.path) — нативный «Сохранить как»;
+        # 2) pick_files-форма (e.files[*].path) — нативный выбор файла.
         if getattr(e, "path", None):
             path = e.path
-        elif getattr(e, "files", None):
-            try:
-                path = e.files[0].path
-            except Exception:
-                path = None
-        if not path:
+        elif files and getattr(files[0], "path", None):
+            path = files[0].path
+        if path:
+            # Desktop: реальный локальный путь — прежний путь без изменений.
+            _preview_import(path)
             return
-        _preview_import(path)
+        # 3) Отмена диалога: нет ни path, ни files.
+        if not files:
+            _import_log("cancelled by user")
+            try:
+                from ui.toast import show_toast
+                show_toast(page, "Импорт отменён", icon=ft.icons.INFO_OUTLINE)
+            except Exception:
+                pass
+            return
+        # 4) WEB: path=None, files есть -> нужен upload на сервер.
+        _start_import_upload(files)
 
     _ensure_file_picker(page, "_controls_file_picker", _on_export_picked)
     _ensure_file_picker(page, "_controls_import_picker", _on_import_picked)
