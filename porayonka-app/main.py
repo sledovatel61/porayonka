@@ -5,6 +5,7 @@
 # + Вкладка "Зональные" для зональных криминалистов
 # ════════════════════════════════════════════════════════════════
 import flet as ft
+import os
 from datetime import datetime
 from typing import List
 
@@ -40,6 +41,46 @@ from ui.edit_departments_modal import create_edit_departments_modal
 from ui.export_modal import create_export_modal
 from ui.reset_modal import create_reset_modal
 from ui.toast import show_save_toast, show_reset_toast, show_error_toast
+# Раунд 39 (задача 2): ленивое создание тяжёлых вкладок (build-on-first-use
+# + кэш экземпляра). См. ui/lazy_tabs.py.
+from ui.lazy_tabs import LazyTabHost
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Раунд 39 (задача 3): ЕДИНСТВЕННЫЙ ВЛАДЕЛЕЦ ОТКРЫТИЯ БРАУЗЕРА (web-режим).
+# ════════════════════════════════════════════════════════════════════════
+# КОРНЕВАЯ ПРИЧИНА «двойного открытия браузера»: открывали ТРИ места
+# одновременно —
+#   1) ft.app(view=AppView.WEB_BROWSER) в main.py  -> открывает сам Flet;
+#   2) start_web_win7.bat  -> `start http://127.0.0.1:8555` после ожидания;
+#   3) main_web.py::_open_browser() на повторном запуске.
+# На обычном запуске через bat срабатывали (1) и (2) -> два окна браузера.
+#
+# РЕШЕНИЕ: владелец — FLET (AppView.WEB_BROWSER). Причина выбора:
+#   * Flet открывает браузер ТОЧНО когда сервер начал отвечать (не «через
+#     4 секунды» и не после отдельного PowerShell-опроса);
+#   * это работает и при dev-запуске `python main.py --web`, и при запуске
+#     exe напрямую (без bat) — bat не обязателен;
+#   * bat не знает, на каком порту реально поднялся сервер (main_web.py
+#     умеет уехать на 8556..8564 при занятом 8555) — его жёстко зашитый
+#     http://127.0.0.1:8555 мог открыть ВКЛАДКУ С МЁРТВЫМ АДРЕСОМ.
+#
+# РОЛИ ОСТАЛЬНЫХ:
+#   * start_web_win7.bat — ТОЛЬКО запускает сервер, ждёт доступности HTTP и
+#     ПЕЧАТАЕТ адрес. `start http://...` из него УБРАН;
+#   * main_web.py::_open_browser() — НЕ второй владелец, а продолжение
+#     политики на ПОВТОРНОМ запуске: там процесс обнаруживает, что порт уже
+#     обслуживается нашим сервером, и завершается через sys.exit(0), НЕ
+#     доходя до ft.app(). То есть в таком процессе Flet браузер не открывает
+#     физически, и открываем мы — ровно один раз на действие пользователя.
+#     Это подтверждается статическим тестом (tests/test_round39.py): каждый
+#     вызов _open_browser() в main_web.py обязан сопровождаться sys.exit().
+#
+# НЕ ПУТАТЬ: webbrowser.open() в явной команде «Открыть» из меню трея
+# (ui/tray_icon.py::_show) — это действие ПОЛЬЗОВАТЕЛЯ по его клику, а не
+# автоматический старт приложения; на правило единственного владельца оно
+# не влияет и остаётся как есть.
+BROWSER_OWNER = "flet:AppView.WEB_BROWSER"
 
 
 # ────────────────────────────────────────────────────────────────
@@ -176,112 +217,137 @@ def _main_impl(page: ft.Page) -> None:
     def on_search(query: str) -> None:
         filter_table(page, query)
 
-    # ── Создать компоненты первой вкладки ───────────────────────
-    stats_bar = create_stats_bar(page, departments)
-    toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset, on_edit_departments)
-    legend = create_legend()
+    # ════════════════════════════════════════════════════════════════
+    # Раунд 39 (задача 2): ЛЕНИВЫЕ ВКЛАДКИ.
+    # ════════════════════════════════════════════════════════════════
+    # Было: create_zonal_tab() и create_controls_tab() вызывались ЗДЕСЬ, на
+    # старте, ещё до page.add() — пользователь платил полную цену построения
+    # всех трёх тяжёлых деревьев, видя только «Контроли».
+    # Стало: ниже — три builder'а и LazyTabHost. На старте строится ТОЛЬКО
+    # активная вкладка «Контроли», остальные — при первом переходе, и
+    # экземпляр кэшируется (возврат на вкладку builder НЕ повторяет).
+    #
+    # Состав вкладок НЕ менялся: используются те же create_controls_tab(),
+    # create_zonal_tab() и тот же (бывший inline) код вкладки отделов —
+    # ни одна возможность Admin не потеряна, изменился только МОМЕНТ вызова.
+    #
+    # Диагноза build/reuse: отключаемая, ASCII-safe —
+    #   set PORAYONKA_LAZY_TAB_DIAG=1
+    _LAZY_TAB_DIAG = os.environ.get("PORAYONKA_LAZY_TAB_DIAG") == "1"
 
-    # Подсказка над канбаном
-    kanban_hint = ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Icon(ft.icons.INFO_OUTLINE, size=14, color=COLORS["text_muted"]),
-                ft.Text(
-                    "Клик по карточке двигает её вправо по статусам →",
-                    size=11,
-                    color=COLORS["text_muted"],
-                    italic=True,
-                ),
-            ],
-            spacing=6,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            tight=True,
-        ),
-        padding=ft.padding.only(left=4, bottom=4),
-    )
+    def _build_departments_tab():
+        """Следственные отделы (бывшая «первая вкладка").
 
-    print(f"[OK] Departments loaded: {len(departments)}")
+        Раунд 39 (задача 2): код перенесён БЕЗ ИЗМЕНЕНИЙ, только вынесен в
+        builder. Колбэки (on_status_change/on_save/on_export/on_reset/
+        on_edit_departments/_refresh_table_and_stats) остались замыканиями
+        _main_impl — как и раньше.
+        """
+        # ── Создать компоненты первой вкладки ───────────────────────
+        stats_bar = create_stats_bar(page, departments)
+        toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset, on_edit_departments)
+        legend = create_legend()
 
-    table = create_department_table(page, departments, on_status_change)
-    export_modal = create_export_modal(page, departments)
-    reset_modal = create_reset_modal(page, on_reset_confirm)
+        # Подсказка над канбаном
+        kanban_hint = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.icons.INFO_OUTLINE, size=14, color=COLORS["text_muted"]),
+                    ft.Text(
+                        "Клик по карточке двигает её вправо по статусам →",
+                        size=11,
+                        color=COLORS["text_muted"],
+                        italic=True,
+                    ),
+                ],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
+            ),
+            padding=ft.padding.only(left=4, bottom=4),
+        )
 
-    page.overlay.extend([export_modal, reset_modal])
+        print(f"[OK] Departments loaded: {len(departments)}")
 
-    # ── Содержимое первой вкладки ────────────────────────────────
-    # Канбан-доска должна заполнять оставшееся пространство по вертикали,
-    # поэтому внешняя Column БЕЗ scroll — прокрутка внутри колонок канбана.
-    tab1_content = ft.Container(
-        content=ft.Column(
-            controls=[
-                stats_bar,
-                ft.Container(height=12),
-                toolbar,
-                ft.Container(height=8),
-                legend,
-                ft.Container(height=6),
-                kanban_hint,
-                ft.Container(height=4),
-                table,
-            ],
-            spacing=0,
+        table = create_department_table(page, departments, on_status_change)
+        export_modal = create_export_modal(page, departments)
+        reset_modal = create_reset_modal(page, on_reset_confirm)
+
+        page.overlay.extend([export_modal, reset_modal])
+
+        # ── Содержимое первой вкладки ────────────────────────────────
+        # Канбан-доска должна заполнять оставшееся пространство по вертикали,
+        # поэтому внешняя Column БЕЗ scroll — прокрутка внутри колонок канбана.
+        tab1_content = ft.Container(
+            content=ft.Column(
+                controls=[
+                    stats_bar,
+                    ft.Container(height=12),
+                    toolbar,
+                    ft.Container(height=8),
+                    legend,
+                    ft.Container(height=6),
+                    kanban_hint,
+                    ft.Container(height=4),
+                    table,
+                ],
+                spacing=0,
+                expand=True,
+            ),
+            padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
             expand=True,
-        ),
-        padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
-        expand=True,
-    )
+        )
+        return tab1_content
 
-    # ── Создать вторую вкладку (Зональные) ──────────────────────
-    print("[MAIN] Создаю вкладку Зональные...")
-    try:
+    def _build_zonal_tab():
+        """Зональные криминалисты. Раунд 39 (задача 2): ТОТ ЖЕ builder
+        create_zonal_tab() и тот же Container-обёртка с прежним padding."""
+        print("[MAIN] Sozdayu vkladku Zonalnye...")
         from ui.zonal.zonal_tab import create_zonal_tab
         zonal_content_raw = create_zonal_tab(page)
-
-        tab2_content = ft.Container(
+        print("[MAIN] [OK] Vkladka Zonalnye sozdana")
+        return ft.Container(
             content=zonal_content_raw,
             padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
             expand=True,
         )
-        print("[MAIN] [OK] Vkladka Zonalnye sozdana")
-    except Exception as e:
-        import traceback
-        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Zonalnye: {e}")
-        traceback.print_exc()
-        tab2_content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
-                ],
-            ),
-            padding=ft.padding.all(20),
-            expand=True,
-        )
 
-    # ── Создать третью вкладку (Контроли) ───────────────────────
-    print("[MAIN] Создаю вкладку Контроли...")
-    try:
+    def _build_controls_tab():
+        """Контроли. Раунд 39 (задача 2): ТОТ ЖЕ builder
+        create_controls_tab() и тот же Container-обёртка с прежним padding."""
+        print("[MAIN] Sozdayu vkladku Kontroli...")
         from ui.controls.controls_tab import create_controls_tab
         controls_content_raw = create_controls_tab(page)
-
-        tab3_content = ft.Container(
+        print("[MAIN] [OK] Vkladka Kontroli sozdana")
+        return ft.Container(
             content=controls_content_raw,
             padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
             expand=True,
         )
-        print("[MAIN] [OK] Vkladka Kontroli sozdana")
-    except Exception as e:
+
+    def _tab_build_error(key, exc):
+        """Раунд 39 (задача 2): ошибка builder'а не роняет всё приложение —
+        в слоте вкладки показываем красный текст (семантика до раунда 39)."""
         import traceback
-        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Kontroli: {e}")
+        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki {key}: {exc}")
         traceback.print_exc()
-        tab3_content = ft.Container(
+        return ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
+                    ft.Text(f"Oshibka zagruzki vkladki: {exc}", color="#dc2626"),
                 ],
             ),
             padding=ft.padding.all(20),
             expand=True,
         )
+
+    _lazy_tabs = LazyTabHost(page=page, on_error=_tab_build_error,
+                             diag=_LAZY_TAB_DIAG)
+    _lazy_tabs.register("departments", _build_departments_tab)
+    _lazy_tabs.register("zonal", _build_zonal_tab)
+    _lazy_tabs.register("controls", _build_controls_tab)
+    # для тестов раунда 39 и диагностики
+    page._lazy_tabs = _lazy_tabs
 
     # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
     # Раунд 21 (задача 8): порядок вкладок — «Контроли» (первая и по
@@ -289,18 +355,21 @@ def _main_impl(page: ft.Page) -> None:
     # прежние имена (tab1 = отделы, tab2 = зональные, tab3 = контроли),
     # ПОРЯДОК задаётся маппингом в _switch_tab/_mk_tab_btn — логика
     # вкладок (polling, сохранение) не затронута.
+    # Раунд 39 (задача 2): content=None — содержимое подставляется при
+    # ПЕРВОМ переходе (_ensure_tab). Порядок вкладок и активная по
+    # умолчанию вкладка (index 0 = «Контроли») НЕ ИЗМЕНИЛИСЬ.
     tab1_container = ft.Container(
-        content=tab1_content,
+        content=None,
         expand=True,
         visible=False,
     )
     tab2_container = ft.Container(
-        content=tab2_content,
+        content=None,
         expand=True,
         visible=False,
     )
     tab3_container = ft.Container(
-        content=tab3_content,
+        content=None,
         expand=True,
         visible=True,
     )
@@ -309,6 +378,34 @@ def _main_impl(page: ft.Page) -> None:
         fit=ft.StackFit.EXPAND,
         expand=True,
     )
+
+    # Раунд 39 (задача 2): индекс кнопки -> (слот, ключ ленивой вкладки).
+    # Маппинг ровно тот, что и в _switch_tab/_mk_tab_btn раунда 21:
+    #   0 = «Контроли»             -> tab3_container
+    #   1 = «Зональные»            -> tab2_container
+    #   2 = «Следственные отделы»  -> tab1_container
+    _tab_slots = (
+        (tab3_container, "controls"),
+        (tab2_container, "zonal"),
+        (tab1_container, "departments"),
+    )
+
+    def _ensure_tab(index: int):
+        """Раунд 39 (задача 2): построить вкладку при первом обращении.
+
+        Повторный вызов ничего не пересоздаёт: и слот уже заполнен, и
+        LazyTabHost вернул бы кэш — двойная защита (слот проверяем здесь,
+        чтобы не платить даже за вход в lock хоста).
+        """
+        slot, key = _tab_slots[index]
+        if slot.content is not None:
+            return slot
+        slot.content = _lazy_tabs.get(key)
+        return slot
+
+    # На старте строится ТОЛЬКО активная вкладка (0 = «Контроли»).
+    # «Зональные» и «Следственные отделы» — при первом переходе.
+    _ensure_tab(0)
 
     def _restyle_tabs():
         for idx, (btn, ico) in enumerate(
@@ -328,6 +425,10 @@ def _main_impl(page: ft.Page) -> None:
         # Раунд 21 (задача 8): индексы кнопок — НОВЫЙ порядок
         # (0=Контроли, 1=Зональные, 2=Следственные отделы).
         active_tab["value"] = index
+        # Раунд 39 (задача 2): ленивое построение — builder вызывается ровно
+        # один раз на вкладку, при возврате используется кэш (состояние
+        # вкладки — фильтры, открытая карточка, скролл — сохраняется).
+        _ensure_tab(index)
         tab3_container.visible = (index == 0)
         tab2_container.visible = (index == 1)
         tab1_container.visible = (index == 2)
@@ -566,10 +667,94 @@ def _entry():
             start_tray(None, web_url=_web_url)
         except Exception:
             pass
+        # Раунд 39 (задача 5): КАТАЛОГ ЗАГРУЗКИ для FilePicker в web-режиме.
+        # КОРНЕВАЯ ПРИЧИНА неработающего Excel-импорта в Admin Win7 Web:
+        # flet/fastapi/app.py регистрирует PUT-эндпоинт /upload ТОЛЬКО если
+        # задан upload_dir, а он берётся из env FLET_UPLOAD_DIR
+        # (app.py: env_upload_dir = os.getenv("FLET_UPLOAD_DIR")). Мы его
+        # никогда не задавали, ft.app(upload_dir=None) -> эндпоинта нет ->
+        # picker.upload() получал 404/405, и браузерный выбор файла не
+        # доходил до import_plan(). Desktop это не касается (там
+        # FilePickerResultEvent.path — реальный локальный путь).
+        # Ставим ДО ft.app: сервер читает env при старте.
+        try:
+            if not os.environ.get("FLET_UPLOAD_DIR"):
+                _appdata39 = os.environ.get("APPDATA") or os.path.expanduser("~")
+                _up39 = os.path.join(_appdata39, "porayonka", "web_uploads")
+                os.makedirs(_up39, exist_ok=True)
+                os.environ["FLET_UPLOAD_DIR"] = _up39
+                print(f"[MAIN] web upload dir: {_up39}")
+        except Exception as _ex39:
+            print(f"[MAIN] web upload dir error: {_ex39}")
+        # Раунд 39 (задача 5, часть 2): СЕКРЕТ ПОДПИСИ ЗАГРУЗКИ.
+        # Второго корня дефекта одного FLET_UPLOAD_DIR мало. По исходникам
+        # Flet 0.23.2 подпись upload-запроса обязательна с ОБЕИХ сторон:
+        #   * клиент: page.get_upload_url() -> flet_runtime/uploads.py
+        #     build_upload_url -> get_upload_signature;
+        #   * сервер: flet/fastapi/flet_upload.py -> get_upload_signature.
+        # Обе функции читают os.getenv("FLET_SECRET_KEY") и БЕЗ него бросают
+        # «Specify secret_key parameter or set FLET_SECRET_KEY environment
+        # variable to enable uploads.» (проверено живым запуском: PUT /upload
+        # отдавал именно это исключение). flet/fastapi/app.py сам env не
+        # читает — поэтому задаём его мы, ДО ft.app.
+        # Ключ храним в %APPDATA%\porayonka\upload_secret.key, чтобы он был
+        # стабилен между перезапусками; при первом запуске генерируем.
+        try:
+            if not os.environ.get("FLET_SECRET_KEY"):
+                _appdata39s = os.environ.get("APPDATA") or os.path.expanduser("~")
+                _kfile39 = os.path.join(_appdata39s, "porayonka",
+                                        "upload_secret.key")
+                _key39 = None
+                try:
+                    if os.path.isfile(_kfile39):
+                        with open(_kfile39, "r", encoding="ascii") as _fk39:
+                            _key39 = _fk39.read().strip() or None
+                except OSError:
+                    _key39 = None
+                if not _key39:
+                    import secrets as _sec39
+                    _key39 = _sec39.token_hex(32)
+                    try:
+                        os.makedirs(os.path.dirname(_kfile39), exist_ok=True)
+                        with open(_kfile39, "w", encoding="ascii") as _fk39:
+                            _fk39.write(_key39)
+                    except OSError:
+                        pass
+                os.environ["FLET_SECRET_KEY"] = _key39
+                print("[MAIN] web upload secret key: configured")
+        except Exception as _ex39s:
+            print(f"[MAIN] web upload secret key error: {_ex39s}")
         print(f"[MAIN] Web-rezhim: http://{host}:{port}")
+        # Раунд 39 (задача 3): ЕДИНСТВЕННЫЙ владелец открытия браузера —
+        # AppView.WEB_BROWSER (см. BROWSER_OWNER). start_web_win7.bat свой
+        # `start http://...` больше НЕ делает.
         ft.app(target=main, view=ft.AppView.WEB_BROWSER, host=host, port=port)
     else:
-        ft.app(target=main)
+        # Раунд 39 (задача 4): SINGLE-INSTANCE guard для desktop-редакций.
+        # Второй запущенный экземпляр не создаёт ни окно, ни второй значок в
+        # трее, а передаёт управление первому (поднимает его окно) и выходит.
+        # fail-open только если API недоступен (не Windows / нет kernel32) —
+        # ERROR_ALREADY_EXISTS к fail-open НЕ относится.
+        try:
+            from core import single_instance as _si39
+            _ok39, _why39 = _si39.acquire()
+            if not _ok39:
+                print(f"[MAIN] already running ({_why39}) - handing over")
+                _si39.focus_existing()
+                return
+        except Exception as _ex39:
+            print(f"[MAIN] single-instance check error: {_ex39}")
+        try:
+            ft.app(target=main)
+        finally:
+            # «Выход» из трея освобождает guard сам (tray_icon.stop_tray),
+            # но закрываем и здесь — выход через окно/краш-путь не должен
+            # оставлять mutex занятым.
+            try:
+                from core import single_instance as _si39b
+                _si39b.release()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
