@@ -245,7 +245,7 @@ def _period_key(days: int) -> str:
             return k
     return "custom"
 
-def _ensure_file_picker(page: ft.Page, attr: str, on_result):
+def _ensure_file_picker(page: ft.Page, attr: str, on_result, on_upload=None):
     # Раунд 38 (задача 5, P1) — КОРНЕВАЯ ПРИЧИНА «вложение скопировано, но не
     # видно до переоткрытия карточки»: EventHandler.subscribe() в Flet 0.23.2
     # НАКАПЛИВАЕТ обработчики (dict) при каждом присваивании on_result — старые
@@ -256,10 +256,12 @@ def _ensure_file_picker(page: ft.Page, attr: str, on_result):
     # прежнее замыкание явно ОТПИСЫВАЕМ (unsubscribe), оставляя ровно один
     # обработчик — текущей открытой карточки.
     if not hasattr(page, attr):
-        picker = ft.FilePicker(on_result=on_result)
+        picker = ft.FilePicker(on_result=on_result, on_upload=on_upload)
         page.overlay.append(picker)
         setattr(page, attr, picker)
         setattr(page, attr + "_handler", on_result)
+        if on_upload is not None:
+            setattr(page, attr + "_upload_handler", on_upload)
         try:
             page.update()
         except Exception:
@@ -279,6 +281,20 @@ def _ensure_file_picker(page: ft.Page, attr: str, on_result):
             setattr(page, attr + "_handler", on_result)
         except Exception:
             traceback.print_exc()
+
+        if on_upload is not None:
+            old_u = getattr(page, attr + "_upload_handler", None)
+            try:
+                ueh = getattr(picker, "on_upload", None)
+                if old_u is not None and ueh is not None and hasattr(ueh, "unsubscribe"):
+                    ueh.unsubscribe(old_u)
+            except Exception:
+                traceback.print_exc()
+            try:
+                picker.on_upload = on_upload
+                setattr(page, attr + "_upload_handler", on_upload)
+            except Exception:
+                traceback.print_exc()
     return getattr(page, attr)
 
 
@@ -2140,7 +2156,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             ft.Row(controls=[ft.Container(width=34, height=20, alignment=ft.alignment.center, content=ft.Text(wd, size=10, weight=ft.FontWeight.W_700, color=GLASS["text_muted"])) for wd in ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"]], spacing=2, tight=True),
             global_cal_grid,
             ft.Container(height=6),
-            ft.Row(controls=[ft.TextButton("Сегодня", on_click=lambda e: _global_cal_today(), style=ft.ButtonStyle(color=GLASS["accent"])), ft.Container(expand=True), ft.TextButton("Закрыть", on_click=lambda e: _close_global_cal(), style=ft.ButtonStyle(color=GLASS["text_muted"]))], spacing=4, tight=True),
+            ft.Row(controls=[
+                ft.TextButton("Сегодня", on_click=lambda e: _global_cal_today(), style=ft.ButtonStyle(color=GLASS["accent"])),
+                ft.TextButton("Очистить", on_click=lambda e: _global_cal_clear(), style=ft.ButtonStyle(color=GLASS["text_muted"])),
+                ft.Container(expand=True),
+                ft.TextButton("Закрыть", on_click=lambda e: _close_global_cal(), style=ft.ButtonStyle(color=GLASS["text_muted"]))
+            ], spacing=4, tight=True),
         ], spacing=2, tight=True,
     )
     global_cal_root.content = global_cal_panel_content
@@ -2154,6 +2175,15 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _safe_update(global_cal_root)
         except Exception:
             traceback.print_exc()
+
+    def _global_cal_clear():
+        global_cal_display["selected"] = None
+        if global_cal_state["setter"]:
+            try:
+                global_cal_state["setter"](None)
+            except Exception:
+                traceback.print_exc()
+        _close_global_cal()
 
     def _open_global_cal(setter, current_iso=None):
         if edition_user:
@@ -2779,18 +2809,64 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         due_box.on_click = lambda e: _open_global_cal(_set_due, detail_state["due_date"])
 
         # End date
-        end_field_text = ft.Text(_display_date(detail_state["end_date"]), size=13, color=GLASS["text"] if detail_state["end_date"] else GLASS["text_muted"])
+        end_field_text = ft.Text(
+            _display_date(detail_state["end_date"]),
+            size=13,
+            color=GLASS["text"] if detail_state["end_date"] else GLASS["text_muted"],
+        )
+        def _on_clear_end(e=None):
+            _set_end(None)
+
+        end_clear_btn = ft.IconButton(
+            icon=ft.icons.CLEAR,
+            icon_size=14,
+            icon_color=GLASS["text_muted"],
+            width=22,
+            height=22,
+            padding=0,
+            visible=bool(detail_state["end_date"]),
+            tooltip="Очистить конечную дату",
+            on_click=_on_clear_end,
+        )
+        end_cal_icon = ft.IconButton(
+            icon=ft.icons.CALENDAR_MONTH,
+            icon_size=18,
+            icon_color=GLASS["text_secondary"],
+            width=24,
+            height=24,
+            padding=0,
+            tooltip="Выбрать конечную дату",
+            on_click=lambda e: _open_global_cal(_set_end, detail_state["end_date"]),
+        )
         end_box = ft.Container(
-            content=ft.Row(controls=[end_field_text, ft.Container(expand=True), ft.Icon(ft.icons.CALENDAR_MONTH, size=18, color=GLASS["text_secondary"])], spacing=6, tight=True),
-            width=160, height=40, bgcolor=GLASS["surface_alt"], border=ft.border.all(1, GLASS["border"]), border_radius=10,
-            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            content=ft.Row(
+                controls=[
+                    end_field_text,
+                    ft.Container(expand=True),
+                    end_clear_btn,
+                    end_cal_icon,
+                ],
+                spacing=4,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            width=175,
+            height=40,
+            bgcolor=GLASS["surface_alt"],
+            border=ft.border.all(1, GLASS["border"]),
+            border_radius=10,
+            padding=ft.padding.symmetric(horizontal=10, vertical=6),
         )
         end_box.visible = (ctl.control_type if ctl else ONE_TIME) == PERIODIC
         def _set_end(iso):
             detail_state["end_date"] = iso
             end_field_text.value = _display_date(iso)
+            end_field_text.color = GLASS["text"] if iso else GLASS["text_muted"]
+            end_clear_btn.visible = bool(iso)
             try:
                 _safe_update(end_field_text)
+                _safe_update(end_clear_btn)
+                _safe_update(end_box)
             except Exception:
                 traceback.print_exc()
             _refresh_cycle_hint()
@@ -2816,6 +2892,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 traceback.print_exc()
         def _on_type_change(e):
             is_per = (e.control.value == PERIODIC)
+            if not is_per:
+                _set_end(None)
             period_dd.visible = is_per
             end_box.visible = is_per
             # Раунд 5: «Промежуточные точки» показываем всегда (секция добавлена всегда),
@@ -3807,9 +3885,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             c.controller = controller_dd.value or ""
             c.control_type = type_dd.value or ONE_TIME
             c.period_days = _period_days_val_inner() if c.control_type == PERIODIC else (ctl.period_days if ctl else 7)
-            # Раунд 22 (задача 2): end_date сохраняется и у РАЗОВОГО контроля —
-            # это «срок разового контроля» в таблице (раунд 18, колонка H
-            # Excel); раньше сохранение карточки молча СТИРАЛО его у разовых.
+            # Раунд 39 (задача 1): сохранённое значение detail_state["end_date"]
+            # (очищено при нажатии кнопки очистки или при переходе periodic -> one-time)
             c.end_date = detail_state["end_date"]
             c.due_date = detail_state["due_date"]
             c.comment = comment_field.value.strip()
@@ -4480,6 +4557,8 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             show_error_toast(page, f"Ошибка: {ex}")
 
     def _on_import_picked(e):
+        if edition_user:
+            return
         path = None
         if getattr(e, "path", None):
             path = e.path
@@ -4488,12 +4567,84 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                 path = e.files[0].path
             except Exception:
                 path = None
-        if not path:
+
+        if path and os.path.isfile(str(path)):
+            # Desktop mode / local path exists
+            _preview_import(str(path))
             return
-        _preview_import(path)
+
+        # Web mode / browser client without local filesystem path:
+        files = getattr(e, "files", None)
+        if not files:
+            # User cancelled dialog
+            return
+        f = files[0]
+        fname = getattr(f, "name", "") or ""
+        if not fname.lower().endswith(".xlsx"):
+            from ui.toast import show_error_toast
+            from core.crash_log import write_error_log
+            show_error_toast(page, "Выберите файл формата Excel (.xlsx)")
+            write_error_log(f"[CONTROLS_TAB] import rejected non-xlsx file: {fname}")
+            return
+
+        # Prepare upload
+        try:
+            from core.crash_log import write_error_log
+            appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+            upload_dir = os.environ.get("FLET_UPLOAD_DIR") or os.path.join(appdata, "porayonka", "web_uploads")
+            os.makedirs(upload_dir, exist_ok=True)
+
+            upload_url = page.get_upload_url(fname, 600)
+            upload_file = ft.FilePickerUploadFile(name=fname, upload_url=upload_url)
+            state["_import_upload_file"] = {
+                "name": fname,
+                "target_path": os.path.join(upload_dir, fname),
+            }
+            write_error_log(f"[CONTROLS_TAB] starting web excel upload for {fname}")
+            page._controls_import_picker.upload([upload_file])
+        except Exception as ex:
+            from ui.toast import show_error_toast
+            from core.crash_log import write_error_log
+            traceback.print_exc()
+            show_error_toast(page, f"Ошибка начала загрузки файла: {ex}")
+            write_error_log(f"[CONTROLS_TAB] upload start error: {ex}")
+
+    def _on_import_upload(e):
+        if edition_user:
+            return
+        from ui.toast import show_error_toast
+        from core.crash_log import write_error_log
+
+        err = getattr(e, "error", None)
+        if err:
+            write_error_log(f"[CONTROLS_TAB] excel upload failed: {err}")
+            show_error_toast(page, f"Ошибка загрузки Excel: {err}")
+            state["_import_upload_file"] = None
+            return
+
+        progress = getattr(e, "progress", None)
+        fname = getattr(e, "file_name", "")
+        if progress is not None and progress >= 0.999:
+            appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+            upload_dir = os.environ.get("FLET_UPLOAD_DIR") or os.path.join(appdata, "porayonka", "web_uploads")
+            cand_path = os.path.join(upload_dir, fname)
+            info = state.get("_import_upload_file") or {}
+            target = info.get("target_path", cand_path)
+
+            if not os.path.isfile(target) and os.path.isfile(cand_path):
+                target = cand_path
+
+            state["_import_upload_file"] = None
+
+            if os.path.isfile(target):
+                write_error_log(f"[CONTROLS_TAB] excel uploaded successfully to {target}")
+                _preview_import(target)
+            else:
+                write_error_log(f"[CONTROLS_TAB] uploaded excel not found on disk at {target}")
+                show_error_toast(page, "Загруженный файл не найден на сервере")
 
     _ensure_file_picker(page, "_controls_file_picker", _on_export_picked)
-    _ensure_file_picker(page, "_controls_import_picker", _on_import_picked)
+    _ensure_file_picker(page, "_controls_import_picker", _on_import_picked, on_upload=_on_import_upload)
 
     def _export(e=None):
         try:
@@ -4512,12 +4663,18 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
 
     def _preview_import(path: str):
         from ui.toast import show_error_toast
+        from core.crash_log import write_error_log
         # Раунд 38 (задача 9): инкрементальный upsert-план — новые строки
         # добавляются, точные дубли пропускаются, существующие обновляются
         # in-place (id/вложения/архив сохраняются), неоднозначности —
         # конфликт без молчаливой перезаписи. Сравнение номеров — той же
         # нормализацией, что и сетевая защита от дублей.
-        plan = import_plan(path, state["controls"])
+        try:
+            plan = import_plan(path, state["controls"])
+        except Exception as ex:
+            write_error_log(f"[CONTROLS_TAB] import_plan error on {path}: {ex}")
+            show_error_toast(page, f"Ошибка чтения файла Excel: {ex}")
+            return
         parsed = plan["new"]
         updates = plan["updates"]
         conflicts = plan["conflicts"]

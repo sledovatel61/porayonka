@@ -35,6 +35,9 @@ def _write_error_log(text: str) -> None:
         pass  # логирование не должно ронять приложение
 
 
+write_error_log = _write_error_log
+
+
 def _crash_hook(exc_type, exc_value, tb):
     try:
         lines = [f"[{datetime.now().isoformat()}] {exc_type.__name__}: {exc_value}"]

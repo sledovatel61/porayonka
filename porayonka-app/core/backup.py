@@ -228,6 +228,9 @@ def create_local_snapshot(today: Optional[date] = None,
     lock = root / ".local.lock"
     if not _acquire_lock(lock):
         return None
+    if not force and local_backup_today_done(today):
+        _release_lock(lock)
+        return None
     tmp_dir = root / f".tmp-local-{os.getpid()}"
     try:
         if tmp_dir.exists():
@@ -328,6 +331,9 @@ def create_shared_snapshot(settings: dict, is_admin: bool,
         return None
     lock = root / ".shared.lock"
     if not _acquire_lock(lock):
+        return None
+    if shared_backup_today_done(settings, today):
+        _release_lock(lock)
         return None
     tmp_dir = root / f".tmp-shared-{os.getpid()}"
     try:

@@ -176,112 +176,142 @@ def _main_impl(page: ft.Page) -> None:
     def on_search(query: str) -> None:
         filter_table(page, query)
 
-    # ── Создать компоненты первой вкладки ───────────────────────
-    stats_bar = create_stats_bar(page, departments)
-    toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset, on_edit_departments)
-    legend = create_legend()
+    # ── Построение вкладок (LazyTabManager, Раунд 39) ────────────
+    # Раунд 39 (задача 2): ленивая инициализация тяжёлых вкладок.
+    # На старте строится ТОЛЬКО активная вкладка «Контроли» (index 0).
+    # «Зональные» (index 1) и «Следственные отделы» (index 2) строятся
+    # исключительно при первом переходе на них и затем кэшируются.
+    from ui.lazy_tabs import LazyTabManager
 
-    # Подсказка над канбаном
-    kanban_hint = ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Icon(ft.icons.INFO_OUTLINE, size=14, color=COLORS["text_muted"]),
-                ft.Text(
-                    "Клик по карточке двигает её вправо по статусам →",
-                    size=11,
-                    color=COLORS["text_muted"],
-                    italic=True,
+    tab1_container = ft.Container(expand=True, visible=False)
+    tab2_container = ft.Container(expand=True, visible=False)
+    tab3_container = ft.Container(expand=True, visible=True)
+
+    def _build_departments_tab():
+        print("[MAIN] [LAZY] Создаю вкладку Следственные отделы...")
+        try:
+            stats_bar = create_stats_bar(page, departments)
+            toolbar = create_toolbar(page, on_search, on_save, on_export, on_reset, on_edit_departments)
+            legend = create_legend()
+
+            kanban_hint = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.icons.INFO_OUTLINE, size=14, color=COLORS["text_muted"]),
+                        ft.Text(
+                            "Клик по карточке двигает её вправо по статусам →",
+                            size=11,
+                            color=COLORS["text_muted"],
+                            italic=True,
+                        ),
+                    ],
+                    spacing=6,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    tight=True,
                 ),
-            ],
-            spacing=6,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            tight=True,
-        ),
-        padding=ft.padding.only(left=4, bottom=4),
-    )
+                padding=ft.padding.only(left=4, bottom=4),
+            )
 
-    print(f"[OK] Departments loaded: {len(departments)}")
+            print(f"[OK] Departments loaded: {len(departments)}")
 
-    table = create_department_table(page, departments, on_status_change)
-    export_modal = create_export_modal(page, departments)
-    reset_modal = create_reset_modal(page, on_reset_confirm)
+            table = create_department_table(page, departments, on_status_change)
+            export_modal = create_export_modal(page, departments)
+            reset_modal = create_reset_modal(page, on_reset_confirm)
 
-    page.overlay.extend([export_modal, reset_modal])
+            page.overlay.extend([export_modal, reset_modal])
 
-    # ── Содержимое первой вкладки ────────────────────────────────
-    # Канбан-доска должна заполнять оставшееся пространство по вертикали,
-    # поэтому внешняя Column БЕЗ scroll — прокрутка внутри колонок канбана.
-    tab1_content = ft.Container(
-        content=ft.Column(
-            controls=[
-                stats_bar,
-                ft.Container(height=12),
-                toolbar,
-                ft.Container(height=8),
-                legend,
-                ft.Container(height=6),
-                kanban_hint,
-                ft.Container(height=4),
-                table,
-            ],
-            spacing=0,
-            expand=True,
-        ),
-        padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
-        expand=True,
-    )
+            return ft.Container(
+                content=ft.Column(
+                    controls=[
+                        stats_bar,
+                        ft.Container(height=12),
+                        toolbar,
+                        ft.Container(height=8),
+                        legend,
+                        ft.Container(height=6),
+                        kanban_hint,
+                        ft.Container(height=4),
+                        table,
+                    ],
+                    spacing=0,
+                    expand=True,
+                ),
+                padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
+                expand=True,
+            )
+        except Exception as e:
+            import traceback
+            print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Otdely: {e}")
+            traceback.print_exc()
+            return ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
+                    ],
+                ),
+                padding=ft.padding.all(20),
+                expand=True,
+            )
 
-    # ── Создать вторую вкладку (Зональные) ──────────────────────
-    print("[MAIN] Создаю вкладку Зональные...")
-    try:
-        from ui.zonal.zonal_tab import create_zonal_tab
-        zonal_content_raw = create_zonal_tab(page)
+    def _build_zonal_tab():
+        print("[MAIN] [LAZY] Создаю вкладку Зональные...")
+        try:
+            from ui.zonal.zonal_tab import create_zonal_tab
+            zonal_content_raw = create_zonal_tab(page)
 
-        tab2_content = ft.Container(
-            content=zonal_content_raw,
-            padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
-            expand=True,
-        )
-        print("[MAIN] [OK] Vkladka Zonalnye sozdana")
-    except Exception as e:
-        import traceback
-        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Zonalnye: {e}")
-        traceback.print_exc()
-        tab2_content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
-                ],
-            ),
-            padding=ft.padding.all(20),
-            expand=True,
-        )
+            return ft.Container(
+                content=zonal_content_raw,
+                padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
+                expand=True,
+            )
+        except Exception as e:
+            import traceback
+            print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Zonalnye: {e}")
+            traceback.print_exc()
+            return ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
+                    ],
+                ),
+                padding=ft.padding.all(20),
+                expand=True,
+            )
 
-    # ── Создать третью вкладку (Контроли) ───────────────────────
-    print("[MAIN] Создаю вкладку Контроли...")
-    try:
-        from ui.controls.controls_tab import create_controls_tab
-        controls_content_raw = create_controls_tab(page)
+    def _build_controls_tab():
+        print("[MAIN] [LAZY] Создаю вкладку Контроли...")
+        try:
+            from ui.controls.controls_tab import create_controls_tab
+            controls_content_raw = create_controls_tab(page)
 
-        tab3_content = ft.Container(
-            content=controls_content_raw,
-            padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
-            expand=True,
-        )
-        print("[MAIN] [OK] Vkladka Kontroli sozdana")
-    except Exception as e:
-        import traceback
-        print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Kontroli: {e}")
-        traceback.print_exc()
-        tab3_content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
-                ],
-            ),
-            padding=ft.padding.all(20),
-            expand=True,
-        )
+            return ft.Container(
+                content=controls_content_raw,
+                padding=ft.padding.only(left=20, right=20, top=12, bottom=12),
+                expand=True,
+            )
+        except Exception as e:
+            import traceback
+            print(f"[MAIN] [ERROR] Oshibka sozdaniya vkladki Kontroli: {e}")
+            traceback.print_exc()
+            return ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text(f"Oshibka zagruzki vkladki: {e}", color="#dc2626"),
+                    ],
+                ),
+                padding=ft.padding.all(20),
+                expand=True,
+            )
+
+    lazy_tabs = LazyTabManager(page)
+    # 0 = Контроли (активна на старте, immediate=True)
+    lazy_tabs.register_tab(0, "Контроли", tab3_container, _build_controls_tab, immediate=True)
+    # 1 = Зональные (ленивая загрузка, immediate=False)
+    lazy_tabs.register_tab(1, "Зональные", tab2_container, _build_zonal_tab, immediate=False)
+    # 2 = Следственные отделы (ленивая загрузка, immediate=False)
+    lazy_tabs.register_tab(2, "Следственные отделы", tab1_container, _build_departments_tab, immediate=False)
+
+    page._lazy_tab_manager = lazy_tabs
 
     # ── Вкладки (custom, без ft.Tabs) ─────────────────────────────
     # Раунд 21 (задача 8): порядок вкладок — «Контроли» (первая и по
@@ -289,21 +319,6 @@ def _main_impl(page: ft.Page) -> None:
     # прежние имена (tab1 = отделы, tab2 = зональные, tab3 = контроли),
     # ПОРЯДОК задаётся маппингом в _switch_tab/_mk_tab_btn — логика
     # вкладок (polling, сохранение) не затронута.
-    tab1_container = ft.Container(
-        content=tab1_content,
-        expand=True,
-        visible=False,
-    )
-    tab2_container = ft.Container(
-        content=tab2_content,
-        expand=True,
-        visible=False,
-    )
-    tab3_container = ft.Container(
-        content=tab3_content,
-        expand=True,
-        visible=True,
-    )
     content_area = ft.Stack(
         controls=[tab1_container, tab2_container, tab3_container],
         fit=ft.StackFit.EXPAND,
@@ -331,6 +346,7 @@ def _main_impl(page: ft.Page) -> None:
         tab3_container.visible = (index == 0)
         tab2_container.visible = (index == 1)
         tab1_container.visible = (index == 2)
+        lazy_tabs.switch_to(index)
         _restyle_tabs()
         # Раунд 26 (задача 6): «Настройка формы» видна только на «Зональных»
         try:
@@ -446,6 +462,11 @@ def _main_impl(page: ft.Page) -> None:
                 except Exception:
                     pass
                 try:
+                    from core.single_instance import release_single_instance
+                    release_single_instance()
+                except Exception:
+                    pass
+                try:
                     page.window.prevent_close = False
                     page.window.close()
                 except Exception:
@@ -521,6 +542,7 @@ def _entry():
         # «Скачать» вложения кладёт копии для отдачи браузеру
         # (/assets/downloads/). Делается ДО ft.app — сервер читает env при
         # запуске. Desktop-режим не затрагивается.
+        _upload_dir = None
         try:
             import shutil as _sh38w
             _appdata38 = os.environ.get("APPDATA") or os.path.expanduser("~")
@@ -546,6 +568,11 @@ def _entry():
                 _sh38w.rmtree(_dl38, ignore_errors=True)
             os.makedirs(_dl38, exist_ok=True)
             os.environ["FLET_ASSETS_DIR"] = _wa38
+
+            # Раунд 39 (задача 5): каталог загрузки Excel в web-режиме
+            _upload_dir = os.path.join(_appdata38, "porayonka", "web_uploads")
+            os.makedirs(_upload_dir, exist_ok=True)
+            os.environ["FLET_UPLOAD_DIR"] = _upload_dir
         except Exception:
             pass
         # Раунд 26 (задача 1): у frozen console=False нет stdout/stderr —
@@ -567,9 +594,18 @@ def _entry():
         except Exception:
             pass
         print(f"[MAIN] Web-rezhim: http://{host}:{port}")
-        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host=host, port=port)
+        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host=host, port=port, upload_dir=_upload_dir)
     else:
-        ft.app(target=main)
+        # Раунд 39 (задача 4): single-instance guard для desktop-режима
+        from core.single_instance import acquire_single_instance, release_single_instance
+        guard = acquire_single_instance("porayonka_desktop")
+        if not guard:
+            print("[MAIN] Another desktop instance is already running. Exiting.")
+            sys.exit(0)
+        try:
+            ft.app(target=main)
+        finally:
+            release_single_instance()
 
 
 if __name__ == "__main__":

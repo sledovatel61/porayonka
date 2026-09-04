@@ -365,23 +365,50 @@ def create_control_card_modal(
         bgcolor=COLORS["card"], color=COLORS["text"],
         visible=(control.control_type if is_edit else ONE_TIME) == PERIODIC,
     )
+    end_clear_btn = ft.IconButton(
+        icon=ft.icons.CLEAR,
+        icon_size=16,
+        icon_color=COLORS["text_muted"],
+        tooltip="Очистить конечную дату",
+        width=24,
+        height=24,
+        padding=0,
+        visible=((control.control_type if is_edit else ONE_TIME) == PERIODIC) and bool(end_ref["value"]),
+        on_click=lambda e: _set_end(None),
+    )
+    end_cal_btn = ft.IconButton(
+        icon=ft.icons.CALENDAR_MONTH,
+        icon_color=COLORS["btn_save"],
+        tooltip="Выбрать конечную дату",
+        visible=(control.control_type if is_edit else ONE_TIME) == PERIODIC,
+        on_click=lambda e: _pick_date(lambda iso: _set_end(iso)),
+    )
     def _set_end(iso):
         end_ref["value"] = iso
         end_field.value = _display(iso)
+        is_per = (type_dd.value == PERIODIC)
+        end_clear_btn.visible = is_per and bool(iso)
         try:
             end_field.update()
+            end_clear_btn.update()
         except Exception:
             pass
 
     def _on_type_change(e):
         is_per = (e.control.value == PERIODIC)
+        if not is_per:
+            _set_end(None)
         period_dd.visible = is_per
         end_field.visible = is_per
+        end_clear_btn.visible = is_per and bool(end_ref["value"])
+        end_cal_btn.visible = is_per
         milestones_header.visible = is_per
         milestones_col.visible = is_per
         try:
             period_dd.update()
             end_field.update()
+            end_clear_btn.update()
+            end_cal_btn.update()
             milestones_header.update()
             milestones_col.update()
         except Exception:
@@ -762,10 +789,11 @@ def create_control_card_modal(
             ft.Row(controls=[controller_dd, type_dd, period_dd, custom_days_field], spacing=6, tight=True),
             ft.Row(controls=[due_field,
                              ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
+                                           tooltip="Выбрать дату исполнения",
                                            on_click=lambda e: _pick_date(lambda iso: _set_due(iso))),
                              end_field,
-                             ft.IconButton(icon=ft.icons.CALENDAR_MONTH, icon_color=COLORS["btn_save"],
-                                           on_click=lambda e: _pick_date(lambda iso: _set_end(iso)))],
+                             end_clear_btn,
+                             end_cal_btn],
                    spacing=6, tight=True),
             comment_field,
             ft.Container(height=2),

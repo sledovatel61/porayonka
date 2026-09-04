@@ -14,10 +14,12 @@
 # спокойно работает без трея (один print в лог), ничего не ломается.
 import os
 import sys
+import threading
 import webbrowser
 from pathlib import Path
 
 _ACTIVE_ICON = None  # процесс-одиночка (в web-режиме main() создаётся на сессию)
+_TRAY_LOCK = threading.Lock()
 
 
 def _icon_path() -> Path:
@@ -31,6 +33,18 @@ def _icon_path() -> Path:
 def get_active_icon():
     """Уже запущенный трей-значок процесса (или None)."""
     return _ACTIVE_ICON
+
+
+def stop_tray():
+    """Остановить активный значок в трее (если запущен)."""
+    global _ACTIVE_ICON
+    with _TRAY_LOCK:
+        if _ACTIVE_ICON is not None:
+            try:
+                _ACTIVE_ICON.stop()
+            except Exception:
+                pass
+            _ACTIVE_ICON = None
 
 
 def notify(message: str, title: str = "Пораёнка — Контроли") -> bool:
@@ -75,97 +89,115 @@ def start_tray(page=None, title: str = "Пораёнка — Контроли",
     if sys.platform != "win32":
         print("[TRAY] skip (tray tolko v Windows)")
         return None
-    if _ACTIVE_ICON is not None:
-        # Раунд 26 (задача 2): web-режим — main() вызывается на каждую
-        # браузерную сессию; второй значок трея не нужен.
-        return _ACTIVE_ICON
-    try:
-        import pystray
-        from PIL import Image
-    except Exception as e:
-        # ImportError (нет библиотек) ИЛИ поломка бэкенда на текущей ОС
-        # (напр., pystray._win32 на Linux) — мягкий None
-        print(f"[TRAY] pystray/pillow nedostupny: {e}")
-        return None
 
-    def _show(icon=None, item=None):
-        # Открыть/на передний план. Web (Win7): новая вкладка браузера с
-        # адресом сервера; натив: показать окно.
+    # Раунд 39: проверка до и после lock (double-checked locking) для защиты
+    # от конкурентных вызовов в одном процессе.
+    if _ACTIVE_ICON is not None:
+        return _ACTIVE_ICON
+
+    with _TRAY_LOCK:
+        if _ACTIVE_ICON is not None:
+            return _ACTIVE_ICON
+
         try:
-            if web_url:
-                webbrowser.open(web_url)
-                return
+            import pystray
+            from PIL import Image
         except Exception as e:
-            print(f"[TRAY] open browser error: {e}")
-            return
-        try:
-            # Раунд 32/33: окно могло быть скрыто/свёрнуто при закрытии
-            # крестиком — полностью восстанавливаем (frozen-сборки: пробуем
-            # focus/maximized=False как дополнительные меры).
-            page.window.visible = True
-            page.window.minimized = False
-            page.window.maximized = False
-            page.window.to_front()
-            page.update()
+            # ImportError (нет библиотек) ИЛИ поломка бэкенда на текущей ОС
+            # (напр., pystray._win32 на Linux) — мягкий None
+            print(f"[TRAY] pystray/pillow nedostupny: {e}")
+            return None
+
+        def _show(icon=None, item=None):
+            # Открыть/на передний план. Web (Win7): новая вкладка браузера с
+            # адресом сервера; натив: показать окно.
             try:
-                page.window.focus()
+                if web_url:
+                    webbrowser.open(web_url)
+                    return
+            except Exception as e:
+                print(f"[TRAY] open browser error: {e}")
+                return
+            try:
+                # Раунд 32/33: окно могло быть скрыто/свёрнуто при закрытии
+                # крестиком — полностью восстанавливаем (frozen-сборки: пробуем
+                # focus/maximized=False как дополнительные меры).
+                page.window.visible = True
+                page.window.minimized = False
+                page.window.maximized = False
+                page.window.to_front()
+                page.update()
+                try:
+                    page.window.focus()
+                except Exception:
+                    pass
+                print("[TRAY] window restored")
+            except Exception as e:
+                print(f"[TRAY] show window error: {e}")
+
+        def _quit(icon, item):
+            global _ACTIVE_ICON
+            with _TRAY_LOCK:
+                if _ACTIVE_ICON is not None:
+                    try:
+                        _ACTIVE_ICON.stop()
+                    except Exception:
+                        pass
+                    _ACTIVE_ICON = None
+
+            # Раунд 39: освобождение SingleInstanceGuard при полном выходе
+            try:
+                from core.single_instance import release_single_instance
+                release_single_instance()
             except Exception:
                 pass
-            print("[TRAY] window restored")
-        except Exception as e:
-            print(f"[TRAY] show window error: {e}")
 
-    def _quit(icon, item):
-        try:
-            icon.stop()
-        except Exception:
-            pass
-        if web_url or os.environ.get("PORAYONKA_WEB"):
-            # Раунд 26 (задача 2): web-режим — «окна» нет, процесс = сервер.
+            if web_url or os.environ.get("PORAYONKA_WEB"):
+                # Раунд 26 (задача 2): web-режим — «окна» нет, процесс = сервер.
+                try:
+                    os._exit(0)
+                except Exception:
+                    pass
+                return
+            # Раунд 32 (задача 2): «Выход» из трея — ПОЛНЫЙ выход: останавливаем
+            # фоновый polling и завершаем процесс (destroy -> close -> os._exit).
+            try:
+                if page is not None and hasattr(page, "_controls_poll_stop"):
+                    page._controls_poll_stop["flag"] = True
+            except Exception:
+                pass
+            try:
+                page.window.destroy()
+                return
+            except Exception:
+                pass
+            try:
+                page.window.close()
+                return
+            except Exception as e:
+                print(f"[TRAY] close window error: {e}")
             try:
                 os._exit(0)
             except Exception:
                 pass
-            return
-        # Раунд 32 (задача 2): «Выход» из трея — ПОЛНЫЙ выход: останавливаем
-        # фоновый polling и завершаем процесс (destroy -> close -> os._exit).
+
         try:
-            if page is not None and hasattr(page, "_controls_poll_stop"):
-                page._controls_poll_stop["flag"] = True
-        except Exception:
-            pass
-        try:
-            page.window.destroy()
-            return
-        except Exception:
-            pass
-        try:
-            page.window.close()
-            return
+            image = Image.open(_icon_path())
         except Exception as e:
-            print(f"[TRAY] close window error: {e}")
+            print(f"[TRAY] icon load error: {e}")
+            return None
+
+        open_label = "Открыть в браузере" if web_url else "Открыть"
+        menu = pystray.Menu(
+            pystray.MenuItem(open_label, _show, default=True),
+            pystray.MenuItem("Выход", _quit),
+        )
+        icon = pystray.Icon("porayonka", image, title, menu)
         try:
-            os._exit(0)
-        except Exception:
-            pass
-
-    try:
-        image = Image.open(_icon_path())
-    except Exception as e:
-        print(f"[TRAY] icon load error: {e}")
-        return None
-
-    open_label = "Открыть в браузере" if web_url else "Открыть"
-    menu = pystray.Menu(
-        pystray.MenuItem(open_label, _show, default=True),
-        pystray.MenuItem("Выход", _quit),
-    )
-    icon = pystray.Icon("porayonka", image, title, menu)
-    try:
-        icon.run_detached()  # daemon-поток; умирает вместе с процессом
-        _ACTIVE_ICON = icon
-        print("[TRAY] icon started" + (" (web: " + web_url + ")" if web_url else ""))
-        return icon
-    except Exception as e:
-        print(f"[TRAY] start error: {e}")
-        return None
+            icon.run_detached()  # daemon-поток; умирает вместе с процессом
+            _ACTIVE_ICON = icon
+            print("[TRAY] icon started" + (" (web: " + web_url + ")" if web_url else ""))
+            return icon
+        except Exception as e:
+            print(f"[TRAY] start error: {e}")
+            return None
