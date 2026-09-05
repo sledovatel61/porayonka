@@ -89,21 +89,41 @@ def run_browser_owner():
 def run_upload_wiring():
     print("\n--- 5b. Связка web-загрузки (инварианты main.py) ---")
     src = _read(MAIN_PY)
-    i_app = src.index("ft.app(target=main, view=ft.AppView.WEB_BROWSER")
-    i_dir = src.index('os.environ["FLET_UPLOAD_DIR"]')
-    i_key = src.index('os.environ["FLET_SECRET_KEY"]')
-    check("r39-5.8a: FLET_UPLOAD_DIR задаётся ДО ft.app (сервер читает env при старте)",
-          0 < i_dir < i_app, "%s < %s" % (i_dir, i_app))
-    check("r39-5.8b: FLET_SECRET_KEY задаётся ДО ft.app", 0 < i_key < i_app)
-    check("r39-5.8c: каталог загрузки — %APPDATA%\\porayonka\\web_uploads, "
-          "создаётся заранее", '"web_uploads"' in src and "makedirs" in src)
-    check("r39-5.8d: ключ стабильный (файл upload_secret.key) и криптостойкий "
-          "(secrets.token_hex)", "upload_secret.key" in src and "token_hex" in src)
-    check("r39-5.8e: env задаётся в web-ветке, desktop-ветка его НЕ трогает "
-          "(desktop-импорт не ломается)",
-          src.index('if "--web" in sys.argv:') < i_dir < i_app)
+    fn = src[src.index("def _ensure_web_upload_env"):src.index("def _entry()")]
+    i_web = src.index('if "--web" in sys.argv:')
+    i_app = src.index("ft.app(target=main, view=ft.AppView.WEB_BROWSER", i_web)
+    i_call = src.index("_ensure_web_upload_env()", i_web)
+    check("r39-5.8a: web-ветка готовит upload-env ДО ft.app (сервер читает env "
+          "при старте), ровно ОДИН вызов",
+          i_web < i_call < i_app
+          and len([ln for ln in src.splitlines()
+                   if ln.strip() == "_ensure_web_upload_env()"]) == 1,
+          "%s < %s < %s" % (i_web, i_call, i_app))
+    check("r39-5.8b: функция задаёт ОБА env (каталог и ключ подписи)",
+          'os.environ["FLET_UPLOAD_DIR"]' in fn and 'os.environ["FLET_SECRET_KEY"]' in fn)
+    check("r39-5.8c: каталог — %APPDATA%\\porayonka\\web_uploads, создаётся заранее",
+          '"web_uploads"' in fn and "os.makedirs" in fn
+          and 'os.environ.get("APPDATA")' in fn)
+    check("r39-5.8d: ключ криптостойкий и стабильный (файл upload_secret.key)",
+          "upload_secret.key" in fn and "secrets" in fn and "token_hex" in fn)
+    check("r39-5.8e: выбор победителя гонки атомарен (O_CREAT|O_EXCL), запись "
+          "дописана до публикации (fsync) — пустого/обрезанного файла нет",
+          "os.O_EXCL" in fn and "os.fsync" in fn
+          and 'open(_kfile39, "w"' not in fn)
+    check("r39-5.8f: проигравший ждёт и берёт ключ ИЗ ФАЙЛА (сходимость), а не "
+          "перезаписывает его",
+          "FileExistsError" in fn and "_key39 = _rd39" in fn
+          and "len(_rd39) == 64" in fn)
+    check("r39-5.8g: идемпотентность — уже заданные env НЕ перезаписываются",
+          'if not os.environ.get("FLET_UPLOAD_DIR"):' in fn
+          and 'if not os.environ.get("FLET_SECRET_KEY"):' in fn)
+    check("r39-5.8h: значение ключа НИКОГДА не попадает в лог/stdout",
+          not [ln for ln in fn.splitlines()
+               if "print(" in ln and "_key39" in ln])
+    check("r39-5.8i: desktop-ветка upload-env НЕ трогает (desktop-импорт не ломается)",
+          "_ensure_web_upload_env()" not in src[src.index("else:", i_app):])
     # main_web.py переиспользует _entry() -> правка действует для обеих web-сборок
-    check("r39-5.8f: main_web.py использует общий _entry() (правка покрывает "
+    check("r39-5.8j: main_web.py использует общий _entry() (правка покрывает "
           "обе web-редакции)", "from main import _entry" in _read(MAIN_WEB_PY))
 
 

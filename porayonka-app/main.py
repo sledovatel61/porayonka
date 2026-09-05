@@ -366,12 +366,14 @@ def _main_impl(page: ft.Page) -> None:
     def _ensure_tab(index: int):
         """Раунд 39 (задача 2): построить вкладку при первом обращении.
 
-        Повторный вызов ничего не пересоздаёт: и слот уже заполнен, и
-        LazyTabHost вернул бы кэш — двойная защита (слот проверяем здесь,
-        чтобы не платить даже за вход в lock хоста).
+        «Уже построено» спрашиваем у хоста, а не только по slot.content:
+        после ошибки builder'а в слоте висит заглушка, и вкладка должна
+        пересобраться при следующем переходе (упавшая постройка не считается
+        построенной). Успешную хост отдаёт из кэша — состояние вкладки
+        (фильтры, открытая карточка, скролл) сохраняется.
         """
         slot, key = _tab_slots[index]
-        if slot.content is not None:
+        if slot.content is not None and _lazy_tabs.is_built(key):
             return slot
         slot.content = _lazy_tabs.get(key)
         return slot
@@ -576,6 +578,86 @@ def _ensure_console_streams() -> bool:
     return fixed
 
 
+def _ensure_web_upload_env() -> None:
+    """Раунд 39 (задача 5): каталог загрузки и ключ подписи для Flet Web.
+
+    flet/fastapi регистрирует PUT /upload ТОЛЬКО при заданном upload_dir (он
+    берётся из env FLET_UPLOAD_DIR — flet/fastapi/app.py), а подпись
+    upload-запроса обязательна с обеих сторон: и клиент
+    (page.get_upload_url -> flet_runtime/uploads.py::build_upload_url), и
+    сервер (flet/fastapi/flet_upload.py) читают FLET_SECRET_KEY. Без этого
+    выбор файла в браузере не доходит до приложения (baseline: PUT -> 405;
+    после правки: 200). Вызывается ДО ft.app только в web-ветке — desktop
+    работает с реальными локальными путями и свой импорт не меняет.
+    Идемпотентно: уже заданные значения env не перезаписываются.
+    """
+    # Каталог: %APPDATA%\porayonka\web_uploads — создаётся заранее, сервер
+    # читает env при старте.
+    try:
+        if not os.environ.get("FLET_UPLOAD_DIR"):
+            _appdata39 = os.environ.get("APPDATA") or os.path.expanduser("~")
+            _up39 = os.path.join(_appdata39, "porayonka", "web_uploads")
+            os.makedirs(_up39, exist_ok=True)
+            os.environ["FLET_UPLOAD_DIR"] = _up39
+            print(f"[MAIN] web upload dir: {_up39}")
+    except Exception as _ex39:
+        print(f"[MAIN] web upload dir error: {_ex39}")
+    # Ключ подписи: flet/fastapi/app.py env НЕ читает — ставим сами ДО
+    # ft.app; лежит в %APPDATA%\porayonka\upload_secret.key, чтобы быть
+    # стабильным между перезапусками (первый запуск генерирует secrets).
+    try:
+        if not os.environ.get("FLET_SECRET_KEY"):
+            _appdata39s = os.environ.get("APPDATA") or os.path.expanduser("~")
+            _kfile39 = os.path.join(_appdata39s, "porayonka",
+                                    "upload_secret.key")
+            _key39 = None
+            try:
+                if os.path.isfile(_kfile39):
+                    with open(_kfile39, "r", encoding="ascii") as _fk39:
+                        _key39 = _fk39.read().strip() or None
+            except OSError:
+                _key39 = None
+            if not _key39:
+                import secrets as _sec39
+                import time as _time39
+                _key39 = _sec39.token_hex(32)
+                try:
+                    os.makedirs(os.path.dirname(_kfile39), exist_ok=True)
+                    # Победитель гонки выбирается ОДНИМ вызовом: O_EXCL не даёт
+                    # второму процессу ни перечеркнуть ключ, ни увидеть половину
+                    # чужой записи.
+                    _fd39 = os.open(_kfile39, os.O_CREAT | os.O_EXCL
+                                    | os.O_WRONLY, 0o600)
+                    with os.fdopen(_fd39, "w", encoding="ascii") as _fk39:
+                        _fk39.write(_key39)
+                        _fk39.flush()
+                        os.fsync(_fk39.fileno())
+                except FileExistsError:
+                    # Файл создал сосед: ждём (до ~2 с), пока он дописан, и
+                    # берём ЕГО ключ — иначе два одновременных запуска
+                    # подписывали бы запросы РАЗНЫМИ ключами, а «стабильный
+                    # между запусками» был бы лотереей.
+                    for _ in range(200):
+                        try:
+                            with open(_kfile39, "r", encoding="ascii") as _fk39:
+                                _rd39 = _fk39.read().strip()
+                        except OSError:
+                            _rd39 = ""
+                        if len(_rd39) == 64:
+                            _key39 = _rd39
+                            break
+                        _time39.sleep(0.01)
+                except OSError:
+                    # Каталог недоступен (ro-профиль, сеть): работаем своим
+                    # ключом — в пределах процесса он стабилен (клиент и сервер
+                    # подписывают им же), просто не переживает перезапуск.
+                    pass
+            os.environ["FLET_SECRET_KEY"] = _key39
+        print("[MAIN] web upload secret key: configured")
+    except Exception as _ex39s:
+        print(f"[MAIN] web upload secret key error: {_ex39s}")
+
+
 def _entry():
     """Раунд 24 (задача 2): вход вынесен в функцию, чтобы main_web.py
     (web-обёртка для Win7) мог безопасно переиспользовать его импортом —
@@ -640,60 +722,9 @@ def _entry():
             start_tray(None, web_url=_web_url)
         except Exception:
             pass
-        # Раунд 39 (задача 5): КАТАЛОГ ЗАГРУЗКИ для FilePicker в web-режиме.
-        # Корень неработающего Excel-импорта в Admin Win7 Web: flet/fastapi
-        # регистрирует PUT /upload только при заданном upload_dir, а он
-        # берётся из env FLET_UPLOAD_DIR (flet/fastapi/app.py). Мы его не
-        # задавали -> PUT давал 405 (проверено живым прогоном baseline:
-        # 405 Method Not Allowed; после правки — 200), и выбор файла в
-        # браузере не доходил до import_plan(). Desktop не затронут: там
-        # FilePickerResultEvent.path — реальный локальный путь. Задается ДО
-        # ft.app — сервер читает env при старте (main_web.py переиспользует
-        # _entry(), поэтому обеих web-сборок достаточно).
-        try:
-            if not os.environ.get("FLET_UPLOAD_DIR"):
-                _appdata39 = os.environ.get("APPDATA") or os.path.expanduser("~")
-                _up39 = os.path.join(_appdata39, "porayonka", "web_uploads")
-                os.makedirs(_up39, exist_ok=True)
-                os.environ["FLET_UPLOAD_DIR"] = _up39
-                print(f"[MAIN] web upload dir: {_up39}")
-        except Exception as _ex39:
-            print(f"[MAIN] web upload dir error: {_ex39}")
-        # Раунд 39 (задача 5, часть 2): СЕКРЕТ ПОДПИСИ ЗАГРУЗКИ. Одного
-        # FLET_UPLOAD_DIR мало: подпись upload-запроса обязательна с обеих
-        # сторон — и у клиента (page.get_upload_url -> flet_runtime/uploads.py
-        # build_upload_url), и у сервера (flet/fastapi/flet_upload.py). Обе
-        # читают os.getenv("FLET_SECRET_KEY"), без него — исключение
-        # «Specify secret_key parameter or set FLET_SECRET_KEY ...».
-        # flet/fastapi/app.py env ключа НЕ читает, поэтому задаём его мы, ДО
-        # ft.app. Ключ лежит в %APPDATA%\porayonka\upload_secret.key — чтобы
-        # быть стабильным между перезапусками (первый запуск генерирует его
-        # через secrets).
-        try:
-            if not os.environ.get("FLET_SECRET_KEY"):
-                _appdata39s = os.environ.get("APPDATA") or os.path.expanduser("~")
-                _kfile39 = os.path.join(_appdata39s, "porayonka",
-                                        "upload_secret.key")
-                _key39 = None
-                try:
-                    if os.path.isfile(_kfile39):
-                        with open(_kfile39, "r", encoding="ascii") as _fk39:
-                            _key39 = _fk39.read().strip() or None
-                except OSError:
-                    _key39 = None
-                if not _key39:
-                    import secrets as _sec39
-                    _key39 = _sec39.token_hex(32)
-                    try:
-                        os.makedirs(os.path.dirname(_kfile39), exist_ok=True)
-                        with open(_kfile39, "w", encoding="ascii") as _fk39:
-                            _fk39.write(_key39)
-                    except OSError:
-                        pass
-                os.environ["FLET_SECRET_KEY"] = _key39
-                print("[MAIN] web upload secret key: configured")
-        except Exception as _ex39s:
-            print(f"[MAIN] web upload secret key error: {_ex39s}")
+        # Раунд 39 (задача 5): каталог загрузки + ключ подписи upload (см.
+        # _ensure_web_upload_env) — ДО ft.app, сервер читает env при старте.
+        _ensure_web_upload_env()
         print(f"[MAIN] Web-rezhim: http://{host}:{port}")
         # Раунд 39 (задача 3): ЕДИНСТВЕННЫЙ владелец открытия браузера —
         # AppView.WEB_BROWSER (см. BROWSER_OWNER). start_web_win7.bat свой

@@ -48,6 +48,7 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 sys.path.insert(0, APP_DIR)
 sys.path.insert(0, os.path.join(APP_DIR, "tests"))
 
+import r39_live                                              # noqa: E402
 import r39_logic                                             # noqa: E402
 import r39_static                                            # noqa: E402
 import r39_ui                                                # noqa: E402
@@ -60,12 +61,14 @@ GROUPS = (
     ("logic: два процесса", r39_logic.run_single_instance_crossprocess),
     ("logic: tray", r39_logic.run_tray),
     ("logic: LazyTabHost", r39_logic.run_lazy_host),
+    ("logic: web-upload env", r39_logic.run_upload_env),
     ("ui: конечная дата", r39_ui.run_end_date),
     ("ui: ленивые вкладки", r39_ui.run_lazy_tabs_runtime),
     ("ui: веб-импорт Excel", r39_ui.run_web_import),
     ("static: браузер", r39_static.run_browser_owner),
     ("static: web-загрузка", r39_static.run_upload_wiring),
     ("static: guard/трей", r39_static.run_guard_wiring),
+    ("live: HTTP upload", r39_live.run_live_upload_flow),
 )
 
 

@@ -788,10 +788,15 @@ def main():
     check("notify: overdue - в тот же день нет", _should_notify(nlog, "c1", OVERDUE, "2026-08-05") is False)
     check("notify: overdue - на следующий день уведомляет", _should_notify(nlog, "c1", OVERDUE, "2026-08-06") is True)
     # round-trip журнала через настройки
-    _save_off({"notify_log": {"c1:new": "2026-08-05"}, "notify_sound": False})
+    # Дата берётся относительной: load_settings вызывает prune_notify_log(days=30),
+    # и захардкоженная дата через месяц после записи молча пропадала (тест падал
+    # на baseline независимо от кода приложения).
+    import datetime as _dt_nl
+    _nl_date = (_dt_nl.datetime.now() - _dt_nl.timedelta(days=1)).strftime("%Y-%m-%d")
+    _save_off({"notify_log": {"c1:new": _nl_date}, "notify_sound": False})
     loaded = load_settings()
     check("settings: notify_log сохраняется в controls_settings.json",
-          (loaded.get("notify_log") or {}).get("c1:new") == "2026-08-05")
+          (loaded.get("notify_log") or {}).get("c1:new") == _nl_date)
     check("settings: notify_sound сохраняется", loaded.get("notify_sound") is False)
 
     # ── 13. офлайн→онлайн: локальная правка не теряется (задача 4) ──

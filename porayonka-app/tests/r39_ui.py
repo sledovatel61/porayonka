@@ -414,9 +414,16 @@ def run_lazy_tabs_runtime():
             main_mod.create_department_table, core_data.load_departments,
             main_mod.load_departments)
 
+    # первый заход на «Зональные» роняет builder'а: так проверяется, что
+    # неудачная постройка НЕ кэшируется и переход повторяется (раунд 39).
+    fail_once = {"zonal": True}
+
     def _stub(key):
         def _b(*a, **kw):            # разные сигнатуры: (page) и (page, deps, cb)
             calls[key] += 1
+            if key == "zonal" and fail_once["zonal"]:
+                fail_once["zonal"] = False
+                raise RuntimeError("zaplanerovannyuboy buildera")
             return ft.Text(key + "-stub")
         return _b
 
@@ -449,15 +456,36 @@ def run_lazy_tabs_runtime():
                     return True
             return False
 
-        check("r39-2.6c: кнопка «Зональные» найдена", _go(1))
-        check("r39-2.6d: первый переход строит вкладку РОВНО ОДИН раз",
-              calls["zonal"] == 1 and host.build_count("zonal") == 1, str(calls))
+        with contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()):
+            built = _go(1)                     # здесь ожидается print traceback'а
+        check("r39-2.6c: первый переход на «Зональные» строит вкладку", built)
+        err_shown = any("Oshibka zagruzki" in t for t in texts(
+            page.added[0] if page.added else None))
+        check("r39-2.6c2: сбой builder'а показан в слоте, вкладка НЕ «построена»",
+              err_shown and host.is_built("zonal") is False
+              and host.build_count("zonal") == 0
+              and host.attempt_count("zonal") == 1,
+              "stats=%s attempts=%s" % (host.stats(), host.attempt_stats()))
+        check("r39-2.6c3: частичный результат НЕ попал в кэш",
+              "zonal" not in host.built_keys(), str(host.built_keys()))
+        _go(1)
+        check("r39-2.6d: повторный переход СТРОИТ заново (retry после сбоя)",
+              host.is_built("zonal") is True and host.build_count("zonal") == 1
+              and host.attempt_count("zonal") == 2 and calls["zonal"] == 2,
+              "calls=%s %s" % (calls, host.attempt_stats()))
+        check("r39-2.6d2: заглушка ошибки заменена реальной вкладкой",
+              any("zonal-stub" in t for t in texts(
+                  page.added[0] if page.added else None))
+              and not any("Oshibka zagruzki" in t for t in texts(
+                  page.added[0] if page.added else None)))
         zonal_first = host.get("zonal")
         # обход туда-сюда: ни одного пересоздания, экземпляры те же
         for idx in (0, 1, 2, 1, 2, 0, 2):
             _go(idx)
-        check("r39-2.6e: повторные переходы НЕ пересоздают вкладки",
-              calls == {"controls": 1, "zonal": 1, "departments": 1}, str(calls))
+        check("r39-2.6e: повторные переходы НЕ пересоздают вкладки "
+              "(zonal = 2 вызова: 1 сбой + 1 успешная постройка)",
+              calls == {"controls": 1, "zonal": 2, "departments": 1}, str(calls))
         check("r39-2.6f: cache сохраняет ЭКЗЕМПЛЯР вкладки",
               host.get("zonal") is zonal_first)
         check("r39-2.6g: после обхода построены все три вкладки",

@@ -3710,13 +3710,35 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _sig = tuple(sorted(str(getattr(_f, "path", None) or getattr(_f, "name", "")) for _f in files))
             if _attach_event_is_duplicate(state, _sig):
                 return
+            # Раунд 39 (задача 5): в WEB браузер не отдаёт локальный путь
+            # (files[*].path = None). Файл сначала грузится на сервер в
+            # FLET_UPLOAD_DIR, и только затем проходит обычный publish-
+            # конвейер (shared/local копия, модель, UI) — тот же, что на
+            # desktop: вложение появляется ТОЛЬКО после успешной публикации.
+            if not any(getattr(_f, "path", None) for _f in files):
+                # Загрузка асинхронная: карточку могут закрыть/переключить,
+                # поэтому привязку к контролю фиксируем СЕЙЧАС, а не в момент
+                # прихода on_upload (иначе файлы ушли бы в чужую карточку).
+                _cid_pick = detail_state.get("control_id")
+                _is_new_pick = detail_state["is_new"]
+                _web_upload_start(
+                    getattr(page, "_controls_attach_picker", None), list(files),
+                    lambda staged: _attach_apply(staged, _cid_pick, _is_new_pick),
+                    "attach")
+                return
+            _attach_apply(list(files))
+
+        def _attach_apply(files, cid_hint=None, is_new_at_pick=None):
+            """Прикрепить загруженные/выбранные файлы к контролю (desktop и web)."""
             # Раунд 13 (задача 5): у новой карточки control_id уже uuid (см.
             # _open_detail), но страховка на краевых случаях — генерируем, если
             # вдруг None/пусто. Иначе shared_dir / ... / None -> TypeError.
-            cid = detail_state.get("control_id")
+            cid = cid_hint or detail_state.get("control_id")
             if not cid:
                 cid = str(uuid4())
                 detail_state["control_id"] = cid
+            if is_new_at_pick is None:
+                is_new_at_pick = detail_state["is_new"]
             # Раунд 21 (задача 5): файл с уже прикреплённым именем не копируем
             # повторно — иначе повторные события/повторные выборы порождали бы
             # name_1, name_2, ... (те самые «13 одинаковых фото»).
@@ -3740,9 +3762,11 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
                                icon=ft.icons.WARNING_AMBER)
                 (big if sz_mb > _ATTACH_ASYNC_MB else small).append(fobj)
             added, failed = _copy_batch(small, cid, existing_names)
-            _apply_attach_result(cid, detail_state["is_new"], added, failed, skipped)
+            _apply_attach_result(cid, is_new_at_pick, added, failed, skipped)
             if big:
-                is_new_at_pick = detail_state["is_new"]
+                # is_new_at_pick уже вычислен выше (в момент выбора файлов, а не
+                # в момент фоновой копии — иначе web-задержка переключения
+                # карточки уводила флаг в чужую карточку).
                 # Раунд 38 (fix stress 5c): completion-job регистрируется ДО
                 # старта потока; снимается строго ПОСЛЕ _apply_attach_result —
                 # к этому моменту файл опубликован, модель сохранена, UI
@@ -4619,11 +4643,12 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
         # basename — защита от «имени» с путевыми разделителями
         return os.path.join(d, os.path.basename(file_name))
 
-    def _ensure_upload_handler(picker, handler):
+    def _ensure_upload_handler(picker, handler,
+                               attr="_controls_import_upload_handler"):
         """Подписать on_upload ровно ОДИН раз: EventHandler.subscribe() в
         Flet 0.23.2 НАКАПЛИВАЕТ обработчики, поэтому старую подписку снимаем
         (та же первопричина, что чинил раунд 38 для on_result)."""
-        old = getattr(page, "_controls_import_upload_handler", None)
+        old = getattr(page, attr, None)
         try:
             eh = getattr(picker, "on_upload", None)
             if old is not None and eh is not None and hasattr(eh, "unsubscribe"):
@@ -4632,7 +4657,7 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             traceback.print_exc()
         try:
             picker.on_upload = handler
-            page._controls_import_upload_handler = handler
+            setattr(page, attr, handler)
         except Exception:
             traceback.print_exc()
 
@@ -4711,6 +4736,132 @@ def create_controls_tab(page: ft.Page) -> ft.Column:
             _import_fail("Не удалось завершить загрузку файла",
                          "on_upload: %s: %s" % (type(ex).__name__, ex))
             traceback.print_exc()
+
+    # ── общий upload для любых файлов, выбранных в браузере ───────────────
+    # Браузер (Flet Web) не отдаёт локальный путь: у FilePickerResultEvent
+    # файлы есть, а path = None. Загружаем на сервер под УНИКАЛЬНЫМИ именами —
+    # два файла с одинаковым именем не затирают друг друга во время PUT, — и
+    # только потом отдаём реальные пути в вызывающий конвейер (вложения).
+    _web_upload = {"active": False, "want": {}, "ready": {}, "on_ready": None}
+
+    class _UploadedFile:
+        """Файл, загруженный браузером: path — реальный путь на сервере."""
+        def __init__(self, name: str, path: str):
+            self.name, self.path = name, path
+            try:
+                self.size = os.path.getsize(path)
+            except OSError:
+                self.size = 0
+
+    def _web_upload_abort(msg_ru: str, detail: str = ""):
+        _web_upload["active"] = False
+        _web_upload["want"] = {}
+        _web_upload["ready"] = {}
+        _web_upload["on_ready"] = None
+        _import_fail(msg_ru, detail)
+
+    def _web_upload_start(picker, files, on_ready, label: str = "upload") -> bool:
+        """-> True, если загрузка начата; False — уже сообщено пользователю."""
+        if picker is None:
+            _web_upload_abort("Загрузка недоступна: диалог выбора файла не инициализирован",
+                              "picker is None")
+            return False
+        if not _web_upload_dir():
+            _web_upload_abort("Загрузка файлов в веб-версии недоступна: "
+                              "не задан каталог загрузки", "FLET_UPLOAD_DIR not set")
+            return False
+        if _web_upload["active"]:
+            # Отказ НЕ должен сбрасывать состояние уже идущей пачки: иначе
+            # «вторая попытка поверх» тихо ломала первую загрузку (её on_upload
+            # переставал находить ожидающие файлы).
+            _import_fail("Дождитесь окончания текущей загрузки",
+                         "upload already active")
+            return False
+        want = {}
+        for f in files:
+            nm = os.path.basename(str(getattr(f, "name", "") or "").replace("\\", "/"))
+            if nm:
+                want["%s__%s" % (uuid4().hex[:10], nm)] = nm
+        if not want:
+            _web_upload_abort("Не удалось определить имена выбранных файлов",
+                              "empty file names")
+            return False
+        try:
+            items = [ft.FilePickerUploadFile(up, page.get_upload_url(up, 3600))
+                     for up in want]
+        except Exception as ex:
+            _web_upload_abort("Не удалось подготовить загрузку файла",
+                              "get_upload_url: %s: %s" % (type(ex).__name__, ex))
+            return False
+        _web_upload.update({"active": True, "want": want, "ready": {},
+                            "on_ready": on_ready})
+        _ensure_upload_handler(picker, _web_upload_event,
+                               attr="_controls_web_upload_handler")
+        _import_log("%s upload start: %s" % (label, ", ".join(sorted(want))))
+        try:
+            picker.upload(items)
+        except Exception as ex:
+            _web_upload_abort("Не удалось отправить файл на сервер",
+                              "upload: %s: %s" % (type(ex).__name__, ex))
+            return False
+        return True
+
+    def _web_upload_finish():
+        """Все файлы на диске — переименовать к исходным именам и в конвейер."""
+        want, ready, cb = (_web_upload["want"], _web_upload["ready"],
+                           _web_upload["on_ready"])
+        _web_upload.update({"active": False, "want": {}, "ready": {},
+                            "on_ready": None})
+        staged = []
+        for up, orig in want.items():
+            src = ready.get(up)
+            if not src:
+                continue
+            dst = os.path.join(os.path.dirname(src), orig)
+            try:
+                # имя загрузки уникальное; в конвейер файл уходит под исходным
+                # именем (дедуп по именам вложений и имя в модели — прежние)
+                if os.path.normcase(dst) != os.path.normcase(src) \
+                        and not os.path.exists(dst):
+                    os.replace(src, dst)
+                    src = dst
+            except OSError:
+                traceback.print_exc()
+            staged.append(_UploadedFile(orig, src))
+        if not staged:
+            _web_upload_abort("Загруженные файлы недоступны", "nothing staged")
+            return
+        if cb is None:
+            return
+        try:
+            cb(staged)
+        except Exception as ex:
+            _import_fail("Не удалось обработать загруженный файл",
+                         "on_ready: %s: %s" % (type(ex).__name__, ex))
+            traceback.print_exc()
+
+    def _web_upload_event(ue):
+        if not _web_upload["active"]:
+            return
+        err = getattr(ue, "error", None)
+        if err:
+            _web_upload_abort("Ошибка загрузки файла на сервер",
+                              "upload error: %s (%s)" % (err, getattr(ue, "file_name", None)))
+            return
+        up = getattr(ue, "file_name", None)
+        if up not in _web_upload["want"]:
+            return
+        prog = getattr(ue, "progress", None)
+        if prog is None or float(prog) < 1.0:
+            return                      # ещё грузится
+        path = _uploaded_path(up)
+        if not path or not os.path.isfile(path):
+            _web_upload_abort("Загруженный файл не найден на сервере",
+                              "missing uploaded file: %s" % up)
+            return
+        _web_upload["ready"][up] = path
+        if len(_web_upload["ready"]) == len(_web_upload["want"]):
+            _web_upload_finish()
 
     def _on_import_picked(e):
         files = list(getattr(e, "files", None) or [])

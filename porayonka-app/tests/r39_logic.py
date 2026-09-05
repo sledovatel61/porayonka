@@ -12,7 +12,9 @@ sys.platform подменяется, WinAPI заменяется фейком, �
 CreateMutexW возможна только на Windows — она выполняется там же и помечается
 SKIP на других ОС (не выдаётся за проверенную).
 """
+import contextlib
 import importlib
+import io
 import json
 import os
 import subprocess
@@ -147,15 +149,18 @@ def make_kernel(last_error=0, fail=None, delay=0.0, taken=()):
     """
     st = {"err": last_error, "next": 0x1000}
     held = {n: 0x0 for n in taken}          # name -> handle занятого объекта
-    calls = {"create": [], "close": 0}
+    calls = {"create": [], "close": 0, "order": []}
 
     def SetLastError(v):
+        calls["order"].append("SetLastError")
         st["err"] = v
 
     def GetLastError():
+        calls["order"].append("GetLastError")
         return st["err"]
 
     def CreateMutexW(_sec, _owner, name):
+        calls["order"].append("CreateMutexW")
         calls["create"].append(name)
         if delay:
             time.sleep(delay)
@@ -300,6 +305,10 @@ def run_single_instance():
               str(k32.calls["create"]))
         check("r39-4.3e: статус «занято ядром» отражён (mutex в реестре fake'а)",
               "Local\\Porayonka_admin" in k32.held, str(list(k32.held)))
+        check("r39-4.3f: SetLastError(0) вызван ДО CreateMutexW, а GetLastError — "
+              "сразу после (порядок, предписанный задачей 4)",
+              k32.calls["order"] == ["SetLastError", "CreateMutexW",
+                                     "GetLastError"], str(k32.calls["order"]))
 
         # 4.6 release + идемпотентность + повторный захват
         n_close = k32.calls["close"]
@@ -642,6 +651,34 @@ def run_tray():
             finally:
                 si.release()
 
+    # web-режим: значок обслуживает URL, а не desktop-окно (требование 6.9)
+    with blocked_module(pystray=_fake_pystray(_TrayState())[0],
+                        PIL=_fake_pystray(_TrayState())[1]), force_platform("win32"):
+        st_w = _TrayState()
+        py_w, pil_w = _fake_pystray(st_w)
+        with blocked_module(pystray=py_w, PIL=pil_w):
+            tiw = _reload_tray()
+            opened = []
+            real_wb = tiw.webbrowser
+            tiw.webbrowser = types.SimpleNamespace(open=lambda u: opened.append(u))
+            try:
+                ic = tiw.start_tray(None, web_url="http://127.0.0.1:8555")
+                menu = (getattr(ic, "args", ()) + (None,) * 4)[3]
+                show = next((it.action for it in getattr(menu, "items", ())
+                             if getattr(it, "text", None) == "Открыть в браузере"),
+                            None)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    show(ic, None)
+                check("r39-4.15d: web-значок «Открыть» ведёт в браузер и НЕ трогает "
+                      "desktop-окно (page=None, window.* не вызываются)",
+                      opened == ["http://127.0.0.1:8555"]
+                      and "show window error" not in out.getvalue(),
+                      "%s | %s" % (opened, out.getvalue().strip()[:60]))
+                tiw.stop_tray()
+            finally:
+                tiw.webbrowser = real_wb
+
     # не-Windows и «нет pystray» — мягкий None, без исключений
     with blocked_module(pystray=None, PIL=None), force_platform("win32"):
         check("r39-4.15a: Windows без pystray/pillow -> мягкий None",
@@ -655,6 +692,127 @@ def run_tray():
         check("r39-4.15c: stop_tray() без значка не падает",
               ti2.stop_tray() is None)
     _reload_tray()      # вернуть модуль в чистое состояние
+
+
+# ── подготовка web-загрузки: каталог, ключ, гонка двух запусков ──────────
+_CHILD_ENV = r"""
+import os, sys
+sys.path.insert(0, os.environ["R39_ROOT"])
+import main
+main._ensure_web_upload_env()
+sys.stdout.write("KEY=" + (os.environ.get("FLET_SECRET_KEY") or ""))
+"""
+
+
+def run_upload_env():
+    print("\n--- 5a. main._ensure_web_upload_env (каталог, ключ, гонка) ---")
+    import main
+    d = tempfile.mkdtemp(prefix="r39_env_")
+    saved = {k: os.environ.get(k) for k in
+             ("APPDATA", "FLET_UPLOAD_DIR", "FLET_SECRET_KEY")}
+    bad = []
+    stop = threading.Event()
+
+    def _sample():
+        f = os.path.join(d, "porayonka", "upload_secret.key")
+        while not stop.is_set():
+            try:
+                with open(f, encoding="ascii") as fh:
+                    txt = fh.read()
+                if txt and not (len(txt) == 64 and all(c in "0123456789abcdef"
+                                                        for c in txt)):
+                    bad.append(repr(txt[:24]))
+            except OSError:
+                pass
+            time.sleep(0.001)
+
+    def _clean_env():
+        os.environ["APPDATA"] = d
+        os.environ.pop("FLET_UPLOAD_DIR", None)
+        os.environ.pop("FLET_SECRET_KEY", None)
+
+    try:
+        # 1) первый запуск: каталог создан, ключ сгенерирован
+        _clean_env()
+        with contextlib.redirect_stdout(io.StringIO()):
+            main._ensure_web_upload_env()
+        up = os.environ.get("FLET_UPLOAD_DIR")
+        key = os.environ.get("FLET_SECRET_KEY") or ""
+        check("r39-5.9a: каталог загрузки = %APPDATA%\\porayonka\\web_uploads "
+              "и существует", up == os.path.join(d, "porayonka", "web_uploads")
+              and os.path.isdir(up), str(up))
+        check("r39-5.9b: ключ 64 hex-символа (secrets.token_hex(32))",
+              len(key) == 64 and all(c in "0123456789abcdef" for c in key),
+              str(len(key)))
+        kf = os.path.join(d, "porayonka", "upload_secret.key")
+        check("r39-5.9c: ключ сохранён в файл (стабильность между запусками)",
+              os.path.isfile(kf) and open(kf, encoding="ascii").read().strip() == key)
+        leftovers = [n for n in os.listdir(os.path.join(d, "porayonka"))
+                     if n.endswith(".tmp")]
+        check("r39-5.9d: временных файлов записи не остаётся", not leftovers,
+              str(leftovers))
+
+        # 2) повторный запуск: значение НЕ меняется
+        _clean_env()
+        with contextlib.redirect_stdout(io.StringIO()):
+            main._ensure_web_upload_env()
+        check("r39-5.9e: перезапуск использует тот же ключ (не генерирует новый)",
+              os.environ.get("FLET_SECRET_KEY") == key)
+
+        # 3) уже заданный env не перезаписывается (идемпотентность)
+        os.environ["FLET_SECRET_KEY"] = "preset-key"
+        os.environ["FLET_UPLOAD_DIR"] = os.path.join(d, "custom")
+        with contextlib.redirect_stdout(io.StringIO()):
+            main._ensure_web_upload_env()
+        check("r39-5.9f: уже заданные env НЕ перезаписываются (идемпотентно)",
+              os.environ["FLET_SECRET_KEY"] == "preset-key"
+              and os.environ["FLET_UPLOAD_DIR"] == os.path.join(d, "custom"))
+
+        # 4) ГОНКА: несколько процессов стартуют одновременно в чистый каталог
+        os.remove(kf)
+        os.makedirs(os.path.join(d, "porayonka"), exist_ok=True)
+        _clean_env()
+        sampler = threading.Thread(target=_sample, daemon=True)
+        sampler.start()
+        outs = []
+        envs = []
+        for _ in range(6):
+            e = dict(os.environ)
+            e.update({"R39_ROOT": ROOT, "PYTHONIOENCODING": "utf-8",
+                      "APPDATA": d})
+            e.pop("FLET_UPLOAD_DIR", None)
+            e.pop("FLET_SECRET_KEY", None)
+            envs.append(e)
+        procs = [subprocess.Popen([sys.executable, "-c", _CHILD_ENV], cwd=ROOT,
+                                  env=e, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, text=True,
+                                  encoding="utf-8", errors="replace")
+                 for e in envs]
+        for p in procs:
+            o, _ = p.communicate(timeout=120)
+            outs.append([l for l in o.splitlines() if l.startswith("KEY=")])
+        stop.set()
+        sampler.join(5)
+        keys = [o[0][4:] if o else "" for o in outs]
+        file_key = open(kf, encoding="ascii").read().strip()
+        check("r39-5.9g: 6 одновременных запуска получили ОДИН ключ (победитель — "
+              "файл)", len(set(keys)) == 1 and keys[0] == file_key
+              and len(file_key) == 64, str(sorted({k[:8] for k in keys})))
+        check("r39-5.9h: наблюдатель никогда не видел пустого/обрезанного ключа "
+              "(запись атомарна)", not bad, str(bad[:2]))
+        leftovers = [n for n in os.listdir(os.path.join(d, "porayonka"))
+                     if n.endswith(".tmp")]
+        check("r39-5.9i: после гонки нет осиротевших .tmp (провал записи чистится)",
+              not leftovers, str(leftovers))
+    finally:
+        stop.set()
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
 
 
 # ── ленивые вкладки: чистая логика хоста ─────────────────────────────────
@@ -731,20 +889,43 @@ def run_lazy_host():
     check("r39-2.3b: все потоки получили один и тот же экземпляр",
           len(res) == 12 and all(r is res[0] for r in res))
 
-    # ошибка builder'а
+    # ошибка builder'а: вкладка НЕ считается построенной, retry разрешён
     def _boom():
         raise RuntimeError("builder died")
 
+    n_bad = {"n": 0}
+
+    def _boom_once():
+        n_bad["n"] += 1
+        if n_bad["n"] == 1:
+            raise RuntimeError("builder died")
+        return "OK-after-retry"
+
     h3 = LazyTabHost(on_error=lambda k, ex: ("ERR", k))
-    h3.register("bad", _boom)
-    check("r39-2.4a: с on_error ошибка не роняет переход (заглушка вкладки)",
-          h3.get("bad") == ("ERR", "bad") and h3.build_count("bad") == 1)
-    check("r39-2.4b: текст ошибки доступен для диагностики",
+    h3.register("bad", _boom_once)
+    stub = h3.get("bad")
+    check("r39-2.4a: с on_error ошибка не роняет переход (в слот — заглушка)",
+          stub == ("ERR", "bad"), str(stub))
+    check("r39-2.4b: упавшая постройка НЕ в кэше и НЕ «построена»",
+          h3.is_built("bad") is False and h3.build_count("bad") == 0
+          and h3.built_keys() == [], "%s %s" % (h3.is_built("bad"), h3.stats()))
+    check("r39-2.4c: текст ошибки доступен для диагностики",
           "builder died" in str(h3.last_error("bad")), str(h3.last_error("bad")))
+    got = h3.get("bad")
+    check("r39-2.4d: следующий переход пробует СНОВА (заглушка не навсегда)",
+          got == "OK-after-retry" and h3.attempt_count("bad") == 2
+          and h3.build_count("bad") == 1 and h3.is_built("bad") is True
+          and h3.last_error("bad") is None, str(h3.attempt_stats()))
+    check("r39-2.4e: после успешной постройки-builder больше не вызывается",
+          h3.get("bad") == "OK-after-retry" and h3.attempt_count("bad") == 2
+          and h3.build_count("bad") == 1, "reuse=%s" % h3.reuse_count("bad"))
     h4 = LazyTabHost()
     h4.register("bad", _boom)
-    check("r39-2.4c: без on_error исключение пробрасывается (не глотается)",
+    check("r39-2.4f: без on_error исключение пробрасывается (не глотается)",
           _raises(RuntimeError, h4.get, "bad"))
+    check("r39-2.4g: без on_error сбой тоже не попадает в кэш",
+          h4.is_built("bad") is False and h4.build_count("bad") == 0
+          and h4.attempt_count("bad") == 1, str(h4.stats()))
 
     # ASCII-safe диагностика
     class _AsciiOnly(__import__("io").StringIO):
