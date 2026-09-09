@@ -12,6 +12,7 @@ from .zonal_models import (
     ReportData, ZonalCollection, Criminalist, CriminalistZone,
 )
 from .zonal_constants import get_initial_criminalists
+from .zonal_replacement import normalize_zonal_criminalists
 
 
 # ────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ def _criminalist_to_dict(c: Criminalist) -> dict:
         "full_name": c.full_name,
         "note": c.note,
         "is_active": c.is_active,
+        "replacement_ids": list(c.replacement_ids),
         "zone": {
             "criminalist_id": c.zone.criminalist_id,
             "department_ids": c.zone.department_ids,
@@ -145,6 +147,7 @@ def _criminalist_from_dict(d: dict) -> Criminalist:
             criminalist_id=zone_data.get("criminalist_id", d["id"]),
             department_ids=zone_data.get("department_ids", []),
         ),
+        replacement_ids=list(d.get("replacement_ids", [])),
     )
 
 
@@ -318,6 +321,9 @@ def load_criminalists() -> List[Criminalist]:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
         criminalists = [_criminalist_from_dict(c) for c in data.get("criminalists", [])]
+        # Фаза 40: старые/ручные JSON без replacement_ids или с мусором
+        # нормализуются до загрузки в UI.
+        normalize_zonal_criminalists(criminalists)
         if not _CRIM_LOAD_LOGGED["done"]:
             print(f"[ZONAL_DATA] Zagruzheno kriminalistov: {len(criminalists)}")
             _CRIM_LOAD_LOGGED["done"] = True
@@ -328,9 +334,10 @@ def load_criminalists() -> List[Criminalist]:
 
 
 def save_criminalists(criminalists: List[Criminalist]) -> None:
-    """Сохранить список криминалистов"""
+    """Сохранить список криминалистов (с нормализацией связей фазы 40)."""
     filepath = get_criminalists_file()
     try:
+        normalize_zonal_criminalists(criminalists)
         data = {"criminalists": [_criminalist_to_dict(c) for c in criminalists]}
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

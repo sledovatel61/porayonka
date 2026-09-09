@@ -2,6 +2,7 @@
 # Вкладка "Зональные криминалисты" — ФАЗА 2.
 # Сетка компактных плашек вместо раскрывающихся карточек.
 # [DARK THEME] + ft.icons.* + hint_style (Flet 0.23.2)
+import os
 import flet as ft
 from typing import List, Optional, Callable, Dict
 from core.zonal_models import (
@@ -19,6 +20,11 @@ from core.zonal_data import (
     get_criminalist_fill, get_non_submitters, build_non_submitters_text,
 )
 from core.constants import COLORS, INITIAL_DEPARTMENTS
+from core.zonal_replacement import (
+    normalize_zonal_criminalists,
+    remove_criminalist_and_clean,
+    apply_replacement_selection,
+)
 from .template_builder import create_template_builder
 from .criminalist_tile import (
     create_criminalist_tile,
@@ -48,6 +54,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     else:
         if not collection.criminalists:
             collection.criminalists = get_initial_criminalists()
+    normalize_zonal_criminalists(collection.criminalists)
 
     # Сохраняем ссылку для авто-сохранения при закрытии окна
     page._zonal_collection = collection
@@ -417,10 +424,14 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         _refresh_summary()
 
     def _on_edit_criminalist(crim: Criminalist):
-        def handle_save(full_name: str, note: str, department_ids: list):
+        def handle_save(full_name: str, note: str, department_ids: list,
+                        replacement_ids: list):
             crim.full_name = full_name
             crim.note = note
             crim.zone.department_ids = department_ids
+            apply_replacement_selection(
+                collection.criminalists, crim.id, list(replacement_ids or [])
+            )
             save_criminalists(collection.criminalists)
             autosave()
             _refresh_tile(crim)
@@ -434,6 +445,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             criminalist=crim,
             on_save=handle_save,
             on_delete=lambda c: _on_delete_criminalist(c),
+            all_criminalists=collection.criminalists,
         )
         page.overlay.append(dialog)
         dialog.open = True
@@ -441,7 +453,9 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
 
     def _on_delete_criminalist(criminalist: Criminalist):
         def confirm_delete(e=None):
-            collection.criminalists = [c for c in collection.criminalists if c.id != criminalist.id]
+            collection.criminalists = remove_criminalist_and_clean(
+                collection.criminalists, criminalist.id
+            )
             tiles.pop(criminalist.id, None)
             save_criminalists(collection.criminalists)
             autosave()
@@ -483,7 +497,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         page.update()
 
     def _on_add_criminalist():
-        def handle_save(full_name: str, note: str, department_ids: list):
+        def handle_save(full_name: str, note: str, department_ids: list,
+                        replacement_ids: list):
             max_id = max((c.id for c in collection.criminalists), default=0)
             new_id = max_id + 1
             new_criminalist = Criminalist(
@@ -492,8 +507,12 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 note=note,
                 is_active=True,
                 zone=CriminalistZone(criminalist_id=new_id, department_ids=department_ids),
+                replacement_ids=[],
             )
             collection.criminalists.append(new_criminalist)
+            apply_replacement_selection(
+                collection.criminalists, new_id, list(replacement_ids or [])
+            )
             save_criminalists(collection.criminalists)
             autosave()
             _refresh_summary()
@@ -505,6 +524,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             page=page,
             criminalist=None,
             on_save=handle_save,
+            all_criminalists=collection.criminalists,
         )
         page.overlay.append(dialog)
         dialog.open = True
@@ -875,6 +895,135 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             allowed_extensions=["xlsx"],
         )
 
+    # ── Фаза 40: печатная PDF-выгрузка зональных ────────────────
+    # Отдельный picker/путь/кнопка — не смешиваем с Excel-экспортом.
+    pdf_state_ref = {"path": None, "url": None, "web": False}
+    page._zonal_pdf_state = pdf_state_ref
+
+    def _web_mode_export():
+        return (os.environ.get("PORAYONKA_WEB") == "1"
+                or bool(os.environ.get("FLET_ASSETS_DIR")))
+
+    def _open_last_pdf():
+        state = page._zonal_pdf_state
+        if state.get("web"):
+            url = state.get("url")
+            if not url:
+                from ui.toast import show_error_toast
+                show_error_toast(page, "PDF не найден в web-каталоге")
+                return
+            try:
+                page.launch_url(url)
+            except Exception as ex:
+                print(f"[ZONAL_TAB] Open PDF URL error: {ex}")
+                from ui.toast import show_error_toast
+                show_error_toast(page, f"Ошибка открытия PDF: {ex}")
+            return
+        path = state.get("path")
+        if not path or not os.path.exists(path):
+            from ui.toast import show_error_toast
+            show_error_toast(page, "PDF-файл удалён или недоступен")
+            return
+        import subprocess, sys as _sys_os
+        try:
+            if _sys_os.platform == "win32":
+                os.startfile(path)
+            elif _sys_os.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as ex:
+            print(f"[ZONAL_TAB] Open PDF error: {ex}")
+            from ui.toast import show_error_toast
+            show_error_toast(page, f"Ошибка открытия PDF: {ex}")
+
+    def _on_pdf_picked(e):
+        if not getattr(e, "path", None):
+            return
+        try:
+            from core.zonal_distribution_exporter import ZonalDistributionPdfExporter
+            ZonalDistributionPdfExporter().export(collection, e.path)
+        except Exception as ex:
+            print(f"[ZONAL_TAB] PDF export error: {ex}")
+            from ui.toast import show_error_toast
+            show_error_toast(page, f"Ошибка выгрузки PDF: {ex}")
+            return
+        pdf_state_ref["path"] = e.path
+        pdf_state_ref["url"] = None
+        pdf_state_ref["web"] = False
+        open_pdf_btn.visible = True
+        try:
+            open_pdf_btn.update()
+        except Exception:
+            page.update()
+        from ui.toast import show_export_toast
+        show_export_toast(page, "Зональные PDF")
+
+    def _on_export_pdf(e=None):
+        """Выгрузить зональных в PDF (desktop: save_file, web: assets/downloads)."""
+        from core.zonal_distribution_exporter import (
+            ZonalDistributionPdfExporter,
+            pdf_filename,
+            write_web_pdf,
+        )
+        exporter = ZonalDistributionPdfExporter()
+        filename = pdf_filename()
+
+        if _web_mode_export():
+            try:
+                data = exporter.export_bytes(collection)
+                final_path, url = write_web_pdf(filename, data)
+                pdf_state_ref["path"] = final_path
+                pdf_state_ref["url"] = url
+                pdf_state_ref["web"] = True
+                open_pdf_btn.visible = True
+                try:
+                    open_pdf_btn.update()
+                except Exception:
+                    page.update()
+                from ui.toast import show_export_toast
+                show_export_toast(page, "Зональные PDF")
+                try:
+                    page.launch_url(url)
+                except Exception as ex:
+                    print(f"[ZONAL_TAB] PDF web launch error: {ex}")
+            except Exception as ex:
+                print(f"[ZONAL_TAB] PDF export error: {ex}")
+                from ui.toast import show_error_toast
+                show_error_toast(page, f"Ошибка выгрузки PDF: {ex}")
+            return
+
+        def _pick_pdf():
+            if not hasattr(page, "_zonal_pdf_picker"):
+                picker = ft.FilePicker(on_result=_on_pdf_picked)
+                page.overlay.append(picker)
+                page._zonal_pdf_picker = picker
+                page.update()  # ВАЖНО: FilePicker монтируется до save_file
+            page._zonal_pdf_picker.save_file(
+                dialog_title="Сохранить выгрузку зональных PDF",
+                file_name=filename,
+                allowed_extensions=["pdf"],
+            )
+
+        _pick_pdf()
+
+    # Кнопка "Открыть PDF" — отдельная от Excel, появляется после выгрузки
+    open_pdf_btn = ft.ElevatedButton(
+        text="Открыть PDF",
+        icon=ft.icons.PICTURE_AS_PDF,
+        bgcolor=COLORS["received"],
+        color=COLORS["text_light"],
+        height=38,
+        visible=False,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=14),
+        ),
+        on_click=lambda e: _open_last_pdf(),
+        tooltip="Открыть последнюю выгрузку зональных PDF",
+    )
+    page._zonal_open_pdf_btn = open_pdf_btn
+
     # Кнопка "Открыть отчёт" — появляется после экспорта
     open_report_btn = ft.ElevatedButton(
         text="Открыть отчёт",
@@ -1166,6 +1315,20 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         tooltip="Выгрузить сводную таблицу в файл Excel",
     )
 
+    pdf_btn = ft.ElevatedButton(
+        text="Выгрузить зональных",
+        icon=ft.icons.PICTURE_AS_PDF,
+        bgcolor=COLORS["btn_save"],
+        color=COLORS["text_light"],
+        height=38,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(horizontal=16),
+        ),
+        on_click=lambda e: _on_export_pdf(e),
+        tooltip="Создать печатный PDF распределения зон и взаимозаменяемости",
+    )
+
     settings_btn = ft.IconButton(
         icon=ft.icons.SETTINGS_OUTLINED,
         icon_size=20,
@@ -1198,6 +1361,8 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
                 copy_btn,
                 clear_all_btn,
                 export_btn,
+                pdf_btn,
+                open_pdf_btn,
                 open_report_btn,
                 ft.Container(expand=True),
                 settings_btn,

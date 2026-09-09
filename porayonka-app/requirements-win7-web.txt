@@ -29,11 +29,14 @@
 #     --reload (мы не используем); закреплён на всякий случай до
 #     Rust-1.78 (Win10-база): версия эпохи, которая импортировалась бы и на
 #     Win7;
-#   * openpyxl — формат Excel приложения (как в основном requirements.txt).
+#   * openpyxl — формат Excel приложения (как в основном requirements.txt);
+#   * reportlab — печатная PDF-выгрузка зональных (фаза 40). Pure Python,
+#     кириллический шрифт берётся из bundled assets/fonts.
 flet==0.23.2
 flet-core==0.23.2
 flet-runtime==0.23.2
 openpyxl==3.1.5
+reportlab==4.2.5
 fastapi==0.115.4
 starlette==0.41.3
 pydantic==1.10.26

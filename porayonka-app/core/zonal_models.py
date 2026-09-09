@@ -58,6 +58,7 @@ class Criminalist:
     note: str = ""               # Примечание (например, "Цифровая криминалистика")
     is_active: bool = True       # Участвует в текущем сборе
     zone: CriminalistZone = field(default_factory=lambda: CriminalistZone(criminalist_id=0))
+    replacement_ids: List[int] = field(default_factory=list)  # Фаза 40: неориентированные пары
 
 
 @dataclass

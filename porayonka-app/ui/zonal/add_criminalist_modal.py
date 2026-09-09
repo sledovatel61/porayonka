@@ -2,18 +2,36 @@
 # Модальное окно добавления/редактирования криминалиста.
 # В режиме редактирования允许 удаление (on_delete).
 # [DARK THEME] + ft.icons.* + hint_style (Flet 0.23.2)
+import inspect
 import flet as ft
 from typing import Callable, Optional, Dict
 from core.zonal_models import Criminalist, CriminalistZone
 from core.constants import COLORS, INITIAL_DEPARTMENTS
 
 
+def _invoke_on_save(on_save, full_name, note, department_ids, replacement_ids):
+    """Вызвать совместимый callback (3 аргумента — старый, 4 — фаза 40)."""
+    if on_save is None:
+        return
+    try:
+        params = list(inspect.signature(on_save).parameters.values())
+        positional = [p for p in params
+                      if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        if len(positional) < 4:
+            on_save(full_name, note, department_ids)
+            return
+    except (ValueError, TypeError):
+        pass
+    on_save(full_name, note, department_ids, replacement_ids)
+
+
 def create_add_criminalist_modal(
     page: ft.Page,
     criminalist: Optional[Criminalist] = None,
-    on_save: Callable[[str, str, list], None] = None,  # full_name, note, department_ids
+    on_save: Callable[[str, str, list, list], None] = None,  # full_name, note, department_ids, replacement_ids
     existing_ids: set = None,
     on_delete: Callable = None,  # on_delete(criminalist) — только в режиме редактирования
+    all_criminalists: Optional[list] = None,  # Фаза 40: список остальных для «Взаимозаменяемость»
 ) -> ft.AlertDialog:
     """
     Создать модальное окно добавления/редактирования криминалиста.
@@ -105,6 +123,60 @@ def create_add_criminalist_modal(
 
     _build_dept_list()
 
+    # ── Фаза 40: взаимозаменяемость (по числовым ID) ─────────────
+    # Текущий человек исключается из вариантов; выбранные сохраняются.
+    _others = []
+    _current_id = criminalist.id if is_edit else None
+    for _c in (all_criminalists or []):
+        _cid = getattr(_c, "id", None)
+        if _cid is not None and _cid != _current_id:
+            _others.append(_c)
+    replacement_selected = set(
+        criminalist.replacement_ids if (is_edit and criminalist) else []
+    )
+    replacement_checkboxes = {}
+    replacement_list = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=150)
+
+    def _build_replacement_list():
+        replacement_list.controls.clear()
+        for _c in _others:
+            _cid = _c.id
+            cb = ft.Checkbox(
+                label=f"[{_cid}] {_c.full_name}",
+                value=(_cid in replacement_selected),
+                active_color=COLORS["btn_save"],
+                label_style=ft.TextStyle(size=12, color=COLORS["text_secondary"]),
+                on_change=lambda e, cid=_cid: _on_repl_change(e, cid),
+            )
+            replacement_checkboxes[_cid] = cb
+            replacement_list.controls.append(cb)
+
+    def _on_repl_change(e, cid: int):
+        if e.control.value:
+            replacement_selected.add(cid)
+        else:
+            replacement_selected.discard(cid)
+
+    def _repl_all(e=None):
+        for _cid, cb in replacement_checkboxes.items():
+            replacement_selected.add(_cid)
+            cb.value = True
+        try:
+            replacement_list.update()
+        except Exception:
+            pass
+
+    def _repl_clear(e=None):
+        for _cid, cb in replacement_checkboxes.items():
+            replacement_selected.discard(_cid)
+            cb.value = False
+        try:
+            replacement_list.update()
+        except Exception:
+            pass
+
+    _build_replacement_list()
+
     # Кнопки
     def _close_dialog(e=None):
         dialog.open = False
@@ -126,8 +198,13 @@ def create_add_criminalist_modal(
 
         note = note_field.value.strip()
 
-        if on_save:
-            on_save(full_name, note, sorted(list(selected_ids)))
+        _invoke_on_save(
+            on_save,
+            full_name,
+            note,
+            sorted(list(selected_ids)),
+            sorted(list(replacement_selected)),
+        )
 
         dialog.open = False
         page.update()
@@ -243,6 +320,36 @@ def create_add_criminalist_modal(
                     ),
                     ft.Container(
                         content=dept_list,
+                        border=ft.border.all(1, COLORS["border"]),
+                        border_radius=8,
+                        padding=ft.padding.all(8),
+                        bgcolor=COLORS["card"],
+                    ),
+                    ft.Container(height=12),
+                    ft.Row(
+                        controls=[
+                            ft.Text(
+                                "Взаимозаменяемость:",
+                                size=13,
+                                weight=ft.FontWeight.W_600,
+                                color=COLORS["text"],
+                                expand=True,
+                            ),
+                            ft.TextButton(
+                                "Все",
+                                on_click=_repl_all,
+                                style=ft.ButtonStyle(color=COLORS["btn_save"]),
+                            ),
+                            ft.TextButton(
+                                "Снять",
+                                on_click=_repl_clear,
+                                style=ft.ButtonStyle(color="#f87171"),
+                            ),
+                        ],
+                        spacing=4,
+                    ),
+                    ft.Container(
+                        content=replacement_list,
                         border=ft.border.all(1, COLORS["border"]),
                         border_radius=8,
                         padding=ft.padding.all(8),
