@@ -24,7 +24,7 @@ echo.
 echo [Шаг 2/10] Установка/обновление зависимостей...
 python -m pip install --upgrade pip -q
 pip install -r requirements.txt -q
-pip install pystray pillow pyinstaller -q
+pip install pystray pillow==10.4.0 pyinstaller -q
 if errorlevel 1 (
     echo [ОШИБКА] Не удалось установить зависимости.
     exit /b 1
@@ -99,7 +99,7 @@ if errorlevel 1 (
     echo [ОШИБКА] Не удалось установить requirements-win7-web.txt.
     exit /b 1
 )
-"%W7PY%" -m pip install pyinstaller==6.11.1 pillow -q
+"%W7PY%" -m pip install pyinstaller==6.11.1 pillow==10.4.0 -q
 if errorlevel 1 (
     echo [ОШИБКА] Не удалось установить pyinstaller==6.11.1.
     exit /b 1

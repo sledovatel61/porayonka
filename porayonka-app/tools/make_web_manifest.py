@@ -23,7 +23,9 @@ from datetime import datetime
 
 TRACKED = ["flet", "flet-core", "flet-runtime", "fastapi", "starlette",
            "pydantic", "uvicorn", "websockets", "anyio", "typing_extensions",
-           "pyinstaller"]
+           "pyinstaller",
+           # Фаза 40: PDF-выгрузка зональных (reportlab + его runtime-деп)
+           "reportlab", "pillow", "charset-normalizer"]
 # Имя импортируемого модуля, наличие которого НЕДОПУСТИМО в профиле Win7.
 FORBIDDEN_MODULES = ["pydantic_core"]
 # Допустимая ветка pydantic для Win7 (v1 — чистый Cython C, без Rust).

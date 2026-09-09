@@ -101,6 +101,13 @@ python tests\test_network_stress.py
 
 Stress-тест после изменений синхронизации запускать минимум три раза. Один `import main` недостаточен: вкладка «Контроли» импортируется лениво. Дополнительно выполнить живую проверку `python main.py`.
 
+После правок фазы 40 (зональные, PDF-выгрузка) дополнительно:
+
+```bat
+python -m py_compile core\zonal_models.py core\zonal_replacement.py core\zonal_distribution_exporter.py core\zonal_data.py ui\zonal\zonal_tab.py ui\zonal\add_criminalist_modal.py
+python tests\test_round40.py
+```
+
 ## 7. Сборка portable-дистрибутивов — подробная инструкция
 
 Скрипты запускаются из `porayonka-app`, сами переходят в свой каталог. Перед сборкой закрыть exe и очистить заблокированные старые каталоги.
@@ -222,3 +229,11 @@ python tests\test_controls_smoke.py
 - **Excel upsert** (`import_plan` в `core/controls_exporter.py`): preview «новые/обновляемые/без изменений/конфликты/ошибки», конфликты молча не перетираются, перед применением — backup; существующие id, вложения и richer-поля не теряются; видимые колонки листа накладываются поверх скрытого full-листа.
 - **Win7 web-профиль**: `requirements-win7-web.txt` (flet/flet-core/flet-runtime 0.23.2, fastapi 0.115.4, starlette 0.41.3, pydantic 1.10.26, uvicorn 0.32.0 — всё запинено); сборка только в чистом `.venv-win7-web`, жёсткий стоп при `pydantic_core`/pydantic 2.x; `upx=False` в web-spec; манифест собирает `tools/make_web_manifest.py`; `api-ms-win-core-path-l1-1-0.dll` кладётся рядом с web exe, desktop-ступени не меняются.
 - **Обязательный контур** дополнен `tests/test_round38.py`; стресс-сценарии 11 и 14 перед «Сохранить» прикрепляют PDF (скан-гард), сценарий 13 проверяет «вложение видно сразу».
+
+## 11. Раунд 40 — зональные: взаимозаменяемость + печатная PDF-выгрузка
+
+- **Взаимозаменяемость** (`core/zonal_replacement.py`): попарная НЕориентированная связь по стабильным числовым `id` (не ФИО), не транзитивна, self/dangling/дубли запрещены; `set_replacement_partners` — полная «замена множества» (старые обратные ссылки снимаются, новые партнёры получают обратную ссылку, субъект вне списка = no-op без dangling); `remove_criminalist_links` чистит ID удаляемого у всех; `normalize_replacement_links` идемпотентно чинит ручные/старые JSON (вызывается при load/save); `unique_pairs` — каждая пара ровно один раз, первым идёт стоящий раньше в списке.
+- **UI**: секция «Взаимозаменяемость» в модалке добавления/редактирования (мультивыбор «кто подменяет», текущий человек исключён, вариант = `(N) ФИО`); on_save строго 4-аргументный `(full_name, note, department_ids, replacement_ids)`; add/edit сразу зовут `set_replacement_partners`, delete — `remove_criminalist_links` ДО удаления человека. Вложенные диалоги выбора людей запрещены.
+- **PDF-выгрузка** (`core/zonal_distribution_exporter.py`): ЧИСТЫЙ экспортёр (никакого Flet/Page/файлов-в-приложение; данные параметрами, коллекцию НЕ мутирует, JSON не пишет). ReportLab `4.4.10` (в `requirements.txt` и `requirements-win7-web.txt`; `rl_accel` НЕ ставится — чисто-Python падение на Windows 7 недопустимо), шрифты — bundled `assets/fonts/DejaVuSans[-Bold].ttf` 2.37 + `LICENSE` (реальная кириллица и `↔`; каталог ищется в dev и frozen `_MEIPASS/assets/fonts`, переопределяется `PORAYONKA_FONT_DIR`). А4 portrait, поля 40/46 pt, точный заголовок «Зональный принцип распределения отдела криминалистики»; карточки в текущем порядке по 3 в ряд (тонкая рамка, шапка «(N) ФИО» bold по центру с переносом, отделы строками «- …», примечание отдельной строкой «Примечание: …», пустая зона → «Отделы не закреплены»); неактивные и пустые зоны НЕ выпадают; ниже сетки «Взаимозаменяемость:» и пары «Фамилия И.О. (N) ↔ Фамилия И.О. (N)» (или «Не указана»), заголовок повторяется на каждой странице; перенос только перераспределяет символы (не теряет); нарезка сверхдлинных слов работает и для ПЕРВОГО слова текста.
+- **Кнопки «Выгрузить зональных» / «Открыть PDF»**: ОТДЕЛЬНЫЙ FilePicker и отдельное состояние `page._zonal_pdf_state` (Excel-кнопки не трогают); Cancel — no-op; desktop — save_file → запись → toast → видимая «Открыть PDF»; web — `FLET_ASSETS_DIR/downloads` + `launch_url(/assets/downloads/<имя>)`; файл удалён извне → сброс состояния + понятная ошибка (проверка наличия файла и в web-режиме). Web-хелперы: `sanitize_pdf_filename` (без traversal), `reserve_unique_pdf_path` (O_EXCL + суффиксы `_1`), `asset_download_url`.
+- **Обязательный контур** дополнен `tests/test_round40.py` (`python tests\test_round40.py`): чистая логика замены, PDF-текст проверяется структурным извлекателем `tests/pdf_text_probe.py` (stdlib: ASCII85+Flate, ToUnicode CMap, Tj/TJ — только для ReportLab-документов), UI-смоук с реальными обработчиками add/edit/delete и web-экспорта, статика упаковки (pinned reportlab/pillow, assets/fonts в spec'ах). `pillow==10.4.0` запинен в `requirements*.txt` и во всех трёх установках `pillow` в `build_*.bat`.

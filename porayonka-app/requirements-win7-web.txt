@@ -45,3 +45,18 @@ httptools==0.6.1
 python-dotenv==1.0.1
 PyYAML==6.0.2
 watchfiles==0.22.0
+
+# ── Фаза 40: печатная PDF-выгрузка зональных (та же связка, что в
+# обычном requirements.txt) ─────────────────────────────────────────────
+# reportlab 4.4.10 — без extra [accel] (rl_accel НЕ устанавливается):
+# чистый Python-fallback акселерации не содержит native-расширений, что
+# безопасно для Windows 7 (аналогично политике pydantic v1 без Rust).
+# pillow 10.4.0 — жёсткий runtime-импорт reportlab.lib.utils (PIL); линия
+# 10.x эпохи flet 0.23.2 (cp311), без перехода на 11/12.
+# charset-normalizer 3.4.1 — зависимость reportlab (чистый Python).
+# Кириллица в PDF — bundled assets/fonts/DejaVuSans*.ttf, системные шрифты
+# Win7 не нужны. Проверка frozen-профиля: tools/make_web_manifest.py
+# дополнительно пишет версии reportlab/pillow в manifest.
+reportlab==4.4.10
+pillow==10.4.0
+charset-normalizer==3.4.1

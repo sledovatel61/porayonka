@@ -63,7 +63,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-"%W7PY%" -m pip install pyinstaller==6.11.1 pillow -q
+"%W7PY%" -m pip install pyinstaller==6.11.1 pillow==10.4.0 -q
 if errorlevel 1 (
     echo.
     echo  [ОШИБКА] Не удалось установить pyinstaller==6.11.1/pillow!

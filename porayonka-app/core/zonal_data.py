@@ -12,6 +12,7 @@ from .zonal_models import (
     ReportData, ZonalCollection, Criminalist, CriminalistZone,
 )
 from .zonal_constants import get_initial_criminalists
+from .zonal_replacement import parse_replacement_ids, normalize_replacement_links
 
 
 # ────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ def _criminalist_to_dict(c: Criminalist) -> dict:
         "full_name": c.full_name,
         "note": c.note,
         "is_active": c.is_active,
+        "replacement_ids": list(c.replacement_ids or []),
         "zone": {
             "criminalist_id": c.zone.criminalist_id,
             "department_ids": c.zone.department_ids,
@@ -136,11 +138,17 @@ def _criminalist_to_dict(c: Criminalist) -> dict:
 
 def _criminalist_from_dict(d: dict) -> Criminalist:
     zone_data = d.get("zone", {})
+    # Фаза 40: старые JSON без replacement_ids → пустой список. Значения
+    # чистятся (int/дубли/self/dangling) позже в normalize_replacement_links
+    # (load_criminalists/save_criminalists); здесь — только мягкий парсинг.
+    replacement_ids = parse_replacement_ids(d.get("replacement_ids", []),
+                                            d["id"], None)
     return Criminalist(
         id=d["id"],
         full_name=d["full_name"],
         note=d.get("note", ""),
         is_active=d.get("is_active", True),  # Для обратной совместимости
+        replacement_ids=replacement_ids,
         zone=CriminalistZone(
             criminalist_id=zone_data.get("criminalist_id", d["id"]),
             department_ids=zone_data.get("department_ids", []),
@@ -318,6 +326,9 @@ def load_criminalists() -> List[Criminalist]:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
         criminalists = [_criminalist_from_dict(c) for c in data.get("criminalists", [])]
+        # Фаза 40: чистим/нормализуем связи после загрузки (старые и ручные
+        # JSON, dangling ID, асимметрия, дубли, строковый мусор).
+        normalize_replacement_links(criminalists)
         if not _CRIM_LOAD_LOGGED["done"]:
             print(f"[ZONAL_DATA] Zagruzheno kriminalistov: {len(criminalists)}")
             _CRIM_LOAD_LOGGED["done"] = True
@@ -331,6 +342,9 @@ def save_criminalists(criminalists: List[Criminalist]) -> None:
     """Сохранить список криминалистов"""
     filepath = get_criminalists_file()
     try:
+        # Фаза 40: перед сохранением связи приводятся к инвариантам
+        # (симметрия, отсутствие self/дублей/dangling, сортировка).
+        normalize_replacement_links(criminalists)
         data = {"criminalists": [_criminalist_to_dict(c) for c in criminalists]}
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

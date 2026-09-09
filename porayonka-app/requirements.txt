@@ -1,6 +1,17 @@
 flet==0.23.2
 openpyxl==3.1.5
 
+# ── Фаза 40: печатная PDF-выгрузка зональных ───────────────────────────
+# reportlab 4.4.10 — финальная зрелая ветка 4.x (Python 3.10+; Windows;
+# работает без rl_accel — чистый Python-fallback, важен для Win7-профиля).
+# pillow и charset-normalizer — жёсткие зависимости reportlab 4.4.10
+# (reportlab.lib.utils импортирует PIL безусловно); закреплены для
+# воспроизводимости. Кириллический шрифт — bundled assets/fonts/
+# (DejaVu Sans 2.37 + LICENSE), системные шрифты не требуются.
+reportlab==4.4.10
+pillow==10.4.0
+charset-normalizer==3.4.1
+
 # ── Опционально (раунд 24): только для СБОРКИ дистрибутивов ─────────────
 # В runtime приложение их НЕ требует (guarded import — ui/tray_icon.py).
 # Устанавливаются build-скриптами (build_admin.bat / build_user.bat):

@@ -58,6 +58,11 @@ class Criminalist:
     note: str = ""               # Примечание (например, "Цифровая криминалистика")
     is_active: bool = True       # Участвует в текущем сборе
     zone: CriminalistZone = field(default_factory=lambda: CriminalistZone(criminalist_id=0))
+    # Фаза 40: взаимозаменяемость — неориентированные попарные связи по
+    # стабильным числовым ID (НЕ по ФИО). Симметрия и целостность
+    # поддерживаются core/zonal_replacement.py; здесь хранится плоский
+    # детерминированно упорядоченный список партнёров текущего человека.
+    replacement_ids: List[int] = field(default_factory=list)
 
 
 @dataclass
