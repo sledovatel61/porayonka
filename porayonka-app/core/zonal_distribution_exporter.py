@@ -53,24 +53,31 @@ _TITLE_SIZE = 13.5            # ровно вписывается между п�
 _TITLE_BOTTOM_GAP = 10.0      # зазор после заголовка до сетки
 
 _REPL_HEADING = "Взаимозаменяемость:"
-_REPL_HEADING_SIZE = 12.5
-_REPL_LINE_SIZE = 10.0
-_REPL_LEAD = 13.6
-_REPL_TOP_GAP = 18.0          # отступ блока пар от последней карточки
+_REPL_HEADING_SIZE = 11.5
+_REPL_LINE_SIZE = 9.5
+_REPL_LEAD = 12.2
+_REPL_TOP_GAP = 12.0          # отступ блока пар от последней карточки
 _NO_PAIRS = "Не указана"
 
-_CARD_GAP_X = 14.0
-_CARD_GAP_Y = 12.0
-_CARD_PAD = 7.0
-_HEADER_SIZE = 9.5
-_HEADER_LEAD = 12.6
-_DEPT_SIZE = 9.0
-_DEPT_LEAD = 11.8
-_NOTE_SIZE = 8.0
-_NOTE_LEAD = 10.6
-_BODY_ITEM_GAP = 3.0
-_SEP_BELOW_HEADER = 2.4       # зазор между шапкой и линией-разделителем
-_BODY_ABOVE_SEP = 2.6         # зазор между линией-разделителем и телом
+# ── Компактная геометрия карточек ─────────────────────────────────────────
+# Метрики подобраны так, чтобы ШТАТНЫЙ набор (16 человек в 6 рядах по 3 +
+# блок «Взаимозаменяемость» с парами) гарантированно умещался на ОДНУ
+# страницу A4 portrait (бюджет ≈ 705 pt между заголовком и нижним полем).
+# Проверено измерениями: дефолтные 16 + 8 пар и 16 человек с 4 длинными
+# отделами каждый → 1 страница; читаемость сохранена (шапка 9.2 pt).
+# Нештатно большие наборы не теряют данные и занимают несколько страниц.
+_CARD_GAP_X = 12.0
+_CARD_GAP_Y = 8.0
+_CARD_PAD = 4.0
+_HEADER_SIZE = 9.2
+_HEADER_LEAD = 11.6
+_DEPT_SIZE = 8.6
+_DEPT_LEAD = 10.8
+_NOTE_SIZE = 7.8
+_NOTE_LEAD = 9.8
+_BODY_ITEM_GAP = 2.4
+_SEP_BELOW_HEADER = 1.8       # зазор между шапкой и линией-разделителем
+_BODY_ABOVE_SEP = 2.0         # зазор между линией-разделителем и телом
 _LINE_W = 0.9
 
 _FONT_REG = "PorayonkaDejaVuSans"
@@ -275,12 +282,21 @@ class ZonalDistributionPdfExporter:
 
         content_top = start_page()
         y = content_top
-
         rows = [criminalists[i:i + 3]
                 for i in range(0, len(criminalists), 3)]
         pairs = unique_pairs(criminalists)
+        max_w = _PAGE_W - _MARGIN_L - _MARGIN_R
 
-        # ── Сетка карточек: три в ряд, ряды одной высоты ────────────
+        # ── Подготовка рядов и нижнего блока ДО отрисовки ───────────
+        # Фаза 40 (дополнение, п.5.1): блок «Взаимозаменяемость» измеряется
+        # и РЕЗЕРВИРУЕТСЯ до раскладки карточек. Если штатный набор (все
+        # ряды + отступ + заголовок + строки пар) умещается между заголовком
+        # документа и нижним полем — вывод гарантированно одна страница A4;
+        # карточки в этом режиме никогда не занимают зарезервированный низ.
+        # Нештатно большие наборы идут прежним многостраничным потоком: без
+        # потери записей, заголовок документа повторяется на каждой странице.
+        prepared_rows = []
+        grid_h = 0.0
         for row in rows:
             prepared = []
             for crim in row:
@@ -297,9 +313,26 @@ class ZonalDistributionPdfExporter:
                     "body": body, "body_h": body_h, "card_h": card_h,
                 })
             row_h = max(p["card_h"] for p in prepared)
+            prepared_rows.append((prepared, row_h))
+            grid_h += row_h
+        if prepared_rows:
+            grid_h += _CARD_GAP_Y * (len(prepared_rows) - 1)
 
-            # Ряд не помещается, а страница уже не пустая — новая страница.
-            if y - row_h < _MARGIN_BOTTOM and y < content_top:
+        pairs_h = self._pairs_block_height(pairs)
+        # Одна страница: после последнего ряда (с учётом хвостового зазора)
+        # остаётся место под _REPL_TOP_GAP + весь блок пар до нижнего поля.
+        fits_one_page = bool(prepared_rows) and (
+            content_top - grid_h - _CARD_GAP_Y - _REPL_TOP_GAP - pairs_h
+            >= _MARGIN_BOTTOM - 0.05
+        )
+
+        # ── Сетка карточек: три в ряд, ряды одной высоты ────────────
+        for prepared, row_h in prepared_rows:
+            # Ряд не помещается, а страница уже не пустая — новая страница
+            # (в режиме fits_one_page ряды не могут упереться в низ: место
+            # под блок пар зарезервировано ДО раскладки карточек).
+            if (not fits_one_page and y - row_h < _MARGIN_BOTTOM
+                    and y < content_top):
                 content_top = new_page()
                 y = content_top
 
@@ -311,13 +344,14 @@ class ZonalDistributionPdfExporter:
         # ── Блок взаимозаменяемости ─────────────────────────────────
         block_top = y - _REPL_TOP_GAP
         heading_needs = _REPL_HEADING_SIZE * 1.9 + 4
-        if block_top - heading_needs < _MARGIN_BOTTOM and y < content_top:
+        if (not fits_one_page
+                and block_top - heading_needs < _MARGIN_BOTTOM
+                and y < content_top):
             content_top = new_page()
             y = content_top
             block_top = y - _REPL_TOP_GAP
         y = block_top
 
-        max_w = _PAGE_W - _MARGIN_L - _MARGIN_R
         heading_done = False
 
         def draw_heading() -> None:
@@ -340,7 +374,7 @@ class ZonalDistributionPdfExporter:
                         f"\u2194 {short_full_name(b.full_name)} ({b.id})")
                 lines = _wrap_line(text, _FONT_REG, _REPL_LINE_SIZE, max_w)
                 block_h = len(lines) * _REPL_LEAD + 1.0
-                if y - block_h < _MARGIN_BOTTOM:
+                if (not fits_one_page and y - block_h < _MARGIN_BOTTOM):
                     content_top = new_page()
                     y = content_top
                     heading_done = False
@@ -354,6 +388,24 @@ class ZonalDistributionPdfExporter:
         pages = c.getPageNumber()
         c.save()
         return pages
+
+    def _pairs_block_height(self, pairs) -> float:
+        """Высота блока «Взаимозаменяемость» от его верха (по модели отрисовки).
+
+        Заголовок занимает 1.7*size, каждая строка пары — lead с зазором 1 pt
+        после пары; перенос строк — тем же _wrap_line/шириной, что и при
+        отрисовке, поэтому оценка совпадает с реальным расходом места.
+        """
+        if not pairs:
+            return _REPL_HEADING_SIZE * 1.9 + 4
+        h = _REPL_HEADING_SIZE * 1.7
+        max_w = _PAGE_W - _MARGIN_L - _MARGIN_R
+        for a, b in pairs:
+            text = (f"{short_full_name(a.full_name)} ({a.id}) "
+                    f"\u2194 {short_full_name(b.full_name)} ({b.id})")
+            lines = _wrap_line(text, _FONT_REG, _REPL_LINE_SIZE, max_w)
+            h += len(lines) * _REPL_LEAD + 1.0
+        return h
 
     def _draw_card(self, c, x0: float, y_top: float, row_h: float,
                    p: dict, dept_map: dict) -> None:

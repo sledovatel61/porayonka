@@ -33,6 +33,9 @@ def create_add_criminalist_modal(
     is_edit = criminalist is not None
 
     # Поле ФИО
+    # ВАЖНО (Flet 0.23.2, AGENTS.md): поля лежат в content-Column со
+    # scroll=AUTO — вертикальный expand=True внутри неё запрещён (ломал
+    # layout: поля растягивались, секции уезжали за видимую область).
     name_field = ft.TextField(
         value=criminalist.full_name if is_edit else "",
         label="ФИО криминалиста *",
@@ -43,10 +46,9 @@ def create_add_criminalist_modal(
         bgcolor=COLORS["card"],
         color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-        expand=True,
     )
 
-    # Поле примечания
+    # Поле примечания (см. комментарий выше: без вертикального expand).
     note_field = ft.TextField(
         value=criminalist.note if is_edit else "",
         label="Примечание (например, 'Цифровая криминалистика')",
@@ -57,7 +59,6 @@ def create_add_criminalist_modal(
         bgcolor=COLORS["card"],
         color=COLORS["text"],
         hint_style=ft.TextStyle(color=COLORS["text_muted"]),
-        expand=True,
     )
 
     # ── Выбор отделов (как было) ─────────────────────────────────
@@ -128,8 +129,33 @@ def create_add_criminalist_modal(
         selected_repl = {int(i) for i in (criminalist.replacement_ids or [])
                          if int(i) in known}
 
+    def _local_scrollbar_theme() -> ft.Theme:
+        """Локальная ScrollbarTheme списка взаимозаменяемости (Flet 0.23.2).
+
+        Клиент оборачивает контрол с атрибутом .theme в Theme(...) поверх
+        page-темы (тот же приём, что в ui/controls/controls_tab.py, раунды
+        17/19), поэтому ползунок виден/интерактивен ТОЛЬКО для списка
+        связей — page.theme и другие прокручиваемые списки не затрагиваются.
+        thumb_visibility=True — ползунок виден всегда; interactive=True —
+        его можно перетаскивать мышью; цвет под тёмную палитру модалки.
+        """
+        th = ft.Theme(use_material3=True)
+        th.scrollbar_theme = ft.ScrollbarTheme(
+            thumb_visibility=True,
+            track_visibility=True,
+            interactive=True,
+            thumb_color="#66ffffff",
+            track_color="#14ffffff",
+            thickness=8,
+            radius=4,
+            cross_axis_margin=2,
+        )
+        return th
+
     repl_checkboxes = {}
-    repl_list = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, height=150)
+    # ВАЖНО: ScrollMode.ALWAYS — список всегда bounded со своим scrollbar;
+    # on_scroll НЕ используется (на Flet 0.23.2/Windows риск KeyError: sd/dir).
+    repl_list = ft.Column(spacing=4, scroll=ft.ScrollMode.ALWAYS)
 
     def _build_repl_list():
         repl_list.controls.clear()
@@ -175,20 +201,49 @@ def create_add_criminalist_modal(
     _build_repl_list()
 
     # ── Адаптивная высота: окна приложения бывают разные ─────────
+    # Схема bounded layout для Flet 0.23.2 (см. AGENTS.md):
+    #   * внешняя content-Column имеет ЯВНУЮ высоту _content_h и
+    #     scroll=AUTO — только как страховка на низких окнах;
+    #   * внутри неё НЕТ вертикальных expand-контролов (поля — природной
+    #     высоты ~52 pt, заголовки секций ~40 pt);
+    #   * списки отделов/связей — bounded-Column со своей прокруткой,
+    #     высоты считаются от _content_h за вычетом фиксированной части;
+    #   * на окне ~860 px высотой viewport списка связей ~236 pt (~5 строк
+    #     чекбоксов) — заметно выше прежнего пережатого (~137 pt), при этом
+    #     секции отделов и оба поля видны без прокрутки внешней колонки;
+    #   * на окне ~430 px действует страховка внешнего AUTO-скролла, а оба
+    #     внутренних списка остаются bounded и работоспособными.
     try:
         _win_h = page.window.height or 860
     except Exception:
         _win_h = 860
-    _content_h = max(380, min(620, int(_win_h) - 170))
-    # Фиксированные секции (поля, заголовки, зазоры) ≈ 250 pt → спискам
-    # остаётся _content_h - 250, делим 60/40 между отделами и связями.
-    _avail = _content_h - 250
-    _dept_list_h = max(110, min(240, int(_avail * 0.60)))
-    _repl_list_h = max(90, min(170, _avail - _dept_list_h))
-    if _repl_list_h < 90:
-        _repl_list_h = 90
+    _win_h = int(_win_h)
+
+    _has_repl = bool(repl_others)
+    # Бюджет диалога (эмпирика Flet 0.23.2, pt): заголовок диалога ~64,
+    # кнопки-actions ~60, отступы AlertDialog ~44 → при окне 860 влезает
+    # 640 pt контента; меньше 300 не опускаемся (низкое окно — внешний
+    # AUTO-скролл как страховка).
+    _content_h = max(300, min(640, _win_h - 168))
+    # Фиксированная часть контента: 2 поля (~52×2), заголовки секций с
+    # кнопками «Все/Снять» (~40×2), зазоры 8+8+12(+10), рамки списков
+    # 18×2 (padding 8 + border 1 с каждой стороны).
+    _FIXED = (52 * 2 + 40 * 2 + (8 + 8 + 12 + 10) + 18 * 2) if _has_repl \
+        else (52 * 2 + 40 + (8 + 8 + 12) + 18)
+    _avail = max(0, _content_h - _FIXED)
+    if _has_repl:
+        # Связям — бОльшая доля бюджета: viewport заметно выше прежнего
+        # (было max 150 pt ≈ 2–3 строки) → на типовом окне видно сразу
+        # ~5 строк, до последнего человека легко добраться колесом/мышью.
+        # Отделы остаются bounded рядом и не выталкиваются за зону видимости.
+        _repl_list_h = max(120, min(300, int(_avail * 0.62)))
+        _dept_list_h = max(110, min(260, _avail - _repl_list_h))
+    else:
+        _dept_list_h = max(120, min(320, _avail))
+        _repl_list_h = 0
     dept_list.height = _dept_list_h
-    repl_list.height = _repl_list_h
+    if _has_repl:
+        repl_list.height = _repl_list_h
 
     # Кнопки
     def _close_dialog(e=None):
@@ -304,6 +359,18 @@ def create_add_criminalist_modal(
     ]
 
     if repl_others:
+        # Контейнер списка связей: локальная ScrollbarTheme (видимый
+        # интерактивный ползунок) действует только на поддерево этого
+        # контрола — page.theme не трогается.
+        repl_box = ft.Container(
+            content=repl_list,
+            border=ft.border.all(1, COLORS["border"]),
+            border_radius=8,
+            padding=ft.padding.all(8),
+            bgcolor=COLORS["card"],
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
+        )
+        repl_box.theme = _local_scrollbar_theme()
         content_controls.extend([
             ft.Container(height=10),
             ft.Row(
@@ -333,14 +400,7 @@ def create_add_criminalist_modal(
                 ],
                 spacing=4,
             ),
-            ft.Container(
-                content=repl_list,
-                border=ft.border.all(1, COLORS["border"]),
-                border_radius=8,
-                padding=ft.padding.all(8),
-                bgcolor=COLORS["card"],
-                clip_behavior=ft.ClipBehavior.HARD_EDGE,
-            ),
+            repl_box,
         ])
     else:
         content_controls.append(

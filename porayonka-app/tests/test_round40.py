@@ -64,8 +64,12 @@ from core.zonal_replacement import (  # noqa: E402
     unique_pairs, short_full_name,
 )
 from core.zonal_distribution_exporter import (  # noqa: E402
-    ZonalDistributionPdfExporter, export_pdf_for_web, sanitize_pdf_filename,
-    reserve_unique_pdf_path, asset_download_url, fonts_dir,
+    ZonalDistributionPdfExporter, ZonalPdfError, export_pdf_for_web,
+    sanitize_pdf_filename, reserve_unique_pdf_path, asset_download_url,
+    fonts_dir, _register_fonts,
+)
+from core.zonal_data import (  # noqa: E402
+    get_initial_criminalists, save_criminalists, load_criminalists,
 )
 from core.constants import INITIAL_DEPARTMENTS  # noqa: E402
 from core.zonal_constants import INITIAL_CRIMINALISTS_DATA  # noqa: E402
@@ -539,6 +543,408 @@ def run_pdf_web_helpers():
           and os.path.isfile(os.path.join(fonts_dir(), "LICENSE")))
 
 
+def _all_checkboxes(root):
+    return _find_all(root, lambda c: isinstance(c, ft.Checkbox))
+
+
+def _find_textfield(root, label):
+    return _find(root, lambda c: getattr(c, "label", None) == label)
+
+
+def _dept_header_row(root):
+    """Row-заголовок «Закреплённые отделы: …» (текст-заголовок в Row)."""
+    for row in _find_all(root, lambda c: isinstance(c, ft.Row)):
+        texts = [getattr(c2, "value", None) for c2 in _walk(row)
+                 if isinstance(c2, ft.Text)]
+        if any(t == "Закреплённые отделы:" for t in texts):
+            return row
+    return None
+
+
+def _find_all_container_cols(root, outer=None):
+    """Все bounded-Column внутри обведённых рамкой Container секций.
+
+    Внешняя content-Column модалки (outer) исключается — нам нужны только
+    вложенные прокручиваемые списки отделов и взаимозаменяемости.
+    """
+    cols = []
+    for cont in _find_all(root, lambda c: isinstance(c, ft.Container)
+                          and isinstance(getattr(c, "content", None),
+                                         ft.Column)):
+        col = cont.content
+        if col is outer:
+            continue
+        if col.scroll in (ft.ScrollMode.AUTO, ft.ScrollMode.ALWAYS) \
+                and isinstance(col.height, (int, float)) and col.height > 0:
+            cols.append((cont, col))
+    return cols
+
+
+def _collect_heights(boxes):
+    return [b[1].height for b in boxes]
+
+
+def _fake_click_handler(control):
+    """Прямой вызов on_click-обработчика/button без монтирования."""
+    handler = getattr(control, "on_click", None)
+    if handler is None:
+        return None
+    try:
+        handler(None)
+    except TypeError:
+        handler(_FakeEvent(control))
+    return True
+
+
+def _save_modal_and_check(page, dlg, name, note, dept_ids, repl_ids,
+                          check_name):
+    """Заполнить модалку, нажать «Сохранить» и вернуть имя сохранённого."""
+    nf = _find_textfield(dlg, "ФИО криминалиста *")
+    tf = _find_textfield(dlg, "Примечание (например, 'Цифровая криминалистика')")
+    if nf is None or tf is None:
+        check(check_name, False, extra="поля ФИО/примечание не найдены")
+        return None
+    nf.value = name
+    tf.value = note
+    # отметить нужные отделы/партнёров (остальные не трогаем — они
+    # добавляются к текущему выбору, как в реальном UI)
+    for cb in _all_checkboxes(dlg):
+        lbl = getattr(cb, "label", "") or ""
+        if lbl.startswith("[") and "]" in lbl:
+            try:
+                did = int(lbl[1:lbl.index("]")])
+            except ValueError:
+                continue
+            if did in dept_ids and not cb.value:
+                cb.value = True
+                cb.on_change(_FakeEvent(cb))
+        elif lbl.startswith("(") and ")" in lbl:
+            try:
+                rid = int(lbl[1:lbl.index(")")])
+            except ValueError:
+                continue
+            if rid in repl_ids and not cb.value:
+                cb.value = True
+                cb.on_change(_FakeEvent(cb))
+    save_btn = next((c for c in _find_all(dlg, lambda c: isinstance(
+        c, ft.ElevatedButton))
+        if getattr(c, "text", "") == "Сохранить"), None)
+    if save_btn is None:
+        check(check_name, False, extra="кнопка Сохранить не найдена")
+        return None
+    save_btn.on_click(None)
+    return name
+
+
+def run_modal_layout(add_mode=True):
+    """16. Layout-регрессия модалки add/edit (Flet 0.23.2, bounded layout)."""
+    from ui.zonal.add_criminalist_modal import create_add_criminalist_modal
+    _label = "add " if add_mode else "edit"
+    _page = _WinPage()
+    others = get_initial_criminalists()
+    subject = others[0] if not add_mode else None
+    # связан №1 с №2 — у edit-режима должны быть предвыбраны партнёры
+    if not add_mode:
+        set_replacement_partners(others, subject.id, [2])
+    dlg_kwargs = dict(on_save=lambda *a: None,
+                      other_criminalists=others)
+    if not add_mode:
+        dlg_kwargs["criminalist"] = subject
+        dlg_kwargs["on_delete"] = lambda c: None
+    dlg = create_add_criminalist_modal(page=_page, **dlg_kwargs)
+
+    # ── (а) обязательные пункты 1–10 присутствуют в дереве модалки ────
+    name_f = _find_textfield(dlg, "ФИО криминалиста *")
+    note_f = _find_textfield(dlg, "Примечание (например, 'Цифровая криминалистика')")
+    check(f"modal40[{_label}]: поле ФИО есть", name_f is not None)
+    check(f"modal40[{_label}]: поле Примечание есть", note_f is not None)
+    header_row = _dept_header_row(dlg)
+    check(f"modal40[{_label}]: заголовок «Закреплённые отделы:» виден",
+          header_row is not None)
+    # «Все»/«Снять» — в заголовочном Row секции отделов
+    if header_row is not None:
+        hb = _find_all(header_row, lambda c: isinstance(
+            c, ft.TextButton) and getattr(c, "text", "") in ("Все", "Снять"))
+        check(f"modal40[{_label}]: кнопки Все/Снять отделов в заголовке",
+              len(hb) == 2)
+    repl_text = _find(dlg, lambda c: isinstance(c, ft.Text)
+                      and getattr(c, "value", None) == "Взаимозаменяемость:")
+    repl_hint = _find(dlg, lambda c: isinstance(c, ft.Text)
+                      and getattr(c, "value", None)
+                      == "кто подменяет этого криминалиста")
+    check(f"modal40[{_label}]: заголовок «Взаимозаменяемость:» виден",
+          repl_text is not None)
+    check(f"modal40[{_label}]: подсказка «кто подменяет…» видна",
+          repl_hint is not None)
+    if repl_text is not None:
+        # Row-заголовок секции связей + его кнопки Все/Снять
+        rrow = None
+        for row in _find_all(dlg, lambda c: isinstance(c, ft.Row)):
+            vals = [getattr(c2, "value", None) for c2 in _walk(row)
+                    if isinstance(c2, ft.Text)]
+            if any(v == "Взаимозаменяемость:" for v in vals):
+                rrow = row
+                break
+        rb = _find_all(rrow, lambda c: isinstance(
+            c, ft.TextButton) and getattr(c, "text", "") in ("Все", "Снять"))
+        check(f"modal40[{_label}]: кнопки Все/Снять связей в заголовке",
+              rrow is not None and len(rb) == 2)
+    # действия
+    acts = [getattr(c, "text", "") for c in
+            _find_all(dlg, lambda c: isinstance(
+                c, (ft.TextButton, ft.ElevatedButton)))]
+    want = {"Отмена", "Сохранить"}
+    if not add_mode:
+        want.add("Удалить")
+    check(f"modal40[{_label}]: кнопки действий на месте",
+          want <= set(acts), extra=",".join(sorted(acts)))
+
+    # ── (б) структурные инварианты Flet 0.23.2 ─────────────────────────
+    outer = dlg.content.content
+    check(f"modal40[{_label}]: внешняя content-Column bounded + scroll",
+          isinstance(outer, ft.Column)
+          and outer.scroll in (ft.ScrollMode.AUTO, ft.ScrollMode.ALWAYS)
+          and isinstance(outer.height, (int, float)) and outer.height > 0,
+          extra=f"height={outer.height}")
+    fields_expand = [f for f in (name_f, note_f) if f is not None
+                     and f.expand is not None and f.expand is not False]
+    check(f"modal40[{_label}]: у полей НЕТ вертикального expand",
+          not fields_expand)
+    bad_expand = []
+    for c in outer.controls:
+        if isinstance(c, ft.TextField) and c.expand is not None \
+                and c.expand is not False:
+            bad_expand.append("field")
+        elif isinstance(c, ft.Row) and c.expand is not None \
+                and c.expand is not False:
+            pass  # Row в Column: expand растягивает ПО ГОРИЗОНТАЛИ — запрета нет
+    check(f"modal40[{_label}]: нет вертикальных expand внутри scroll-Column",
+          not bad_expand)
+
+    # ── (в) обе секции — bounded, положительная высота, видны ─────────
+    boxes = _find_all_container_cols(dlg, outer=outer)
+    heights = _collect_heights(boxes)
+    check(f"modal40[{_label}]: ровно 2 bounded-списка (отделы+связи)",
+          len(boxes) == 2, extra=str(heights))
+    # внутренние списки: 29 отделов + (16/15) остальных
+    cb = _all_checkboxes(dlg)
+    n_dept = sum(1 for c in cb if getattr(c, "label", "").startswith("["))
+    n_repl = sum(1 for c in cb if getattr(c, "label", "").startswith("("))
+    check(f"modal40[{_label}]: 29 чекбоксов отделов", n_dept == 29,
+          extra=str(n_dept))
+    expected_repl = (16 if add_mode else 15)
+    check(f"modal40[{_label}]: варианты связей = остальные ({expected_repl})",
+          n_repl == expected_repl, extra=str(n_repl))
+    if add_mode:
+        check(f"modal40[{_label}]: в add нет собственного id",
+              all("(17)" not in (getattr(c, "label", "") or "")
+                  for c in cb))
+    else:
+        check(f"modal40[{_label}]: в edit текущий (№1) исключён",
+              all("(1) " not in (getattr(c, "label", "") or "")
+                  for c in cb)
+              and any("(2) " in (getattr(c, "label", "") or "")
+                      for c in cb))
+    ok_bounded = len(heights) == 2 and all(
+        isinstance(h, (int, float)) and h > 0 for h in heights)
+    check(f"modal40[{_label}]: обе секции имеют положительную ограниченную "
+          f"высоту", ok_bounded, extra=str(heights))
+    # предвыбор партнёра у edit-режима дошёл до чекбокса (id=2 отмечен)
+    if not add_mode:
+        cb2 = next((c for c in cb
+                    if getattr(c, "label", "").startswith("(2) ")), None)
+        check(f"modal40[{_label}]: предвыбранный партнёр №2 отмечен",
+              cb2 is not None and cb2.value is True)
+
+    # ── (г) расчёт высот без заведомого переполнения ───────────────────
+    win_h = int(_page.window.height)
+    if win_h >= 700:
+        # сумма: top-отступ 8 + ФИО + 8 + примечание + 12 + заголовок +
+        # контейнер отделов + 10 + заголовок + контейнер связей
+        est = (8 + 52 + 8 + 52 + 12 + 40 + heights[0] + 18
+               + 10 + 40 + heights[1] + 18)
+        # внешний scroll-Column всё равно bounded; то, что контент
+        # потенциально больше высоты, допустимо (внешний скролл — страховка),
+        # НО огромная неиспользуемая «дыра» недопустима:
+        est_min = 8 + 52 + 8 + 52 + 12 + 40 + 110 + 18 + 10 + 40 + 90 + 18
+        if outer.height > 200:
+            excess = outer.height - min(outer.height, est)
+            check(f"modal40[{_label}]: нет огромной пустой области внизу",
+                  outer.height <= est + 90
+                  or outer.height - est <= 90,
+                  extra=f"content_h={outer.height}, est={est}")
+            _ = est_min
+    # минимальные размеры списков на всех окнах
+    if len(heights) == 2:
+        check(f"modal40[{_label}]: список отделов ≥ 110 pt",
+              heights[0] >= 110, extra=str(heights[0]))
+        check(f"modal40[{_label}]: список связей ≥ 90 pt",
+              heights[1] >= 90, extra=str(heights[1]))
+
+
+def run_modal_layout_add():
+    run_modal_layout(add_mode=True)
+
+
+def run_modal_layout_edit():
+    run_modal_layout(add_mode=False)
+
+
+def run_modal_small_window():
+    """16в. Маленькое окно (720) — bounded без огромной пустой области."""
+    from ui.zonal.add_criminalist_modal import create_add_criminalist_modal
+    _page = _WinPage(height=720)
+    others = get_initial_criminalists()
+    dlg = create_add_criminalist_modal(page=_page,
+                                       on_save=lambda *a: None,
+                                       other_criminalists=others)
+    outer = dlg.content.content
+    boxes = _find_all_container_cols(dlg, outer=outer)
+    heights = _collect_heights(boxes)
+    check("modal40[small]: внешняя высота ограничена окном (≤ 720-100)",
+          outer.height <= 620 and outer.height > 300,
+          extra=f"content_h={outer.height}")
+    check("modal40[small]: обе секции bounded и положительны",
+          len(heights) == 2 and all(
+              isinstance(h, (int, float)) and h >= 90 for h in heights),
+          extra=str(heights))
+    # «дыры» нет: сумма секций+фикс ≥ 0.75 content_h
+    if len(heights) == 2 and isinstance(outer.height, (int, float)):
+        sum_lists = heights[0] + heights[1]
+        fixed = (8 + 52 + 8 + 52 + 12 + 40 + 10 + 40) + 18 * 2
+        est = fixed + sum_lists
+        check("modal40[small]: раскладка заполняет высоту (без дыры > 25%)",
+              outer.height <= est + 90,
+              extra=f"content_h={outer.height}, est={est}")
+
+
+def run_pdf_env_check():
+    """16г. Runtime-проверка зависимости PDF (реальный sys.executable)."""
+    import importlib
+    print(f"[ENV40] sys.executable: {sys.executable}")
+    try:
+        rl = importlib.import_module("reportlab")
+        PIL = importlib.import_module("PIL")
+        print(f"[ENV40] reportlab {rl.Version}; Pillow {PIL.__version__}")
+    except Exception as ex:
+        check("env40: reportlab/Pillow импортируются", False, extra=str(ex))
+        return
+    check("env40: reportlab импортируется", True)
+    check("env40: Pillow импортируется", True)
+    # версии совпадают с пинами requirements
+    check("env40: reportlab == 4.4.10", rl.Version == "4.4.10",
+          extra=rl.Version)
+    check("env40: Pillow == 10.4.0", PIL.__version__ == "10.4.0",
+          extra=PIL.__version__)
+    # формируем НАСТОЯЩИЙ PDF с кириллицей в temp
+    path, pages = export_to([mk_crim(1, "Кириллица Проверка", depts=[1]),
+                             mk_crim(2, "Второй Человек", depts=[2])],
+                            tag="pdf_env")
+    check("env40: реальный PDF создан (1 страница)", pages == 1,
+          extra=str(pages))
+    check("env40: файл существует и не пуст",
+          os.path.exists(path) and os.path.getsize(path) > 20000)
+    txt = extract_pdf_text(path)
+    check("env40: PDF содержит кириллицу/районы",
+          "Кириллица Проверка" in txt and "Второй Человек" in txt)
+
+
+def run_modal_persistence():
+    """16д. Persistence: модалка→модель→JSON→повторное открытие (add+edit)."""
+    from ui.zonal.add_criminalist_modal import create_add_criminalist_modal
+
+    # ── (а) добавление через РЕАЛЬНЫЕ обработчики модалки ───────────────
+    others = get_initial_criminalists()
+    page = _WinPage()
+    saved = {}
+    dlg_add = create_add_criminalist_modal(
+        page=page, criminalist=None,
+        on_save=lambda name, note, dep, rep: saved.update(
+            name=name, note=note, dep=dep, rep=rep),
+        other_criminalists=others)
+    _save_modal_and_check(page, dlg_add, "Тест Добавление",
+                          "Заметка добавления", [2, 5], [3], "persist40: add")
+    check("persist40: колбэк add получил районы [2, 5]", saved.get("dep") == [2, 5],
+          extra=str(saved.get("dep")))
+    check("persist40: колбэк add получил партнёра [3]", saved.get("rep") == [3],
+          extra=str(saved.get("rep")))
+    # теперь тот же путь, что в zonal_tab._on_add_criminalist: модель+JSON
+    new = Criminalist(id=17, full_name=saved.get("name", "?"),
+                      note=saved.get("note", ""), is_active=True,
+                      zone=CriminalistZone(17, saved.get("dep", [])))
+    others.append(new)
+    set_replacement_partners(others, 17, saved.get("rep", []))
+    save_criminalists(others)
+    p17 = next(c for c in others if c.id == 17)
+    partner3 = next(c for c in others if c.id == 3)
+    check("persist40: у нового района [2, 5] и партнёр [3]",
+          p17.zone.department_ids == [2, 5] and p17.replacement_ids == [3])
+    check("persist40: связь 17↔3 симметрична", 17 in partner3.replacement_ids)
+    jpath = os.path.join(_APPDATA, "porayonka", "zonal_criminalists.json")
+    check("persist40: JSON записан после save_criminalists",
+          os.path.exists(jpath))
+    if os.path.exists(jpath):
+        with open(jpath, encoding="utf-8") as f:
+            j = json.load(f)
+        c17 = next((c for c in j.get("criminalists", [])
+                    if c.get("id") == 17), None)
+        check("persist40: JSON содержит районы/связь (после normalize)",
+              c17 is not None
+              and sorted(c17["zone"]["department_ids"]) == [2, 5]
+              and sorted(c17.get("replacement_ids", [])) == [3])
+
+    # ── (б) повторное открытие: выбранное отмечено ──────────────────────
+    # «после перезапуска»: файл перечитан (новые объекты) + добавлен №17
+    reloaded = load_criminalists()
+    if not any(c.id == 17 for c in reloaded):
+        reloaded.append(p17)
+    dlg_re = create_add_criminalist_modal(page=_WinPage(), criminalist=p17,
+                                          on_save=lambda *a: None,
+                                          on_delete=lambda c: None,
+                                          other_criminalists=reloaded)
+    cb_dep = {getattr(c, "label", ""): c for c in _all_checkboxes(dlg_re)}
+    cb2 = next((cb for lbl, cb in cb_dep.items() if lbl.startswith("[2] ")),
+               None)
+    cb5 = next((cb for lbl, cb in cb_dep.items() if lbl.startswith("[5] ")),
+               None)
+    cb3 = next((cb for lbl, cb in cb_dep.items() if lbl.startswith("(3) ")),
+               None)
+    check("persist40: повторное открытие — районы 2,5 отмечены",
+          cb2 is not None and cb2.value is True
+          and cb5 is not None and cb5.value is True)
+    check("persist40: повторное открытие — партнёр 3 отмечен",
+          cb3 is not None and cb3.value is True)
+    own_present = any(lbl.startswith("(17)") for lbl in cb_dep)
+    check("persist40: сам редактируемый (17) не в списке вариантов",
+          not own_present)
+
+    # ── (в) редактирование: снять партнёра — связь исчезает с обеих ────
+    dlg_edit = create_add_criminalist_modal(
+        page=_WinPage(), criminalist=p17,
+        on_save=lambda name, note, dep, rep: saved.update(
+            name=name, note=note, dep=dep, rep=rep),
+        on_delete=lambda c: None,
+        other_criminalists=reloaded)
+    for cb in _all_checkboxes(dlg_edit):
+        if getattr(cb, "label", "").startswith("(3) ") and cb.value:
+            cb.value = False
+            cb.on_change(_FakeEvent(cb))
+    save_btn = next((c for c in _find_all(dlg_edit, lambda c: isinstance(
+        c, ft.ElevatedButton))
+        if getattr(c, "text", "") == "Сохранить"), None)
+    save_btn.on_click(None)
+    check("persist40: edit-колбэк отдал rep=[]", saved.get("rep") == [],
+          extra=str(saved.get("rep")))
+    # снятие через set_replacement_partners убирает обе стороны
+    p17.replacement_ids = saved.get("rep", [])
+    others = reloaded
+    p17c = next(c for c in others if c.id == 17)
+    set_replacement_partners(others, p17c.id, p17.replacement_ids)
+    partner3b = next(c for c in others if c.id == 3)
+    check("persist40: снятие удалило связь с обеих сторон",
+          p17c.replacement_ids == [] and 17 not in partner3b.replacement_ids)
+
+
 # ── UI-слой: настоящие обработчики вкладки (PageStub + временные env) ───
 def _walk(obj):
     """Обойти дерево Flet-контролов (controls/content/actions/overlay)."""
@@ -573,6 +979,26 @@ class _FakeEvent:
         self.data = None
         self.x = 5.0
         self.y = 5.0
+
+
+class _WinPage:
+    """Минимальная desktop-страница для сборки модалок (без web-атрибутов)."""
+
+    def __init__(self, height=860):
+        self.width = 1280
+        self.height = height
+        self.web = False
+        self.window = type("_Win", (), {"height": height, "width": 1280})()
+        self.overlay = []
+        self.snack_bar = None
+        self.on_resize = None
+
+    def update(self):
+        pass
+
+    def open(self, dlg):
+        if dlg not in self.overlay:
+            self.overlay.append(dlg)
 
 
 class _WebPage:
@@ -763,6 +1189,14 @@ def run_static_invariants():
             content = f.read()
         check(f"static40: {fname} пинит reportlab==4.4.10",
               req in content and "pillow==10.4.0" in content)
+    # сообщение о недостающем компоненте PDF в обработчике ошибки
+    tab_src = open(os.path.join(_APP_DIR, "ui", "zonal", "zonal_tab.py"),
+                   encoding="utf-8").read()
+    check("static40: toast PDF объясняет отсутствие ReportLab/Pillow",
+          "Отсутствует компонент PDF" in tab_src
+          and "_pdf_failure_toast" in tab_src)
+    check("static40: исключение PDF пишется ASCII-safe (ascii())",
+          "ascii(ex)" in tab_src or "ascii(e)" in tab_src)
     # assets/fonts в каждом spec (6 файлов сборки)
     specs = [f for f in os.listdir(_APP_DIR) if f.endswith(".spec")]
     for spec in specs:
@@ -811,6 +1245,441 @@ def run_static_invariants():
           "import flet" not in exp_src and "from flet" not in exp_src)
 
 
+# ────────────────────────────────────────────────────────────────────────
+# Дополнение фазы 40 (PROMPT_зональные_доработка_фаза40.md, §6): группы 17+
+# ────────────────────────────────────────────────────────────────────────
+def _default_crims():
+    """Актуальный штатный набор приложения (16 дефолтных)."""
+    return [Criminalist(id=d["id"], full_name=d["full_name"], note=d["note"],
+                        is_active=d.get("is_active", True),
+                        zone=CriminalistZone(criminalist_id=d["id"],
+                                             department_ids=list(d["department_ids"])))
+            for d in INITIAL_CRIMINALISTS_DATA]
+
+
+def _crim_by_id(crims, cid):
+    return next(c for c in crims if c.id == cid)
+
+
+def _save_load(crims):
+    """save_criminalists + load_criminalists (JSON round-trip как в UI)."""
+    save_criminalists(crims)
+    return load_criminalists()
+
+
+def run_suppl_symmetry():
+    """17. Дополнение §6.1: полные сценарии симметрии связей с save/load."""
+    # ── (1) A↔B через «редактирование A»: обе стороны содержат друг друга
+    crims = _default_crims()
+    a, b = _crim_by_id(crims, 1), _crim_by_id(crims, 2)
+    set_replacement_partners(crims, a.id, [b.id])
+    check("suppl40: (1) A↔B — обе стороны содержат друг друга",
+          b.id in a.replacement_ids and a.id in b.replacement_ids,
+          extra=f"a={list(a.replacement_ids)} b={list(b.replacement_ids)}")
+    reloaded = _save_load(crims)
+    ra, rb = _crim_by_id(reloaded, 1), _crim_by_id(reloaded, 2)
+    check("suppl40: (1) A↔B переживает save/load JSON",
+          rb.id in ra.replacement_ids and ra.id in rb.replacement_ids)
+    # неориентированность не зависит от порядка карточек: редактирование B
+    # с тем же партнёром даёт тот же результат
+    set_replacement_partners(reloaded, rb.id, [ra.id])
+    check("suppl40: (1) редактирование B даёт ту же пару",
+          ra.id in rb.replacement_ids and rb.id in ra.replacement_ids)
+
+    # ── (2) снять B у A — ссылка удалена у ОБЕИХ сторон
+    crims = _default_crims()
+    a, b = _crim_by_id(crims, 1), _crim_by_id(crims, 2)
+    set_replacement_partners(crims, a.id, [b.id])
+    set_replacement_partners(crims, a.id, [])      # редактирование A: сняли B
+    check("suppl40: (2) снятие B у A удалило ссылку у обеих сторон",
+          not a.replacement_ids and not b.replacement_ids,
+          extra=f"a={list(a.replacement_ids)} b={list(b.replacement_ids)}")
+    reloaded = _save_load(crims)
+    ra, rb = _crim_by_id(reloaded, 1), _crim_by_id(reloaded, 2)
+    check("suppl40: (2) после save/load связи не вернулись",
+          not ra.replacement_ids and not rb.replacement_ids)
+
+    # ── (3) новый C с выбранным A: симметрия сразу и после save/load
+    crims = _default_crims()
+    crims.append(Criminalist(id=17, full_name="Новиков Новый ФазаСорок",
+                             note="", is_active=True,
+                             zone=CriminalistZone(17, [2])))
+    set_replacement_partners(crims, 17, [1])
+    c17, r1 = _crim_by_id(crims, 17), _crim_by_id(crims, 1)
+    check("suppl40: (3) новый C↔A — симметрия сразу",
+          1 in c17.replacement_ids and 17 in r1.replacement_ids)
+    reloaded = _save_load(crims)
+    rc17, rr1 = _crim_by_id(reloaded, 17), _crim_by_id(reloaded, 1)
+    check("suppl40: (3) C↔A переживает save/load JSON",
+          rr1.id in rc17.replacement_ids
+          and rc17.id in rr1.replacement_ids)
+
+    # ── (4) удалить A: его ID отсутствует у всех после save/load
+    crims = _default_crims()
+    set_replacement_partners(crims, 1, [2, 3])
+    remove_criminalist_links(crims, 1)
+    crims = [c for c in crims if c.id != 1]
+    reloaded = _save_load(crims)
+    refs = [c.replacement_ids for c in reloaded]
+    check("suppl40: (4) после удаления A его ID нет ни у кого",
+          all(1 not in (ids or []) for ids in refs)
+          and all(c.id != 1 for c in reloaded))
+    check("suppl40: (4) удалённый A отсутствует в JSON (15 человек)",
+          len(reloaded) == 15)
+    # после удаления A пара 2↔3, созданная через A, не «повисла»
+    r2, r3 = _crim_by_id(reloaded, 2), _crim_by_id(reloaded, 3)
+    check("suppl40: (4) пара 2↔3 не создалась из удалённого A",
+          not r2.replacement_ids and not r3.replacement_ids)
+
+    # ── (5) unique_pairs: одно-/двустороннее представление — та же пара
+    order = [mk_crim(1, "Агеев Олег Владимирович", depts=[1]),
+             mk_crim(2, "Грубников Георгий Григорьевич", depts=[1]),
+             mk_crim(3, "Смирнов Сергей Сергеевич", depts=[1])]
+    variants = {}
+    v1 = [mk_crim(x.id, x.full_name, depts=[1]) for x in order]
+    set_replacement_partners(v1, 1, [2])             # двусторонняя 1↔2
+    variants["both"] = list(unique_pairs(v1))
+    v2 = [mk_crim(x.id, x.full_name, depts=[1]) for x in order]
+    v2[0].replacement_ids = [2]                      # «односторонняя» A→B
+    v2[1].replacement_ids = []
+    variants["a_to_b"] = list(unique_pairs(v2))
+    v3 = [mk_crim(x.id, x.full_name, depts=[1]) for x in order]
+    v3[0].replacement_ids = []
+    v3[1].replacement_ids = [1]                      # «односторонняя» B→A
+    variants["b_to_a"] = list(unique_pairs(v3))
+    ok_keys = all([(p[0].id, p[1].id) for p in variants[k]] == [(1, 2)]
+                  for k in variants)
+    check("suppl40: (5) unique_pairs: 1 пара (1,2) во всех представлениях",
+          ok_keys,
+          extra=str({k: [(p[0].id, p[1].id) for p in v]
+                     for k, v in variants.items()}))
+    normalize_replacement_links(v2)
+    check("suppl40: (5) нормализация однонаправленного входа не меняет пару",
+          [(p[0].id, p[1].id) for p in unique_pairs(v2)] == [(1, 2)]
+          and 1 in v2[1].replacement_ids and 2 in v2[0].replacement_ids)
+
+    # ── (6) две разные пары не склеиваются; self/dangling не в результате
+    crims = [mk_crim(1, "Один Один Один", depts=[1]),
+             mk_crim(2, "Два Два Два", depts=[1]),
+             mk_crim(3, "Три Три Три", depts=[1]),
+             mk_crim(4, "Четыре Четыре Четыре", depts=[1])]
+    set_replacement_partners(crims, 1, [2])
+    set_replacement_partners(crims, 3, [4])
+    # ручной «мусор»: self-link у №1 и ссылка на отсутствующего (99)
+    crims[0].replacement_ids = [1, 2, 99]
+    pairs = unique_pairs(crims)
+    ids = [(p[0].id, p[1].id) for p in pairs]
+    check("suppl40: (6) ровно 2 пары, без склейки/self/dangling",
+          sorted(ids) == [(1, 2), (3, 4)], extra=str(ids))
+
+
+def _has_on_scroll_cb(control):
+    """Есть ли у контрола ПОДПИСАННЫЙ on_scroll-обработчик.
+
+    У Row/Column (ScrollableControl) атрибут on_scroll всегда содержит
+    объект EventHandler; «использование on_scroll» = наличие подписки
+    (count > 0) — как в реальном Flet 0.23.2.
+    """
+    v = getattr(control, "on_scroll", None)
+    if v is None:
+        return False
+    count = getattr(v, "count", None)
+    if count is not None:
+        try:
+            return count() > 0 if callable(count) else count > 0
+        except TypeError:
+            return bool(count)
+    return bool(v)
+
+
+def _vertical_expand_violations(root):
+    """Контролы с вертикальным expand=True внутри scroll-колонки.
+
+    expand допустим только у ПРЯМЫХ детей Row (там он горизонтальный).
+    Всё остальное под внешней Column(scroll=AUTO) — запрещённое
+    вертикальное растяжение (Flet 0.23.2 ломает bounded layout).
+    """
+    bad = []
+
+    def walk(node, parent_is_row):
+        if getattr(node, "expand", None) is True and not parent_is_row:
+            bad.append(node)
+        children = []
+        for attr in ("controls", "actions", "title", "content"):
+            v = getattr(node, attr, None)
+            if isinstance(v, (list, tuple)):
+                children.extend(v)
+            elif (v is not None
+                  and not isinstance(v, (str, int, float, bool, dict))):
+                children.append(v)
+        for ch in children:
+            walk(ch, parent_is_row=isinstance(node, ft.Row))
+
+    walk(root, False)
+    return bad
+
+
+def run_suppl_modal():
+    """17б. Дополнение §6.2: модалка на реальном дереве контролов.
+
+    Окна 430 и 860: bounded-списки, ScrollMode.ALWAYS у списка связей,
+    локальная ScrollbarTheme с видимым интерактивным ползунком, без
+    on_scroll и без вертикальных expand; последний вариант выбирается
+    реальным on_change и доходит до on_save.
+    """
+    from ui.zonal.add_criminalist_modal import create_add_criminalist_modal
+    others = _default_crims()
+    for win_h in (430, 860):
+        _page = _WinPage(height=win_h)
+        saved = []
+        dlg = create_add_criminalist_modal(
+            page=_page, on_save=lambda *a: saved.append(a),
+            other_criminalists=others)
+        tag = f"h{win_h}"
+        outer = dlg.content.content
+
+        # внешняя bounded-колонка со scroll (страховка), внутри — без
+        # запрещённых вертикальных expand и без on_scroll
+        check(f"suppl40[{tag}]: внешняя колонка bounded + scroll",
+              isinstance(outer, ft.Column) and outer.height is not None
+              and outer.height > 0
+              and outer.scroll == ft.ScrollMode.AUTO,
+              extra=f"h={outer.height}")
+        check(f"suppl40[{tag}]: внешняя высота не превышает окно",
+              outer.height <= win_h, extra=str(outer.height))
+        check(f"suppl40[{tag}]: нет on_scroll ни у одного контрола",
+              all(not _has_on_scroll_cb(c) for c in _walk(dlg)))
+        violations = _vertical_expand_violations(outer)
+        check(f"suppl40[{tag}]: нет вертикальных expand в scroll-колонке",
+              not violations,
+              extra=",".join(type(v).__name__ for v in violations[:3]))
+
+        # две секции: bounded положительные высоты; связи = ALWAYS, отделы = AUTO
+        boxes = _find_all_container_cols(dlg, outer=outer)
+        check(f"suppl40[{tag}]: ровно 2 bounded-списка",
+              len(boxes) == 2,
+              extra=str([b[1].height for b in boxes]))
+        repl_boxes = [(cont, col) for cont, col in boxes
+                      if col.scroll == ft.ScrollMode.ALWAYS]
+        dept_boxes = [(cont, col) for cont, col in boxes
+                      if col.scroll == ft.ScrollMode.AUTO]
+        check(f"suppl40[{tag}]: список связей — ScrollMode.ALWAYS",
+              len(repl_boxes) == 1)
+        check(f"suppl40[{tag}]: список отделов — bounded AUTO",
+              len(dept_boxes) == 1)
+        repl_h = repl_boxes[0][1].height if repl_boxes else 0
+        dept_h = dept_boxes[0][1].height if dept_boxes else 0
+        check(f"suppl40[{tag}]: связь: bounded положительная высота",
+              isinstance(repl_h, (int, float)) and repl_h > 0,
+              extra=str(repl_h))
+        check(f"suppl40[{tag}]: отделы: bounded положительная высота",
+              isinstance(dept_h, (int, float)) and dept_h > 0,
+              extra=str(dept_h))
+
+        # локальная ScrollbarTheme на контейнере списка связей
+        theme = repl_boxes[0][0].theme if repl_boxes else None
+        sbt = theme.scrollbar_theme if isinstance(theme, ft.Theme) else None
+        check(f"suppl40[{tag}]: локальная тема на контейнере связей",
+              isinstance(theme, ft.Theme)
+              and isinstance(sbt, ft.ScrollbarTheme))
+        check(f"suppl40[{tag}]: thumb видимый и ползунок интерактивный",
+              isinstance(sbt, ft.ScrollbarTheme)
+              and sbt.thumb_visibility is True
+              and sbt.interactive is True
+              and (sbt.thickness or 0) > 0
+              and (sbt.thumb_color or "") != "",
+              extra=str(sbt.thumb_visibility) + "/"
+              + str(sbt.interactive))
+        check(f"suppl40[{tag}]: страница НЕ тронута (тема локальна)",
+              getattr(_page, "theme", None) is None)
+
+        # обе секции доступны + 2 TextField + кнопки действий
+        check(f"suppl40[{tag}]: поля ФИО/примечание доступны",
+              _find_textfield(dlg, "ФИО криминалиста *") is not None
+              and _find_textfield(dlg, "Примечание (например, 'Цифровая "
+                                       "криминалистика')") is not None)
+        check(f"suppl40[{tag}]: заголовки обеих секций на месте",
+              _find(dlg, lambda c: isinstance(c, ft.Text)
+                    and getattr(c, "value", None)
+                    == "Закреплённые отделы:") is not None
+              and _find(dlg, lambda c: isinstance(c, ft.Text)
+                        and getattr(c, "value", None)
+                        == "Взаимозаменяемость:") is not None)
+        acts = {getattr(c, "text", "") for c in _find_all(
+            dlg, lambda c: isinstance(c, (ft.TextButton, ft.ElevatedButton)))}
+        check(f"suppl40[{tag}]: кнопки Отмена/Сохранить на месте",
+              {"Отмена", "Сохранить"} <= acts)
+        # список из 29 отделов полностью в дереве
+        cb = _all_checkboxes(dlg)
+        n_dept = sum(1 for c in cb if getattr(c, "label", "").startswith("["))
+        n_repl = sum(1 for c in cb if getattr(c, "label", "").startswith("("))
+        check(f"suppl40[{tag}]: 29 отделов + 16 вариантов в списках",
+              n_dept == 29 and n_repl == 16,
+              extra=f"{n_dept}/{n_repl}")
+
+        if win_h == 860:
+            # новый viewport списка связей заметно выше прежнего тесного
+            # (было ≤150 pt ≈ 2–3 строки; теперь ~236 pt ≈ 5 строк)
+            check("suppl40[h860]: список связей ≥ 200 pt (был ~137)",
+                  repl_h >= 200, extra=str(repl_h))
+            check("suppl40[h860]: список связей выше деп. списка-компаньона",
+                  repl_h >= dept_h, extra=f"repl={repl_h} dept={dept_h}")
+
+        # последний вариант (16) отмечен РЕАЛЬНЫМ on_change и доходит до
+        # on_save (четырёхаргументный: full_name, note, depts, repl)
+        if win_h == 860:
+            last_cb = next((c for c in cb
+                            if getattr(c, "label", "").startswith("(16) ")),
+                           None)
+            check("suppl40[h860]: последний человек (16) в списке",
+                  last_cb is not None)
+            if last_cb is not None:
+                name_f = _find_textfield(dlg, "ФИО криминалиста *")
+                if name_f is not None:
+                    name_f.value = "Выбор Последнего Тест"
+                last_cb.value = True
+                last_cb.on_change(_FakeEvent(last_cb))
+                save_btn = next((c for c in _find_all(
+                    dlg, lambda c: isinstance(c, ft.ElevatedButton))
+                    if getattr(c, "text", "") == "Сохранить"), None)
+                save_btn.on_click(None)
+                got = saved[-1] if saved else None
+                check("suppl40[h860]: on_save получил replacement_ids=[16]",
+                      got is not None and got[3] == [16],
+                      extra=str(got[3] if got else None))
+
+
+def run_suppl_pdf():
+    """17в. Дополнение §6.3: реальный PDF штатного набора — 1 страница A4.
+
+    Полный текстовый состав, число «↔» == числу пар, направление входной
+    связи не влияет на строки, oversized — без потерь на доп. страницах,
+    длинные строки после удаления переносов не теряют символы.
+    """
+    base = _default_crims()
+
+    # ── штатный набор без пар ─────────────────────────────────────
+    path, pages = export_to(base, tag="suppl_pdf_std")
+    check("suppl40: штатный набор — ровно 1 страница A4",
+          pages == 1, extra=str(pages))
+    with open(path, "rb") as f:
+        raw = f.read()
+    m = re.search(rb"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]", raw)
+    ok_a4 = m is not None and abs(float(m.group(1)) - 595.2756) < 0.5 \
+        and abs(float(m.group(2)) - 841.8898) < 0.5
+    check("suppl40: MediaBox A4 portrait",
+          ok_a4, extra=m.group(0).decode()[:40] if m else "no MediaBox")
+    rm = re.search(rb"/Rotate\s+(\d+)", raw)
+    check("suppl40: поворот страницы 0 (портрет при открытии/печати)",
+          rm is None or int(rm.group(1)) == 0,
+          extra=rm.group(0).decode() if rm else "нет /Rotate")
+    text = extract_pdf_text(path)
+    check("suppl40: точный заголовок присутствует ровно один раз",
+          text.count("Зональный принцип распределения отдела "
+                     "криминалистики") == 1)
+    missing = [i for i in range(1, 17) if f"({i})" not in text]
+    check("suppl40: все (N) ФИО штатного набора на месте", not missing,
+          extra=f"нет: {missing[:5]}")
+    words = set()
+    for d in INITIAL_CRIMINALISTS_DATA:
+        words.update(w for w in d["full_name"].split() if w)
+    miss_w = [w for w in words if w not in text]
+    check("suppl40: ФИО-токены не потеряны", not miss_w,
+          extra=",".join(miss_w[:3]))
+    check("suppl40: блок пар и «Не указана» (штатно пар нет)",
+          "Взаимозаменяемость:" in text and "Не указана" in text)
+    check("suppl40: без пар нет ни одной «↔»", "\u2194" not in text)
+
+    # ── штатный набор + 8 пар: та же 1 страница, «↔» == 8 ─────────
+    paired = _default_crims()
+    for x, y in [(1, 2), (3, 4), (5, 6), (7, 8),
+                 (9, 10), (11, 12), (13, 14), (15, 16)]:
+        set_replacement_partners(paired, x, [y])
+    path2, pages2 = export_to(paired, tag="suppl_pdf_pairs8")
+    text2 = extract_pdf_text(path2)
+    check("suppl40: штатные 16 + 8 пар — тоже 1 страница",
+          pages2 == 1, extra=str(pages2))
+    check("suppl40: число «↔» == числу уникальных пар (8)",
+          text2.count("\u2194") == 8, extra=str(text2.count("\u2194")))
+    check("suppl40: блок пар на той же странице, что и карточки",
+          "Взаимозаменяемость:" in text2)
+
+    # ── направление входной связи не меняет строки пар ────────────
+    names = {1: "Агеев Олег Владимирович", 2: "Грубников Георгий Григорьевич",
+             3: "Смирнов Сергей Сергеевич"}
+    lines_of = {}
+    for direction in ("a_to_b", "b_to_a", "both"):
+        crims = [mk_crim(i, names[i], depts=[1]) for i in (1, 2, 3)]
+        if direction == "a_to_b":
+            crims[0].replacement_ids = [2]
+        elif direction == "b_to_a":
+            crims[1].replacement_ids = [1]
+        else:
+            set_replacement_partners(crims, 1, [2])
+        p, _pg = export_to(crims, tag=f"suppl_dir_{direction}")
+        lines_of[direction] = sorted(
+            ln for ln in extract_pdf_text(p).split("\n") if "\u2194" in ln)
+    check("suppl40: направления a→b / b→a / обе дают одинаковые строки пар",
+          lines_of["a_to_b"] == lines_of["b_to_a"] == lines_of["both"],
+          extra=" | ".join(lines_of["both"]))
+    # …и после нормализации «одностороннего» входа строки те же
+    crims = [mk_crim(i, names[i], depts=[1]) for i in (1, 2, 3)]
+    crims[0].replacement_ids = [2]
+    normalize_replacement_links(crims)
+    p, _pg = export_to(crims, tag="suppl_dir_norm")
+    norm_lines = sorted(ln for ln in extract_pdf_text(p).split("\n")
+                        if "\u2194" in ln)
+    check("suppl40: после normalize строки пар не меняются",
+          norm_lines == lines_of["both"])
+
+    # ── само-ссылки и dangling не печатаются в PDF ─────────────────
+    crims = [mk_crim(1, "Один Один Один", depts=[1]),
+             mk_crim(2, "Два Два Два", depts=[1]),
+             mk_crim(3, "Три Три Три", depts=[1]),
+             mk_crim(4, "Четыре Четыре Четыре", depts=[1])]
+    set_replacement_partners(crims, 1, [2])
+    set_replacement_partners(crims, 3, [4])
+    crims[0].replacement_ids = [1, 2, 99]     # ручной мусор: self + dangling
+    p, _pg = export_to(crims, tag="suppl_self")
+    t = extract_pdf_text(p)
+    check("suppl40: self/dangling не печатаются (2 пары, 2 стрелки)",
+          t.count("\u2194") == 2)
+
+    # ── большой синтетический набор: без потерь, доп. страницы ────
+    big = []
+    for i in range(1, 51):
+        big.append(mk_crim(i, f"Многоплаговый Синтетический{i}",
+                           note=("Специализация номер %d: длинное примечание "
+                                 "для проверки переноса строк" % i),
+                           active=(i % 9 != 0),
+                           depts=list(range(1, (i % 7) + 2))))
+    for x, y in [(1, 2), (10, 11), (25, 26), (49, 50)]:
+        set_replacement_partners(big, x, [y])
+    pbig, pbig_pages = export_to(big, tag="suppl_big50")
+    big_text = extract_pdf_text(pbig)
+    missing = [i for i in range(1, 51)
+               if f"({i})" not in big_text or f"Синтетический{i}" not in big_text]
+    check("suppl40: 50 человек — все на месте (доп. страницы допустимы)",
+          pbig_pages > 1 and not missing,
+          extra=f"страниц={pbig_pages}, нет: {missing[:5]}")
+    check("suppl40: 50 человек: 4 пары напечатаны по разу",
+          big_text.count("\u2194") == 4,
+          extra=str(big_text.count("\u2194")))
+    check("suppl40: заголовок повторён на каждой странице",
+          all("Зональный принцип распределения" in pt
+              for pt in extract_pdf_pages(pbig)))
+
+    # ── длинная строка: удаление переносов не теряет символы ──────
+    long_note = ("Экстремальнодлинная-строка-без-пробелов-" * 6).rstrip("-")
+    crims = [mk_crim(1, "Длинная Строка Тест", note=long_note, depts=[1])]
+    p, _pg = export_to(crims, tag="suppl_longnote")
+    t = extract_pdf_text(p).replace("\n", "").replace(" ", "")
+    check("suppl40: длинная строка без пробелов цела после переносов",
+          long_note.replace("-", "") in t
+          or long_note in t,
+          extra=f"len(t)={len(t)}, need={len(long_note)}")
+
+
 def main():
     groups = (
         ("1. replacement: parse_replacement_ids", run_logic_parse),
@@ -829,6 +1698,17 @@ def main():
         ("14. Web: helpers выгрузки", run_pdf_web_helpers),
         ("15. UI: вкладка + add/edit/delete + web-экспорт", run_ui_flows),
         ("15б. Static: упаковка/инварианты", run_static_invariants),
+        ("16. Модалка add: layout-регрессия", run_modal_layout_add),
+        ("16б. Модалка edit: layout-регрессия", run_modal_layout_edit),
+        ("16в. Модалка: маленькое окно (720)", run_modal_small_window),
+        ("16г. Runtime: окружение PDF (sys.executable)", run_pdf_env_check),
+        ("16д. Модалка: persistence add/edit", run_modal_persistence),
+        ("17. Дополнение §6.1: симметрия-сценарии с save/load",
+         run_suppl_symmetry),
+        ("17б. Дополнение §6.2: модалка 430/860 + scrollbar + on_save",
+         run_suppl_modal),
+        ("17в. Дополнение §6.3: PDF штатного набора — 1 страница A4",
+         run_suppl_pdf),
     )
     for title, fn in groups:
         print("\n" + "=" * 72)

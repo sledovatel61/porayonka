@@ -945,10 +945,35 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
     page._zonal_pdf_state = {"path": None, "url": None}
 
     def _write_pdf_to(path: str) -> None:
-        """Синхронная генерация PDF в указанный файл (ядро без UI)."""
+        """Синхронная генерация PDF в указанный файл (ядро без UI).
+
+        Импорт экспортёра — ленивый: отсутствие reportlab/Pillow в окружении
+        НЕ ломает запуск вкладки, а даёт понятную ошибку в момент выгрузки
+        (обрабатывается в _pdf_failure_toast).
+        """
         from core.zonal_distribution_exporter import ZonalDistributionPdfExporter
         ZonalDistributionPdfExporter().export(collection.criminalists,
                                               dept_map, path)
+
+    def _pdf_failure_toast(ex: Exception, fallback: str) -> None:
+        """Toast по типу сбоя PDF; полный exception — только ASCII-safe print.
+
+        Пользователю никогда не показываем traceback: если отсутствует
+        reportlab/Pillow — сообщаем про недостающий компонент PDF.
+        """
+        print("[ZONAL_TAB] PDF export error (ascii): %s" % (ascii(ex),))
+        msg = fallback
+        name = type(ex).__name__
+        text = str(ex)
+        low = (name + " " + text).lower()
+        if name in ("ModuleNotFoundError", "ImportError") and (
+                "reportlab" in low or "pillow" in low
+                or "'pil" in low or " pil " in low or low.startswith("pil ")):
+            msg = ("Отсутствует компонент PDF (ReportLab/Pillow). "
+                   "Установите зависимости (python -m pip install -r "
+                   "requirements.txt) или переустановите приложение")
+        from ui.toast import show_error_toast
+        show_error_toast(page, msg)
 
     def _pdf_export_ok(name: str):
         pdf_open_btn.visible = True
@@ -971,9 +996,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
         try:
             _write_pdf_to(path)
         except Exception as ex:
-            print(f"[ZONAL_TAB] PDF export error: {ex}")
-            from ui.toast import show_error_toast
-            show_error_toast(page, "Не удалось сохранить PDF")
+            _pdf_failure_toast(ex, "Не удалось сохранить PDF")
             return
         page._zonal_pdf_state.update({"path": path, "url": None})
         _pdf_export_ok(os.path.basename(path))
@@ -992,9 +1015,7 @@ def create_zonal_tab(page: ft.Page) -> ft.Column:
             from core.zonal_distribution_exporter import export_pdf_for_web
             result = export_pdf_for_web(collection.criminalists, dept_map)
         except Exception as ex:
-            print(f"[ZONAL_TAB] PDF web export error: {ex}")
-            from ui.toast import show_error_toast
-            show_error_toast(page, "Не удалось сформировать PDF")
+            _pdf_failure_toast(ex, "Не удалось сформировать PDF")
             return
         page._zonal_pdf_state.update({
             "path": result["path"], "url": result["url"],

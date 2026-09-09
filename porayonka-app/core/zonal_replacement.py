@@ -140,7 +140,9 @@ def unique_pairs(criminalists: List):
     появления в collection.criminalists (для каждой пары первым идёт тот,
     кто стоит раньше в списке). Каждая пара встречается РОВНО один раз,
     направление детерминировано. Пара учитывается только если ОБЕ стороны
-    присутствуют в списке (гарантируется normalize_replacement_links).
+    присутствуют в списке (гарантируется normalize_replacement_links);
+    self-links и ссылки на отсутствующих (dangling) не печатаются даже на
+    сыром входе до нормализации.
     """
     by_id = {c.id: c for c in criminalists}
     index = {c.id: i for i, c in enumerate(criminalists)}
@@ -149,7 +151,9 @@ def unique_pairs(criminalists: List):
     for c in criminalists:
         for partner_id in c.replacement_ids:
             partner = by_id.get(partner_id)
-            if partner is None:
+            # Отсутствующие участники (dangling) и self-links не печатаются —
+            # в т.ч. на «сыром» ручном/асимметричном входе до нормализации.
+            if partner is None or partner.id == c.id:
                 continue
             key = (min(c.id, partner_id), max(c.id, partner_id))
             if key in seen:
