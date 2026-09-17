@@ -128,7 +128,7 @@
 
 - **Причина:** «свои» — клиентский фильтр `_mine`/`_visible_base`
   (`ui/controls/controls_tab.py:914–951`); роль и ФИО — локальные настройки
-  (`core/controls_data.py:231–275`; `ui/controls/controls_settings_modal.py:23–288`); роль `user`
+  (`core/controls_data.py:231–275`; `ui/controls/controls_settings_modal.py:23–287`); роль `user`
   с пустым ФИО = весь список `[код]`; вход без пароля (`porayonka-app/main.py:49–75`) `[код]`.
 - **Опасность:** в web прямой URL (`/controls/<id>`, файл, экспорт) отдаёт чужие данные; «роль»
   правится пользователем; история/закладки/чат делают утечку постоянной.
