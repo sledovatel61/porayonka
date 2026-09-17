@@ -1,0 +1,167 @@
+# Первичный CI стенда controls-web (этап W01).
+# Шаги по промпту W01: установка из lock, backend-тесты, frontend type-check,
+# production build, smoke HTTP. Секреты репозитория не используются: тестовая БД
+# поднимается сервис-контейнером с trust-аутентификацией только внутри job.
+name: controls-web W01
+
+on:
+  push:
+    paths:
+      - 'controls-web/**'
+      - '.github/workflows/controls-web-w01.yml'
+  pull_request:
+    paths:
+      - 'controls-web/**'
+      - '.github/workflows/controls-web-w01.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: "Frontend: type-check и production build"
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: controls-web/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: controls-web/frontend/package-lock.json
+      - name: Версии инструментов
+        run: |
+          node -v
+          npm -v
+      - name: Установка из lock
+        run: npm ci --no-audit --no-fund
+      - name: Type-check
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Состав сборки
+        run: |
+          find dist -type f -printf '%s\t%p\n' | sort -k2
+      - name: Артефакт dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: controls-web-dist
+          path: controls-web/frontend/dist
+          retention-days: 7
+
+  backend:
+    name: "Backend: установка из lock и тесты на PostgreSQL"
+    runs-on: ubuntu-24.04
+    needs: frontend
+    defaults:
+      run:
+        working-directory: controls-web/backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: controls_web
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U controls_web"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CONTROLS_WEB_TEST_PGHOST: 127.0.0.1
+      CONTROLS_WEB_TEST_PGPORT: '5432'
+      CONTROLS_WEB_TEST_PGUSER: controls_web
+      CONTROLS_WEB_TEST_DB: controls_web_w01_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Скачать сборку фронтенда (для тестов статики)
+        uses: actions/download-artifact@v4
+        with:
+          name: controls-web-dist
+          path: controls-web/frontend/dist
+      - name: Версии инструментов
+        run: |
+          python -V
+          python -m pip --version
+      - name: Установка из lock
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.lock.txt
+          python -m pip freeze --local | wc -l
+      - name: Шрифт с кириллицей для генератора PDF
+        run: |
+          ls -l /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+      - name: Тесты backend (настоящий PostgreSQL, 10 000 записей)
+        run: python -m pytest -v --maxfail=1
+
+  smoke:
+    name: Smoke HTTP на развёрнутом стенде
+    runs-on: ubuntu-24.04
+    needs: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: controls_web
+          POSTGRES_DB: controls_web_w01
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U controls_web"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CONTROLS_WEB_DSN: postgresql://controls_web@127.0.0.1:5432/controls_web_w01
+      CONTROLS_WEB_BASE: http://127.0.0.1:8080
+      CONTROLS_WEB_ENABLE_TEST_ENDPOINTS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Скачать сборку фронтенда
+        uses: actions/download-artifact@v4
+        with:
+          name: controls-web-dist
+          path: controls-web/frontend/dist
+      - name: Установка backend из lock
+        working-directory: controls-web/backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.lock.txt
+      - name: Наполнение 10 000 синтетических записей
+        working-directory: controls-web/backend
+        run: python -m app.seed --reset --count 10000 --seed 20260917
+      - name: Проверка воспроизводимости наполнения
+        working-directory: controls-web/backend
+        run: python -m app.seed --verify --count 10000 --seed 20260917
+      - name: Запуск стенда
+        working-directory: controls-web/backend
+        run: |
+          nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --log-level warning > /tmp/stand.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:8080/api/health > /dev/null; then echo "стенд поднялся за ${i} попыток"; break; fi
+            sleep 1
+          done
+          curl -s http://127.0.0.1:8080/api/health
+      - name: Smoke-проверки
+        run: bash controls-web/scripts/smoke_http.sh
+      - name: Измерения (5 повторов в CI)
+        run: python controls-web/scripts/measure.py --repeats 5
+      - name: Журнал стенда при падении
+        if: failure()
+        run: tail -60 /tmp/stand.log

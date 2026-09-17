@@ -1,0 +1,8 @@
+# controls-web backend — зависимости стенда W01 (зафиксированные версии)
+# Python 3.11+, PostgreSQL >= 14 (проверено на PostgreSQL 16.14, см. README)
+# Обоснование совместимости: все пакеты — чистый Python или manylinux-колёса,
+# новых браузерных API не требуют; на сервере Win7 не запускаются (сервер — Linux).
+fastapi==0.141.1
+uvicorn==0.53.0
+psycopg[binary]==3.3.5
+python-multipart==0.0.32

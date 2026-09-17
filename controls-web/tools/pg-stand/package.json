@@ -1,0 +1,9 @@
+{
+  "name": "controls-web-pg-stand",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Временный стенд W01 (вариант B): бинарники настоящего PostgreSQL для песочницы Arena, где недоступны apt-зеркала Debian и Docker. На целевом сервере (вариант A/C) используется PostgreSQL из пакета ОС — этот каталог тогда не нужен.",
+  "dependencies": {
+    "@embedded-postgres/linux-x64": "16.14.0-beta.17"
+  }
+}

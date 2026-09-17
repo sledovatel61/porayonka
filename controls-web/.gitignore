@@ -1,0 +1,14 @@
+# Локальные артефакты стенда controls-web — в git не попадают
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+dist/
+.pgdata/
+uploads/
+.env
+.env.*
+*.log
+measurements/
