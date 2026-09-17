@@ -31,7 +31,8 @@ controls-web/tools/pg-stand/      настоящий PostgreSQL 16.14 из npm-�
 controls-web/scripts/             provision_stand.sh, run_stand.sh, smoke_http.sh (49 проверок), measure.py (30x, p50/p95)
 controls-web/docs/                browser-target, stand-limitations, win7-checklist, measurement-protocol,
                                   measurements-w01-sandbox.md/.json (фактические измерения)
-.github/workflows/controls-web-w01.yml   первичный CI: frontend → backend (PostgreSQL 16) → smoke
+controls-web/ci/controls-web-w01.yml + README.md   первичный CI: frontend → backend (PostgreSQL 16) → smoke
+                                  (в .github/workflows не опубликован: токен приложения не имеет права workflows)
 ```
 
 Обновлены документы этапа: `reports/W01.md` (фактический отчёт вместо blocked-версии),
@@ -72,7 +73,7 @@ controls-web/docs/                browser-target, stand-limitations, win7-checkl
   справочник людей, периодичность, уведомления, порядок пунктов, tombstones, ответственные за сервер и копии.
 - **Открытые блокеры W01:** B-01 (постоянный сервер), B-03 остаток (версия движка, Турбо, политики),
   B-05 (сетевой доступ Win7-машин), B-07 (`reports/W00-comparison.md` отсутствует), B-08 (имя ветки),
-  B-09 (фактический объём данных), B-10 (кто и когда проведёт Win7-проверку).
+  B-09 (фактический объём данных), B-10 (кто и когда проведёт Win7-проверку), B-11 (включить CI: скопировать `controls-web/ci/controls-web-w01.yml` в `.github/workflows/` — из сессии это запрещено правом токена `workflows`).
 
 ## 5. Следующий разрешённый шаг
 
@@ -125,6 +126,9 @@ controls-web/docs/                browser-target, stand-limitations, win7-checkl
   npm-пакета `@embedded-postgres/linux-x64` (16.14.0-beta.17).
 - **Подключение GitHub** может быть недействительным (в W00 было); при ошибке авторизации сообщать
   ограничение и просить переподключить GitHub в Arena, не обещая публикацию.
+- **Право `workflows` отсутствует**: push любого файла в `.github/workflows/` отклоняется
+  (`refusing to allow a GitHub App to create or update workflow`). CI-файлы хранить в каталоге проекта
+  (`controls-web/ci/`) и передавать владельцу инструкцию по включению.
 - **Порт стенда 8080** (0.0.0.0) виден владельцу как live preview платформы. Для показа без временных
   endpoints запускать с `CONTROLS_WEB_ENABLE_TEST_ENDPOINTS=0`.
 
